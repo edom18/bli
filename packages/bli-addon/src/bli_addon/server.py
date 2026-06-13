@@ -25,6 +25,7 @@ from bli_core import runtime
 from bli_core.errors import (
     RPC_BUSINESS_ERROR,
     RPC_INTERNAL_ERROR,
+    RPC_INVALID_PARAMS,
     ErrorCategory,
     ErrorCode,
     make_error,
@@ -237,6 +238,12 @@ class Server:
             self._send(conn, proto.error_response_from(rid, e))
             return
 
+        # request-status は registry を直接読むメタ問い合わせ。
+        # 冪等性登録（begin）やメイン直列ディスパッチを経由しない。
+        if method == "request-status":
+            self._send(conn, self._request_status(rid, params))
+            return
+
         state, cached = self._registry.begin(rid)
         if state == "cached" and cached is not None:
             self._send(conn, cached)
@@ -277,6 +284,29 @@ class Server:
             resp = proto.build_error(rid, RPC_INTERNAL_ERROR, "INTERNAL", eo)
             self._registry.complete(rid, resp, ok=False)
         self._send(conn, resp)
+
+    def _request_status(self, rid: str, params: dict[str, Any]) -> dict[str, Any]:
+        """対象 id の決着状態を registry から返す（spec §7 後追い回収）。"""
+        target = params.get("id")
+        if not isinstance(target, str) or not target:
+            eo = make_error(
+                ErrorCode.INVALID_PARAMS,
+                category=ErrorCategory.USER_INPUT,
+                retryable=False,
+                symptom="request-status には id が必要です",
+                remediation="--id <UUIDv4> を指定してください",
+            )
+            return proto.build_error(rid, RPC_INVALID_PARAMS, ErrorCode.INVALID_PARAMS, eo)
+        state, result = self._registry.lookup(target)
+        data = {
+            "id": target,
+            "known": state is not None,
+            "state": state or "UNKNOWN",
+            "result": result,
+        }
+        return proto.build_success(
+            rid, {"success": True, "operation": "request-status", "data": data}
+        )
 
     # ---- 補助 ----
 

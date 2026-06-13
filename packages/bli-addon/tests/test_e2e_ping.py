@@ -105,3 +105,28 @@ def test_http_like_rejected(server):
 def test_runtime_files_written(server, tmp_path):
     assert runtime.connection_path().exists()
     assert runtime.token_path().exists()
+
+
+def test_request_status_unknown_id(server):
+    result, _ = client.call("request-status", {"id": "no-such-id"})
+    assert result["operation"] == "request-status"
+    assert result["data"]["known"] is False
+    assert result["data"]["state"] == "UNKNOWN"
+    assert result["data"]["result"] is None
+
+
+def test_request_status_after_completed_request(server):
+    # 先に echo を1回確定させ、その id の決着を後追い取得する
+    rid = "tracked-echo-id"
+    client.call("echo", {"v": 1}, request_id=rid)
+    result, _ = client.call("request-status", {"id": rid})
+    assert result["data"]["known"] is True
+    assert result["data"]["state"] == "DONE"
+    # 保存済みレスポンスから元の echo 結果が回収できる
+    assert result["data"]["result"]["result"]["data"]["echo"] == {"v": 1}
+
+
+def test_request_status_missing_id(server):
+    with pytest.raises(client.RpcRemoteError) as ei:
+        client.call("request-status", {})
+    assert ei.value.error["message"] == "INVALID_PARAMS"

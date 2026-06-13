@@ -68,3 +68,11 @@ class RequestRegistry:
         with self._lock:
             entry = self._entries.get(rid)
             return entry.state if entry else None
+
+    def lookup(self, rid: str) -> tuple[str | None, dict[str, Any] | None]:
+        """状態と保存結果を返す（request-status 用）。未知なら (None, None)。"""
+        with self._lock:
+            entry = self._entries.get(rid)
+            if entry is None:
+                return None, None
+            return entry.state, entry.result
