@@ -1,0 +1,348 @@
+"""bli アドオンの TCP サーバ（M2）。spec §5/§6/§7 / data-model.md。
+
+bpy 非依存（L3 でプロセス内テスト可能）。bpy 実行ディスパッチ（timers）は M3 で
+handler を差し替えて結線する。ここでは ping/echo の疎通までを担う。
+
+スレッド: accept ループ（1本）+ 接続ごとのハンドラスレッド。
+セッションは session_lock で単一直列（2本目は SESSION_BUSY fail-fast）。
+"""
+
+from __future__ import annotations
+
+import hmac
+import json
+import os
+import secrets
+import select
+import socket
+import threading
+import time
+from collections.abc import Callable
+from typing import Any
+
+from bli_core import protocol as proto
+from bli_core import runtime
+from bli_core.errors import (
+    RPC_BUSINESS_ERROR,
+    RPC_INTERNAL_ERROR,
+    ErrorCategory,
+    ErrorCode,
+    make_error,
+)
+from bli_core.protocol import JsonRpcError
+
+from .handlers import ServerInfo
+from .handlers import dispatch as default_dispatch
+from .request_registry import RequestRegistry
+
+READ_TIMEOUT = 30.0
+DispatchFn = Callable[[str, dict[str, Any], ServerInfo], dict[str, Any]]
+
+
+def _atomic_write(path, text: str, mode: int = 0o600) -> None:
+    tmp = f"{path}.tmp{os.getpid()}"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    try:
+        os.chmod(tmp, mode)  # posix で所有者限定。Windows は限定的
+    except OSError:
+        pass
+    os.replace(tmp, path)
+
+
+class Server:
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        info: ServerInfo,
+        handler: DispatchFn,
+        ttl: float = 600.0,
+    ) -> None:
+        self.host = host
+        self.port = port
+        self.info = info
+        self._handler = handler
+        self._registry = RequestRegistry(ttl)
+        self._session_lock = threading.Lock()
+        self._stop = threading.Event()
+        self._listen: socket.socket | None = None
+        self._accept_thread: threading.Thread | None = None
+        self._conns: set[socket.socket] = set()
+        self._token = ""
+
+    # ---- ライフサイクル ----
+
+    def start(self) -> None:
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            srv.bind((self.host, self.port))
+        except OSError as e:
+            srv.close()
+            raise RuntimeError(
+                f"bind 失敗 {self.host}:{self.port}: {e}（二重起動 or ポート使用中の可能性）"
+            ) from e
+        srv.listen(8)
+        srv.settimeout(0.5)
+        # 実際にバインドされたポートを採用（port=0 で OS 割当を許容）
+        self.port = srv.getsockname()[1]
+        self._listen = srv
+
+        self._token = secrets.token_urlsafe(32)
+        self._write_runtime_files()
+
+        self._accept_thread = threading.Thread(
+            target=self._accept_loop, daemon=True, name="bli-accept"
+        )
+        self._accept_thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        listen = self._listen
+        self._listen = None
+        if listen is not None:
+            try:
+                listen.close()
+            except OSError:
+                pass
+        # in-flight 接続を解放
+        for c in list(self._conns):
+            try:
+                c.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                c.close()
+            except OSError:
+                pass
+        if self._accept_thread is not None:
+            self._accept_thread.join(timeout=2.0)
+            self._accept_thread = None
+        self._cleanup_runtime_files()
+
+    # ---- ランタイムファイル ----
+
+    def _write_runtime_files(self) -> None:
+        _atomic_write(str(runtime.token_path()), self._token)
+        conn = {
+            "host": self.host,
+            "port": self.port,
+            "pid": os.getpid(),
+            "protocol_version": proto.PROTOCOL_VERSION,
+            "blender_version": self.info.blender_version,
+            "schema_hash": self.info.schema_hash,
+            "started_at": time.time(),
+        }
+        _atomic_write(
+            str(runtime.connection_path()), json.dumps(conn, ensure_ascii=False), mode=0o644
+        )
+
+    def _cleanup_runtime_files(self) -> None:
+        for p in (runtime.connection_path(), runtime.token_path()):
+            try:
+                p.unlink()
+            except OSError:
+                pass
+
+    # ---- 受信 ----
+
+    def _accept_loop(self) -> None:
+        listen = self._listen
+        while not self._stop.is_set() and listen is not None:
+            try:
+                r, _, _ = select.select([listen], [], [], 0.5)
+            except OSError:
+                break
+            if not r:
+                continue
+            try:
+                conn, _addr = listen.accept()
+            except OSError:
+                break
+            conn.settimeout(READ_TIMEOUT)
+            t = threading.Thread(target=self._serve, args=(conn,), daemon=True, name="bli-conn")
+            t.start()
+
+    def _serve(self, conn: socket.socket) -> None:
+        self._conns.add(conn)
+        got_lock = False
+        try:
+            # 先に HELLO を受信・認証してから、セッション取得を判定する
+            # （書き込みレース回避 + 認証後に SESSION_BUSY を返す）。
+            if not self._authenticate(conn):
+                return
+            got_lock = self._session_lock.acquire(blocking=False)
+            if not got_lock:
+                self._send(conn, self._busy_error())
+                return
+            self._send(conn, self._hello_ok())
+            self._rpc_loop(conn)
+        except (OSError, ConnectionError):
+            pass
+        finally:
+            if got_lock:
+                self._session_lock.release()
+            self._conns.discard(conn)
+            try:
+                conn.close()
+            except OSError:
+                pass
+
+    def _authenticate(self, conn: socket.socket) -> bool:
+        try:
+            first = proto.read_frame(conn.recv)
+        except (proto.FrameTooLarge, json.JSONDecodeError, ConnectionError, OSError):
+            # HTTP/WebSocket 様式や巨大フレームは即切断（DNS rebinding 対策）
+            return False
+        if not proto.is_hello(first):
+            self._send(
+                conn, self._err(None, ErrorCode.AUTH_FAILED, "最初のフレームは hello が必要")
+            )
+            return False
+        token = first.get("token", "")
+        if not isinstance(token, str) or not hmac.compare_digest(token, self._token):
+            self._send(conn, self._err(None, ErrorCode.AUTH_FAILED, "トークン不一致"))
+            return False
+        if proto.major(first.get("protocol_version", "")) != proto.major(proto.PROTOCOL_VERSION):
+            self._send(
+                conn,
+                self._err(None, ErrorCode.PROTOCOL_VERSION_MISMATCH, "protocol MAJOR 不一致"),
+            )
+            return False
+        return True
+
+    def _hello_ok(self) -> dict[str, Any]:
+        session_uid = secrets.token_hex(8)
+        return proto.build_hello_ok(
+            self.info.blender_version,
+            self.info.schema_hash,
+            session_uid,
+            self.info.capabilities,
+        )
+
+    def _rpc_loop(self, conn: socket.socket) -> None:
+        while not self._stop.is_set():
+            try:
+                msg = proto.read_frame(conn.recv)
+            except (ConnectionError, OSError, json.JSONDecodeError, proto.FrameTooLarge):
+                return
+            self._handle_rpc(conn, msg)
+
+    def _handle_rpc(self, conn: socket.socket, msg: Any) -> None:
+        try:
+            method, rid, params = proto.parse_request(msg)
+        except JsonRpcError as e:
+            rid = msg.get("id") if isinstance(msg, dict) else None
+            self._send(conn, proto.error_response_from(rid, e))
+            return
+
+        state, cached = self._registry.begin(rid)
+        if state == "cached" and cached is not None:
+            self._send(conn, cached)
+            return
+        if state == "in_progress":
+            self._send(
+                conn,
+                proto.build_error(
+                    rid,
+                    RPC_BUSINESS_ERROR,
+                    ErrorCode.IN_PROGRESS,
+                    make_error(
+                        ErrorCode.IN_PROGRESS,
+                        category=ErrorCategory.ENVIRONMENT,
+                        retryable=True,
+                        symptom="同一IDのリクエストが実行中",
+                        remediation="request-status で決着を確認してください",
+                    ),
+                ),
+            )
+            return
+
+        try:
+            result = self._handler(method, params, self.info)
+            resp = proto.build_success(rid, result)
+            self._registry.complete(rid, resp, ok=True)
+        except JsonRpcError as e:
+            resp = proto.error_response_from(rid, e)
+            self._registry.complete(rid, resp, ok=False)
+        except Exception as e:
+            eo = make_error(
+                "INTERNAL",
+                category=ErrorCategory.INTERNAL,
+                retryable=False,
+                symptom=str(e),
+                code_bug=True,
+            )
+            resp = proto.build_error(rid, RPC_INTERNAL_ERROR, "INTERNAL", eo)
+            self._registry.complete(rid, resp, ok=False)
+        self._send(conn, resp)
+
+    # ---- 補助 ----
+
+    def _send(self, conn: socket.socket, obj: dict[str, Any]) -> None:
+        try:
+            conn.sendall(proto.encode_frame(obj))
+        except OSError:
+            pass
+
+    def _busy_error(self) -> dict[str, Any]:
+        return self._err(
+            None,
+            ErrorCode.SESSION_BUSY,
+            "別セッションが使用中です（単一セッションのみ）",
+            category=ErrorCategory.ENVIRONMENT,
+            retryable=True,
+        )
+
+    def _err(
+        self,
+        rid: str | None,
+        kind: str,
+        symptom: str,
+        category: str = ErrorCategory.ENVIRONMENT,
+        retryable: bool = False,
+    ) -> dict[str, Any]:
+        return proto.build_error(
+            rid,
+            RPC_BUSINESS_ERROR,
+            kind,
+            make_error(kind, category=category, retryable=retryable, symptom=symptom),
+        )
+
+
+# ---- シングルトン（アドオン register/unregister から使う）----
+
+_server: Server | None = None
+
+
+def start(
+    blender_version: str = "dev",
+    capabilities: list[str] | None = None,
+    schema_hash: str = "",
+    host: str | None = None,
+    port: int | None = None,
+    handler: DispatchFn | None = None,
+) -> Server:
+    """サーバを起動（既存があれば先に停止して二重 listen を防ぐ）。"""
+    global _server
+    if _server is not None:
+        _server.stop()
+        _server = None
+    info = ServerInfo(blender_version, schema_hash, capabilities or [])
+    srv = Server(
+        host or runtime.DEFAULT_HOST,
+        port or runtime.DEFAULT_PORT,
+        info,
+        handler or default_dispatch,
+    )
+    srv.start()
+    _server = srv
+    return srv
+
+
+def stop() -> None:
+    global _server
+    if _server is not None:
+        _server.stop()
+        _server = None
