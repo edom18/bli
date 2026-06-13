@@ -46,10 +46,12 @@ def _emit_error(json_out: bool, kind: str, message: str) -> None:
 
 
 def _exit_code_for(err: dict[str, Any]) -> ExitCode:
-    """サーバ error の category から終了コードを決める（spec §8）。"""
+    """サーバ error の kind/category から終了コードを決める（spec §8）。"""
     kind = err.get("message", "")
     data = err.get("data")
     category = data.get("category") if isinstance(data, dict) else None
+    if kind == ErrorCode.TIMEOUT:
+        return ExitCode.TIMEOUT_PENDING  # 未決: request-status で後追い
     if kind == ErrorCode.INVALID_PARAMS or category == ErrorCategory.USER_INPUT:
         return ExitCode.INPUT
     return ExitCode.FAILURE
@@ -265,16 +267,22 @@ def _command_meta(cmd: Command) -> dict[str, Any]:
         "stability": cmd.stability.value,
         "is_heavy": cmd.is_heavy,
         "capability_deps": list(cmd.capability_deps),
+        "implemented": cmd.implemented,
     }
 
 
 @app.command("list-commands")
 def list_commands(
+    show_all: bool = typer.Option(False, "--all", help="未実装コマンドも含める"),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
 ) -> None:
-    """利用可能なコマンド一覧を返す（SSOTから生成・ローカル完結）。"""
+    """利用可能なコマンド一覧を返す（SSOTから生成・ローカル完結）。
+
+    既定では実行可能（implemented）なコマンドのみ。未実装の定義は --all で表示する。
+    """
     cmds = load_definitions()
-    items = [_command_meta(c) for c in sorted(cmds.values(), key=lambda c: c.name)]
+    chosen = [c for c in cmds.values() if show_all or c.implemented]
+    items = [_command_meta(c) for c in sorted(chosen, key=lambda c: c.name)]
     if json_out:
         typer.echo(
             json.dumps({"schema_hash": schema_hash(cmds), "commands": items}, ensure_ascii=False)
@@ -282,7 +290,8 @@ def list_commands(
     else:
         for it in items:
             flag = "✎" if it["mutates"] else " "
-            typer.echo(f"  {flag} {it['name']:<16}{it['summary']}")
+            todo = "" if it["implemented"] else " (未実装)"
+            typer.echo(f"  {flag} {it['name']:<16}{it['summary']}{todo}")
 
 
 def _human_command(cmd: Command) -> str:
@@ -304,9 +313,13 @@ def _human_command(cmd: Command) -> str:
 @app.command("help")
 def help_(
     command: str | None = typer.Option(None, "--command", help="対象コマンド名"),
+    show_all: bool = typer.Option(False, "--all", help="未実装コマンドも含める"),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
 ) -> None:
-    """コマンドの JSON Schema を返す（AIエージェントの発見用・SSOTから生成）。"""
+    """コマンドの JSON Schema を返す（AIエージェントの発見用・SSOTから生成）。
+
+    一覧は既定で実行可能なコマンドのみ。--command 指定時は未実装でも introspection 可。
+    """
     cmds = load_definitions()
     sh = schema_hash(cmds)
 
@@ -323,13 +336,14 @@ def help_(
         _emit(json_out, _human_command(cmd), payload)
         return
 
+    chosen = {name: c for name, c in cmds.items() if show_all or c.implemented}
     payload = {
         "schema_hash": sh,
-        "commands": {name: to_json_schema(c) for name, c in sorted(cmds.items())},
+        "commands": {name: to_json_schema(c) for name, c in sorted(chosen.items())},
     }
     human = "\n".join(
         [f"schema_hash: {sh[:12]}", "コマンド（詳細は --command NAME）:"]
-        + [f"  {name}" for name in sorted(cmds)]
+        + [f"  {name}" for name in sorted(chosen)]
     )
     _emit(json_out, human, payload)
 

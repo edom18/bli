@@ -63,7 +63,7 @@ command(
     required_mode=Mode.OBJECT,
 )
 
-# ---- 汎用編集（代表・vec3 型確認用）----
+# ---- 汎用編集（代表・vec3 型確認用 / 実装は M6）----
 command(
     "transform",
     "位置/回転/拡縮を設定または相対適用する",
@@ -76,9 +76,10 @@ command(
     ),
     mutates=True,
     required_mode=Mode.OBJECT,
+    implemented=False,  # M6 で実装予定（現状は型確認用の定義のみ）
 )
 
-# ---- 逃げ道（既定 off / path 型確認用）----
+# ---- 逃げ道（既定 off / path 型確認用 / 実装は M11）----
 command(
     "exec-python",
     "構造化で表現できない操作のフォールバック（既定 off）",
@@ -88,4 +89,5 @@ command(
     ),
     mutates=True,
     stability=Stability.EXPERIMENTAL,
+    implemented=False,  # M11 で実装予定
 )

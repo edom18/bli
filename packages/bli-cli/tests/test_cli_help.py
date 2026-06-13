@@ -62,3 +62,34 @@ def test_schema_hash_matches_core():
 
     res = runner.invoke(app, ["list-commands", "--json"])
     assert json.loads(res.output)["schema_hash"] == schema_hash(load_definitions())
+
+
+def test_list_commands_excludes_unimplemented_by_default():
+    # 発見系は未実装コマンド（transform/exec-python）を広告しない
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    names = {c["name"] for c in data["commands"]}
+    assert "transform" not in names
+    assert "exec-python" not in names
+    assert "set-origin" in names
+
+
+def test_list_commands_all_includes_unimplemented():
+    data = json.loads(runner.invoke(app, ["list-commands", "--all", "--json"]).output)
+    by_name = {c["name"]: c for c in data["commands"]}
+    assert "transform" in by_name
+    assert by_name["transform"]["implemented"] is False
+
+
+def test_help_excludes_unimplemented_by_default():
+    data = json.loads(runner.invoke(app, ["help", "--json"]).output)
+    assert "transform" not in data["commands"]
+    data_all = json.loads(runner.invoke(app, ["help", "--all", "--json"]).output)
+    assert "transform" in data_all["commands"]
+
+
+def test_help_command_introspects_unimplemented():
+    # 個別 introspection は未実装でも可（implemented=False を明示）
+    res = runner.invoke(app, ["help", "--command", "transform", "--json"])
+    assert res.exit_code == 0
+    data = json.loads(res.output)
+    assert data["command"]["implemented"] is False
