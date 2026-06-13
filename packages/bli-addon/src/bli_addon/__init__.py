@@ -67,9 +67,11 @@ def register() -> None:
 
     dispatcher = _dispatcher
 
-    def _executor(method, params, info):
-        # 受信スレッドから submit → メインスレッドで ops.dispatch を直列実行
-        return dispatcher.submit(lambda: ops.dispatch(method, params, info))
+    def _executor(method, params, info, settle):
+        # 受信スレッドから submit → メインスレッドで ops.dispatch を直列実行。
+        # settle はジョブ完了時にメインスレッドで呼ばれ、registry を確定させる
+        # （タイムアウト後に完走したジョブも request-status で回収可能になる）。
+        return dispatcher.submit(lambda: ops.dispatch(method, params, info), settle=settle)
 
     server.start(
         blender_version=bpy.app.version_string,

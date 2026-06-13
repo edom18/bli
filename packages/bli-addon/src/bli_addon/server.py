@@ -32,16 +32,31 @@ from bli_core.errors import (
 )
 from bli_core.protocol import JsonRpcError
 
+from .dispatcher import TimeoutPending
 from .handlers import ServerInfo
 from .handlers import dispatch as default_dispatch
 from .request_registry import RequestRegistry
 
 READ_TIMEOUT = 30.0
-DispatchFn = Callable[[str, dict[str, Any], ServerInfo], dict[str, Any]]
+
+# settle(result, error) -> resp: ジョブ完了時に呼ぶ確定処理（resp 構築 + registry 完了）。
+SettleFn = Callable[[Any, BaseException | None], dict[str, Any]]
+# ハンドラは settle を受け取り、ジョブ完了時（同期なら即時、非同期ならメインスレッド）に呼ぶ。
+DispatchFn = Callable[[str, dict[str, Any], ServerInfo, SettleFn], dict[str, Any]]
 
 # セッションロックを必要としないメタ問い合わせ（registry を直接読むだけ）。
 # 別セッションが実行中（SESSION_BUSY）でも応答できる＝タイムアウト後の後追い回収を成立させる。
 LOCK_FREE_METHODS = frozenset({"request-status"})
+
+
+def _sync_handler(
+    method: str, params: dict[str, Any], info: ServerInfo, settle: SettleFn
+) -> dict[str, Any]:
+    """dispatcher を使わない同期ディスパッチ（テスト/疎通用）。接続スレッドで即 settle。"""
+    try:
+        return settle(default_dispatch(method, params, info), None)
+    except Exception as e:
+        return settle(None, e)
 
 
 def _atomic_write(path, text: str, mode: int = 0o600) -> None:
@@ -274,24 +289,48 @@ class Server:
             )
             return
 
+        def settle(result: Any, error: BaseException | None) -> dict[str, Any]:
+            # ジョブ完了時の確定処理。非同期ハンドラではメインスレッドで呼ばれる。
+            resp = self._build_resp(rid, result, error)
+            self._registry.complete(rid, resp, ok=(error is None))
+            return resp
+
         try:
-            result = self._handler(method, params, self.info)
-            resp = proto.build_success(rid, result)
-            self._registry.complete(rid, resp, ok=True)
-        except JsonRpcError as e:
-            resp = proto.error_response_from(rid, e)
-            self._registry.complete(rid, resp, ok=False)
+            resp = self._handler(method, params, self.info, settle)
+        except TimeoutPending:
+            # 実行はメインスレッドで継続中。registry は RUNNING のまま残し、
+            # ジョブ完走時に settle が DONE/FAILED へ更新する（request-status で回収可能）。
+            resp = self._timeout_resp(rid)
         except Exception as e:
-            eo = make_error(
-                "INTERNAL",
-                category=ErrorCategory.INTERNAL,
-                retryable=False,
-                symptom=str(e),
-                code_bug=True,
-            )
-            resp = proto.build_error(rid, RPC_INTERNAL_ERROR, "INTERNAL", eo)
-            self._registry.complete(rid, resp, ok=False)
+            # ハンドラが settle 前に異常終了した場合の保険。
+            resp = settle(None, e)
         self._send(conn, resp)
+
+    def _build_resp(self, rid: str, result: Any, error: BaseException | None) -> dict[str, Any]:
+        """ドメイン結果/例外から JSON-RPC レスポンスを構築する。"""
+        if error is None:
+            return proto.build_success(rid, result)
+        if isinstance(error, JsonRpcError):
+            return proto.error_response_from(rid, error)
+        eo = make_error(
+            "INTERNAL",
+            category=ErrorCategory.INTERNAL,
+            retryable=False,
+            symptom=str(error),
+            code_bug=True,
+        )
+        return proto.build_error(rid, RPC_INTERNAL_ERROR, "INTERNAL", eo)
+
+    def _timeout_resp(self, rid: str) -> dict[str, Any]:
+        """タイムアウト（実行は継続中の可能性）。後追いは request-status。"""
+        eo = make_error(
+            ErrorCode.TIMEOUT,
+            category=ErrorCategory.ENVIRONMENT,
+            retryable=True,
+            symptom="実行がタイムアウト待機を超過しました（メインスレッドで継続中の可能性）",
+            remediation="request-status --id <この id> で決着を確認してください",
+        )
+        return proto.build_error(rid, RPC_BUSINESS_ERROR, ErrorCode.TIMEOUT, eo)
 
     def _request_status(self, rid: str, params: dict[str, Any]) -> dict[str, Any]:
         """対象 id の決着状態を registry から返す（spec §7 後追い回収）。"""
@@ -372,7 +411,7 @@ def start(
         host or runtime.DEFAULT_HOST,
         port or runtime.DEFAULT_PORT,
         info,
-        handler or default_dispatch,
+        handler or _sync_handler,
     )
     srv.start()
     _server = srv

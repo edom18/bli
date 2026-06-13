@@ -131,8 +131,8 @@ def main():
 
     dispatcher = Dispatcher()  # background では timer を使わず手動 pump
 
-    def executor(method, params, info):
-        return dispatcher.submit(lambda: ops.dispatch(method, params, info))
+    def executor(method, params, info, settle):
+        return dispatcher.submit(lambda: ops.dispatch(method, params, info), settle=settle)
 
     srv_mod.start(
         blender_version=bpy.app.version_string,

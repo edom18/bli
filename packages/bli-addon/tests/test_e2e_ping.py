@@ -11,6 +11,7 @@ import pytest
 
 from bli import client
 from bli_addon import server as srv_mod
+from bli_addon.dispatcher import TimeoutPending
 from bli_core import protocol as proto
 from bli_core import runtime
 
@@ -130,6 +131,49 @@ def test_request_status_missing_id(server):
     with pytest.raises(client.RpcRemoteError) as ei:
         client.call("request-status", {})
     assert ei.value.error["message"] == "INVALID_PARAMS"
+
+
+def test_timeout_leaves_running_then_settle_completes(tmp_path, monkeypatch):
+    """タイムアウトしても registry を FAILED にせず RUNNING のまま残し、
+
+    ジョブ完走時に settle が DONE+result へ更新する（Codex P1 指摘の修正）。
+    """
+    monkeypatch.setenv("BLI_STATE_DIR", str(tmp_path))
+    monkeypatch.delenv("BLI_TOKEN", raising=False)
+    monkeypatch.delenv("BLI_PORT", raising=False)
+
+    captured: dict = {}
+
+    def handler(method, params, info, settle):
+        # 受信スレッドはタイムアウト。ジョブ（settle）は後でメインスレッドが実行する想定。
+        captured["settle"] = settle
+        raise TimeoutPending()
+
+    srv_mod.start(
+        blender_version="t",
+        schema_hash="h",
+        capabilities=[],
+        host="127.0.0.1",
+        port=0,
+        handler=handler,
+    )
+    try:
+        with pytest.raises(client.RpcRemoteError) as ei:
+            client.call("echo", {"x": 1}, request_id="rid-timeout")
+        assert ei.value.error["message"] == "TIMEOUT"
+        assert ei.value.error["data"]["retryable"] is True
+
+        # 偽 FAILED ではなく RUNNING のまま
+        rs, _ = client.call("request-status", {"id": "rid-timeout"})
+        assert rs["data"]["state"] == "RUNNING"
+
+        # ジョブがメインスレッドで後から完走 → settle が DONE へ更新
+        captured["settle"]({"success": True, "operation": "echo", "data": {"echo": {"x": 1}}}, None)
+        rs2, _ = client.call("request-status", {"id": "rid-timeout"})
+        assert rs2["data"]["state"] == "DONE"
+        assert rs2["data"]["result"]["result"]["data"]["echo"] == {"x": 1}
+    finally:
+        srv_mod.stop()
 
 
 def test_request_status_works_while_session_busy(server):
