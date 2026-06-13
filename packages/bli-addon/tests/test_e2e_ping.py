@@ -130,3 +130,27 @@ def test_request_status_missing_id(server):
     with pytest.raises(client.RpcRemoteError) as ei:
         client.call("request-status", {})
     assert ei.value.error["message"] == "INVALID_PARAMS"
+
+
+def test_request_status_works_while_session_busy(server):
+    """別セッションがロック保持中でも request-status は応答できる（spec §7 後追い回収）。
+
+    通常コマンドは SESSION_BUSY のまま。これが Codex P2 指摘の修正点。
+    """
+    host, port, token, _ = client.load_connection()
+    holder = socket.create_connection((host, port), timeout=5)
+    try:
+        holder.sendall(proto.encode_frame(proto.build_hello(token)))
+        assert proto.read_frame(holder.recv)["type"] == "hello-ok"  # holder がセッション保持
+
+        # request-status は lock-free → busy 中でも成功する
+        result, _ = client.call("request-status", {"id": "whatever"})
+        assert result["operation"] == "request-status"
+        assert result["data"]["known"] is False
+
+        # ロックを要する通常コマンドは従来どおり SESSION_BUSY
+        with pytest.raises(client.RpcRemoteError) as ei:
+            client.call("ping")
+        assert ei.value.error["message"] == "SESSION_BUSY"
+    finally:
+        holder.close()

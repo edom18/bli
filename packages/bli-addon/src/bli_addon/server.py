@@ -39,6 +39,10 @@ from .request_registry import RequestRegistry
 READ_TIMEOUT = 30.0
 DispatchFn = Callable[[str, dict[str, Any], ServerInfo], dict[str, Any]]
 
+# セッションロックを必要としないメタ問い合わせ（registry を直接読むだけ）。
+# 別セッションが実行中（SESSION_BUSY）でも応答できる＝タイムアウト後の後追い回収を成立させる。
+LOCK_FREE_METHODS = frozenset({"request-status"})
+
 
 def _atomic_write(path, text: str, mode: int = 0o600) -> None:
     tmp = f"{path}.tmp{os.getpid()}"
@@ -169,16 +173,15 @@ class Server:
         self._conns.add(conn)
         got_lock = False
         try:
-            # 先に HELLO を受信・認証してから、セッション取得を判定する
-            # （書き込みレース回避 + 認証後に SESSION_BUSY を返す）。
+            # 先に HELLO を受信・認証してから、セッション取得を判定する。
             if not self._authenticate(conn):
                 return
+            # ロックを取れれば通常セッション。取れなくても hello-ok は返し、
+            # lock-free メソッド（request-status）だけ受け付ける限定セッションにする。
+            # こうすることで別セッション実行中でもタイムアウト後の決着確認が可能になる。
             got_lock = self._session_lock.acquire(blocking=False)
-            if not got_lock:
-                self._send(conn, self._busy_error())
-                return
             self._send(conn, self._hello_ok())
-            self._rpc_loop(conn)
+            self._rpc_loop(conn, has_lock=got_lock)
         except (OSError, ConnectionError):
             pass
         finally:
@@ -222,15 +225,15 @@ class Server:
             self.info.capabilities,
         )
 
-    def _rpc_loop(self, conn: socket.socket) -> None:
+    def _rpc_loop(self, conn: socket.socket, has_lock: bool) -> None:
         while not self._stop.is_set():
             try:
                 msg = proto.read_frame(conn.recv)
             except (ConnectionError, OSError, json.JSONDecodeError, proto.FrameTooLarge):
                 return
-            self._handle_rpc(conn, msg)
+            self._handle_rpc(conn, msg, has_lock)
 
-    def _handle_rpc(self, conn: socket.socket, msg: Any) -> None:
+    def _handle_rpc(self, conn: socket.socket, msg: Any, has_lock: bool) -> None:
         try:
             method, rid, params = proto.parse_request(msg)
         except JsonRpcError as e:
@@ -238,10 +241,15 @@ class Server:
             self._send(conn, proto.error_response_from(rid, e))
             return
 
-        # request-status は registry を直接読むメタ問い合わせ。
-        # 冪等性登録（begin）やメイン直列ディスパッチを経由しない。
-        if method == "request-status":
+        # lock-free メソッド（request-status）は registry を直接読むメタ問い合わせ。
+        # 冪等性登録（begin）やメイン直列ディスパッチを経由せず、セッションロックも不要。
+        if method in LOCK_FREE_METHODS:
             self._send(conn, self._request_status(rid, params))
+            return
+
+        # 限定セッション（ロック未取得）は lock-free 以外を SESSION_BUSY で拒否する。
+        if not has_lock:
+            self._send(conn, self._busy_error(rid))
             return
 
         state, cached = self._registry.begin(rid)
@@ -316,11 +324,11 @@ class Server:
         except OSError:
             pass
 
-    def _busy_error(self) -> dict[str, Any]:
+    def _busy_error(self, rid: str | None) -> dict[str, Any]:
         return self._err(
-            None,
+            rid,
             ErrorCode.SESSION_BUSY,
-            "別セッションが使用中です（単一セッションのみ）",
+            "別セッションが使用中です（単一セッションのみ）。request-status は利用可能",
             category=ErrorCategory.ENVIRONMENT,
             retryable=True,
         )
