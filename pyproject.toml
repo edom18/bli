@@ -1,0 +1,54 @@
+# bli (Blender CLI) — uv workspace ルート（virtual workspace）
+# 個別パッケージは packages/* に分割（plan.md §1.1）。
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+bli-core = { workspace = true }
+bli-cli = { workspace = true }
+bli-addon = { workspace = true }
+
+# 開発ツール（PEP 735 dependency-groups）
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "pyright>=1.1.380",
+    "bli-core",
+    "bli-cli",
+    "bli-addon",
+]
+
+# ----- ruff（lint + format）-----
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["packages/bli-core/src", "packages/bli-cli/src", "packages/bli-addon/src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "E501",   # line-length は formatter に任せる
+    "RUF001", # 日本語コメント/文字列の全角括弧（）等を許可
+    "RUF002",
+    "RUF003",
+    "SIM105", # リソース解放の try/except/pass を許可（contextlib.suppress 強制しない）
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["B", "SIM"]
+
+# ----- pyright -----
+[tool.pyright]
+pythonVersion = "3.10"
+include = ["packages/bli-core/src", "packages/bli-cli/src"]
+# bli-addon は bpy(実機型なし)依存のため厳格対象外
+exclude = ["**/vendored/**", "**/spikes/**"]
+typeCheckingMode = "basic"
+
+# ----- pytest -----
+[tool.pytest.ini_options]
+testpaths = ["packages"]
+python_files = ["test_*.py"]
+addopts = "-q"

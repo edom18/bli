@@ -1,0 +1,2 @@
+# ビルド時に bli-core を vendored/bli_core/ へコピーする（M14 build スクリプト）。
+# dev では空でよい（workspace の bli-core が解決される）。

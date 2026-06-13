@@ -1,0 +1,15 @@
+[project]
+name = "bli-addon"
+version = "0.1.0"
+description = "bli Blenderアドオン（TCPサーバ + bpy実行）。配布時は bli-core を vendoring。"
+# Blender 5.0/4.4 の埋め込み Python は 3.11 系だが、
+# dev venv(3.10) でのテスト解決のため >=3.10。コードは 3.10 互換に保つ。
+requires-python = ">=3.10"
+dependencies = []  # 外部依存なし。bli-core は配布時 vendoring（dev では workspace 解決）
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bli_addon"]

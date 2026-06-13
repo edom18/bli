@@ -1,0 +1,18 @@
+# Blender Extensions 用マニフェスト（将来 Extensions 配布時に使用）
+# v1 一次導線は手動 zip（legacy bl_info）。本ファイルは Extensions 対応の予約。
+schema_version = "1.0.0"
+
+id = "bli_server"
+version = "0.1.0"
+name = "bli (Blender CLI) server"
+tagline = "AIエージェント向け CLI のための常駐 TCP サーバ"
+maintainer = "edo_m <edo.m18@gmail.com>"
+type = "add-on"
+
+blender_version_min = "4.4.0"
+
+license = ["SPDX:MIT"]
+
+# 標準ライブラリのみ使用（ソケット/スレッド）。外部 wheel 同梱なし。
+[permissions]
+network = "127.0.0.1 のローカル TCP サーバを提供するため"

@@ -1,0 +1,40 @@
+name: test-blender
+
+on: [push, pull_request]
+
+jobs:
+  # L1 純ユニット + lint + AST guard（全 PR ゲート / bpy 不要）
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+      - name: Sync
+        run: uv sync
+      - name: Lint (ruff)
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: AST guard (生 bpy.ops 禁止)
+        run: uv run python scripts/check_no_raw_bpy_ops.py packages/bli-addon/src
+      - name: Unit tests (L1) + protocol E2E (L3)
+        run: uv run pytest
+
+  # L2 bpy 統合（5.0 主軸 / 4.4 ベストエフォート）— M0.5 以降で有効化
+  # bpy-integration:
+  #   runs-on: ${{ matrix.os }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       os: [ubuntu-latest]
+  #       blender-version: ["4.4", "5.0"]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: BradyAJohnston/setup-blender@v5
+  #       with:
+  #         version: ${{ matrix.blender-version }}
+  #     - name: Capability dump + 契約テスト
+  #       run: |
+  #         blender --background --python packages/bli-addon/spikes/dump_capabilities.py
+  #         blender --background --python packages/bli-addon/tests/test_contract.py
