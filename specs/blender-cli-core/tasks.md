@@ -55,3 +55,4 @@
 - walking skeleton 達成: CLI→HELLO→ping/echo 疎通（dev 3.10 / Blender 3.11 両対応実証）。
 - M3 完了（2026-06-13）。pytest **45件** pass + ruff/format/AST guard 緑。Blender **5.0.1 / 4.4.3** 両実機で smoke_ops OK（fingerprint 一致 = 決定性確認）。
 - M4 完了（2026-06-13）。pytest **60件** pass + ruff/format/AST guard 緑。Pydantic↔bli-core schema parity 緑。Blender 5.0.1 実機で request-status 後追い回収 OK（DONE / unknown=False）。
+- M4 追補（PR #1 Codex レビュー対応, 2026-06-13）。pytest **70件** pass。①request-status のセッションロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（Dispatcher.submit settle + サーバ TIMEOUT/exit2、registry は RUNNING 維持）③発見系を Command.implemented でフィルタ（transform/exec-python は未実装扱い）。
