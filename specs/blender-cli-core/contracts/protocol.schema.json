@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bli protocol envelope",
+  "description": "localhost TCP 上の長さ接頭辞付き JSON-RPC 2.0 サブセット。フレーム=[4byte BE uint32 length][UTF-8 JSON body]。",
+  "$defs": {
+    "HelloRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "token", "protocol_version"],
+      "properties": {
+        "type": {"const": "hello"},
+        "token": {"type": "string", "description": "セッショントークン。hmac.compare_digestで照合"},
+        "protocol_version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+        "client": {"type": "string"}
+      }
+    },
+    "HelloResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "protocol_version", "blender_version", "schema_hash", "session_uid"],
+      "properties": {
+        "type": {"const": "hello-ok"},
+        "protocol_version": {"type": "string"},
+        "blender_version": {"type": "string"},
+        "schema_hash": {"type": "string"},
+        "capabilities": {"type": "array", "items": {"type": "string"}},
+        "session_uid": {"type": "string"}
+      }
+    },
+    "RpcRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "method", "id"],
+      "properties": {
+        "jsonrpc": {"const": "2.0"},
+        "method": {"type": "string", "description": "CLIサブコマンド名"},
+        "id": {"type": "string", "description": "UUIDv4。再試行は同一id（冪等）"},
+        "params": {"type": "object"}
+      }
+    },
+    "RpcSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": {"const": "2.0"},
+        "id": {"type": "string"},
+        "result": {
+          "type": "object",
+          "required": ["success", "operation"],
+          "properties": {
+            "success": {"type": "boolean"},
+            "operation": {"type": "string"},
+            "verified": {"type": "boolean", "description": "mutates系で事後検証済みか"},
+            "fingerprint": {"type": ["string", "null"], "description": "選択/active/modeの状態ハッシュ"},
+            "output_ref": {"$ref": "#/$defs/OutputRef"},
+            "data": {"type": ["object", "array", "null"]},
+            "warnings": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "RpcError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "error"],
+      "properties": {
+        "jsonrpc": {"const": "2.0"},
+        "id": {"type": ["string", "null"]},
+        "error": {
+          "type": "object",
+          "required": ["code", "message", "data"],
+          "properties": {
+            "code": {"type": "integer", "description": "-32600/-32601/-32602/-32000(業務)"},
+            "message": {"type": "string", "description": "ErrorObject.kind"},
+            "data": {"$ref": "#/$defs/ErrorObject"}
+          }
+        }
+      }
+    },
+    "ErrorObject": {
+      "type": "object",
+      "required": ["category", "kind", "retryable"],
+      "properties": {
+        "category": {"enum": ["PRECONDITION", "USER_INPUT", "ENVIRONMENT", "INTERNAL"]},
+        "kind": {"type": "string"},
+        "cause": {"type": "string"},
+        "userVisibleSymptom": {"type": "string"},
+        "codeBug": {"type": "boolean"},
+        "retryable": {"type": "boolean"},
+        "remediation": {"type": "string"},
+        "tracebackRef": {"type": ["string", "null"]}
+      }
+    },
+    "OutputRef": {
+      "type": ["object", "null"],
+      "properties": {
+        "id": {"type": "string"},
+        "transport": {"enum": ["inline", "shared-fs"]},
+        "path": {"type": ["string", "null"]},
+        "size": {"type": "integer"},
+        "sha256": {"type": "string"},
+        "encoding": {"type": "string"},
+        "schema": {"type": "string"}
+      }
+    }
+  }
+}
