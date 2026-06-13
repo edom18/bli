@@ -40,8 +40,18 @@
 - [x] ops ユニットテスト 7件（ルーティング + param検証、bpy不要）。
 - [x] 実機スモーク smoke_ops.py（メインスレッド手動pump + 別スレッドclient）。set-origin world→geometry の golden 検証。
 
+## M4: CLI骨格 & 診断コマンド ✅
+- [x] T4.2 bli/models.py: bli-core Command 定義から Pydantic モデルを動的生成（validate_params / model_for）。送信前のローカル検証に使用。
+- [x] T4.2 parity テスト: Pydantic model_json_schema と bli-core to_json_schema の一致（required/プロパティ/型・enum）を全コマンドで検証 = SSOT ドリフト検出。
+- [x] T4.4 `help [--command] [--json]` / `list-commands [--json]`（SSOTから生成・schema_hash 同梱・ローカル完結）。
+- [x] T4.3 `request-status`（RPC + CLI）: サーバが RequestRegistry を直接 lookup（begin/メイン直列を経由しないメタ問い合わせ）。known/state/result を返す。
+- [x] T4.1 グローバルフラグ: `_rpc` 送信前に Pydantic ローカル検証（不正入力は接続前に exit 4）。set-origin に `--id`（冪等リトライ用）。
+- [x] テスト: parity 6件 + CLI help/list/local検証 6件 + request-status E2E 3件。
+- 繰越: **job-status / job-wait → M10**（非同期job基盤に依存）。**`--dry-run` → 後続**（コマンド別プレビュー意味論が必要）。
+
 ## 進捗メモ
 - 着手日: 2026-06-13 / ブランチ: feature/m0-bootstrap
 - M0→M2 完了（2026-06-13）。L3 E2E 38件 pass + Blender 5.0.1 実機スモーク OK。
 - walking skeleton 達成: CLI→HELLO→ping/echo 疎通（dev 3.10 / Blender 3.11 両対応実証）。
 - M3 完了（2026-06-13）。pytest **45件** pass + ruff/format/AST guard 緑。Blender **5.0.1 / 4.4.3** 両実機で smoke_ops OK（fingerprint 一致 = 決定性確認）。
+- M4 完了（2026-06-13）。pytest **60件** pass + ruff/format/AST guard 緑。Pydantic↔bli-core schema parity 緑。Blender 5.0.1 実機で request-status 後追い回収 OK（DONE / unknown=False）。
