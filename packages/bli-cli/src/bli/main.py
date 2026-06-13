@@ -1,6 +1,8 @@
-"""bli CLI エントリポイント（Typer）。M2: init / ping / doctor。
+"""bli CLI エントリポイント（Typer）。
 
-終了コード（spec §8）: 0=成功 / 1=確定失敗 / 3=接続不能・認証失敗 / 4=入力エラー。
+コマンド: init / doctor / ping / request-status / scene-info / object-info /
+set-origin / list-commands / help。
+終了コード（spec §8）: 0=成功 / 1=確定失敗 / 2=未決 / 3=接続不能・認証失敗 / 4=入力エラー。
 """
 
 from __future__ import annotations
@@ -12,9 +14,11 @@ from typing import Any
 
 import typer
 
+from bli_core.commands import Command, load_definitions
 from bli_core.errors import ErrorCategory, ErrorCode, ExitCode
+from bli_core.schema import schema_hash, to_json_schema
 
-from . import client, config
+from . import client, config, models
 
 app = typer.Typer(
     name="bli",
@@ -58,10 +62,16 @@ def _rpc(
     json_out: bool,
     port: int | None,
     human: Callable[[dict[str, Any]], str],
+    request_id: str | None = None,
 ) -> None:
     """RPC を1往復し結果を出力する（接続/業務エラーは終了コードへ写像）。"""
     try:
-        result, _hello = client.call(method, params, port=port)
+        models.validate_params(method, params)  # 送信前のローカル Pydantic 検証
+    except models.ParamValidationError as e:
+        _emit_error(json_out, ErrorCode.INVALID_PARAMS, e.detail)
+        raise typer.Exit(int(ExitCode.INPUT)) from None
+    try:
+        result, _hello = client.call(method, params, request_id=request_id, port=port)
     except client.ConnectError as e:
         _emit_error(json_out, "CONNECTION", str(e))
         raise typer.Exit(int(ExitCode.CONNECTION)) from None
@@ -207,6 +217,9 @@ def set_origin(
     make_single_user: bool = typer.Option(
         False, "--make-single-user", help="共有mesh時に単一ユーザ化を許可"
     ),
+    request_id: str | None = typer.Option(
+        None, "--id", help="リクエストID(UUIDv4)。冪等リトライで同一IDを再利用する"
+    ),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
@@ -226,7 +239,99 @@ def set_origin(
     def human(data: dict[str, Any]) -> str:
         return f"origin of {data.get('name')} -> {data.get('to')} @ {data.get('origin_world')}"
 
-    _rpc("set-origin", params, json_out=json_out, port=port, human=human)
+    _rpc("set-origin", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command("request-status")
+def request_status(
+    request_id: str = typer.Option(..., "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """リクエストの決着状態を取得する（タイムアウト後の後追い回収）。"""
+
+    def human(data: dict[str, Any]) -> str:
+        return f"id={data.get('id')} state={data.get('state')} known={data.get('known')}"
+
+    _rpc("request-status", {"id": request_id}, json_out=json_out, port=port, human=human)
+
+
+def _command_meta(cmd: Command) -> dict[str, Any]:
+    return {
+        "name": cmd.name,
+        "summary": cmd.summary,
+        "mutates": cmd.mutates,
+        "required_mode": cmd.required_mode.value,
+        "stability": cmd.stability.value,
+        "is_heavy": cmd.is_heavy,
+        "capability_deps": list(cmd.capability_deps),
+    }
+
+
+@app.command("list-commands")
+def list_commands(
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+) -> None:
+    """利用可能なコマンド一覧を返す（SSOTから生成・ローカル完結）。"""
+    cmds = load_definitions()
+    items = [_command_meta(c) for c in sorted(cmds.values(), key=lambda c: c.name)]
+    if json_out:
+        typer.echo(
+            json.dumps({"schema_hash": schema_hash(cmds), "commands": items}, ensure_ascii=False)
+        )
+    else:
+        for it in items:
+            flag = "✎" if it["mutates"] else " "
+            typer.echo(f"  {flag} {it['name']:<16}{it['summary']}")
+
+
+def _human_command(cmd: Command) -> str:
+    lines = [
+        f"{cmd.name} — {cmd.summary}",
+        f"  mutates={cmd.mutates} mode={cmd.required_mode.value} stability={cmd.stability.value}",
+    ]
+    if cmd.params:
+        lines.append("  params:")
+        for prm in cmd.params:
+            req = "必須" if prm.required else "任意"
+            choices = f" choices={prm.choices}" if prm.choices else ""
+            lines.append(f"    --{prm.name} ({prm.type.value}, {req}){choices}  {prm.help}")
+    else:
+        lines.append("  params: なし")
+    return "\n".join(lines)
+
+
+@app.command("help")
+def help_(
+    command: str | None = typer.Option(None, "--command", help="対象コマンド名"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+) -> None:
+    """コマンドの JSON Schema を返す（AIエージェントの発見用・SSOTから生成）。"""
+    cmds = load_definitions()
+    sh = schema_hash(cmds)
+
+    if command is not None:
+        cmd = cmds.get(command)
+        if cmd is None:
+            _emit_error(json_out, ErrorCode.METHOD_NOT_FOUND, f"未知のコマンド: {command}")
+            raise typer.Exit(int(ExitCode.INPUT))
+        payload = {
+            "schema_hash": sh,
+            "command": _command_meta(cmd),
+            "schema": to_json_schema(cmd),
+        }
+        _emit(json_out, _human_command(cmd), payload)
+        return
+
+    payload = {
+        "schema_hash": sh,
+        "commands": {name: to_json_schema(c) for name, c in sorted(cmds.items())},
+    }
+    human = "\n".join(
+        [f"schema_hash: {sh[:12]}", "コマンド（詳細は --command NAME）:"]
+        + [f"  {name}" for name in sorted(cmds)]
+    )
+    _emit(json_out, human, payload)
 
 
 if __name__ == "__main__":
