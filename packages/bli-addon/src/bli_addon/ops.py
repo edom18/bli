@@ -324,12 +324,11 @@ def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             remediation="--name を指定してください",
         )
     # color は create 専用（assign/list で渡されたら silent ignore せず弾く）。
-    if action != "create" and color is not None:
-        _require_input(
-            False,
-            symptom="--color は create のときのみ有効です",
-            remediation="create で使うか --color を外してください",
-        )
+    _require_input(
+        action == "create" or color is None,
+        symptom="--color は create のときのみ有効です",
+        remediation="create で使うか --color を外してください",
+    )
 
     from . import gateway  # lazy: bpy 依存
 

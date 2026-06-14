@@ -197,7 +197,8 @@ packages/{bli-core, bli-cli, bli-addon}（uv workspace）。
 
 ## 10. 後続マイルストーンの繰越事項
 - M5: scene-info の output_ref 退避（大きい結果はファイル退避 + sha256 + os.replace）。詳細は NEXT-M5.md。
-- M6: T6.1（select/transform/apply-transform）✅ / T6.2（duplicate/delete）✅。残り T6.3 material・T6.4 modifier。`exec-python` は M11。
+- M6: T6.1（select/transform/apply-transform）✅ / T6.2（duplicate/delete）✅ / T6.3（material）✅。残り T6.4 modifier。`exec-python` は M11。
+- M6 編集系の**孤児データブロック**（delete の sole-user mesh / material create-and-assign の置換で外れた material）の purge は後続（save/cleanup 系）で対応。即時 GC しない bpy 仕様どおりで設計上は意図的（レビューで P2 記録）。
 - M8: print3d Toolbox の実モジュールid特定（Extensions）。3MFは addon 必要 or STLフォールバック。
 - M9: import/export 各フォーマット（RESOLVERS は capability.py に確定値あり）。
 - M10: `job-status`/`job-wait`（非同期job）+ `--dry-run`。settle/RUNNING 機構は M4 で土台済み。

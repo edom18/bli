@@ -403,6 +403,8 @@ def run_calls():
 
     # 16) material（M6 T6.3）: create-and-assign → Base Color 往復 → list で確認。
     red = [0.8, 0.1, 0.2, 1.0]
+    before, _ = call_retry("material", {"action": "list", "targets": "Cube"})
+    n_before = len(before["data"]["materials"])  # 既定 Cube は "Material" を1枚持つ
     mc, _ = call_retry(
         "material", {"action": "create", "targets": "Cube", "name": "SmRed", "color": red}
     )
@@ -410,9 +412,30 @@ def run_calls():
     created_mat = mc["data"]["material"]  # "SmRed"（衝突時は自動採番）
     assert mc.get("fingerprint") and len(mc["fingerprint"]) == 16, mc
     ml, _ = call_retry("material", {"action": "list", "targets": "Cube"})
-    slot_entry = next(m for m in ml["data"]["materials"] if m["name"] == created_mat)
+    # active スロット置換: スロット数は増えない（空なら append で +1）。
+    expected_n = n_before if n_before >= 1 else 1
+    assert len(ml["data"]["materials"]) == expected_n, (n_before, ml["data"]["materials"])
+    slot_entry = ml["data"]["materials"][mc["data"]["slot"]]
+    assert slot_entry["name"] == created_mat, (slot_entry, created_mat)
+    assert len(slot_entry["base_color"]) == 4, slot_entry  # RGBA 4要素（version 退化検出）
     assert approx(slot_entry["base_color"], red), slot_entry
-    print("material_create_ok", created_mat, "slot", mc["data"]["slot"], "color", slot_entry["base_color"])
+    print(
+        "material_create_ok",
+        created_mat,
+        "slot",
+        mc["data"]["slot"],
+        "color",
+        slot_entry["base_color"],
+    )
+
+    # 空スロットのオブジェクト（ShA はマテリアル未割当）への create → append で slot 0。
+    sa, _ = call_retry(
+        "material", {"action": "create", "targets": "ShA", "name": "ShGreen", "color": [0, 1, 0, 1]}
+    )
+    assert sa["data"]["slot"] == 0, sa["data"]
+    sal, _ = call_retry("material", {"action": "list", "targets": "ShA"})
+    assert sal["data"]["materials"][0]["name"] == sa["data"]["material"], sal["data"]
+    print("material_empty_append_ok", sa["data"]["material"])
 
     # 別マテリアルを create（active スロット置換）→ assign で既存 SmRed に戻す。
     call_retry(
