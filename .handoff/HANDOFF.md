@@ -1,9 +1,9 @@
 # bli (Blender CLI) — 引き継ぎ資料 (HANDOFF)
 
-最終更新: 2026-06-14 / 状態: **PR #1（M0–M4）マージ済み。M5 は `feature/m5-info` 実装完了→ PR #2 レビュー中**。
+最終更新: 2026-06-14 / 状態: **PR #1（M0–M4）・PR #2（M5）マージ済み。M6 を `feature/m6-edit` で実装中（T6.1 完了→PR予定）**。
 
 > 新規セッションはこの1枚を読めば再開できる。詳細は `specs/blender-cli-core/` を参照。
-> **次の作業（M5）の着手手順とタスクは `.handoff/NEXT-M5.md` を参照**（このファイルは全体史 + 規約）。
+> **次の作業（M6）の着手手順とタスクは `.handoff/NEXT-M6.md` を参照**（このファイルは全体史 + 規約）。
 
 ---
 
@@ -60,10 +60,12 @@
 | M2 通信層（server/auth/session/registry/shutdown/client/CLI ping） | ✅ | L3 E2E 38件 + Blender5.0実機スモークOK |
 | **M3 アドオン実行基盤**（ops/gateway/dispatcher結線・CLI 3コマンド） | ✅ | pytest 45件 + Blender5.0/4.4実機 smoke_ops OK |
 | **M4 CLI骨格 & 診断コマンド**（Pydanticラッパ/help/list-commands/request-status/--id） | ✅ | pytest 79件 + parity緑 + 実機 request-status OK |
-| **M5 情報取得**（list-objects / object-info bbox / scene-info の output_ref 退避） | ✅（PR #2 レビュー中） | pytest 95 + 5.0/4.4 実機 smoke OK |
-| M6–M14 | 未着手 | — |
+| **M5 情報取得**（list-objects / object-info bbox / scene-info の output_ref 退避） | ✅ main（PR #2） | pytest 95 + 5.0/4.4 実機 smoke OK |
+| **M6 汎用編集**（T6.1 select/transform/apply-transform 実装。T6.2–6.4 未） | 🔨 実装中（feature/m6-edit） | pytest 103 + 5.0/4.4 実機 smoke OK |
+| M7–M14 | 未着手 | — |
 
-**main の全テスト/lint状態: `uv run pytest` = 79 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK。**
+**main の全テスト/lint状態（M5まで）: `uv run pytest` = 95 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK。**
+**feature/m6-edit（T6.1）: pytest = 103 passed / lint 緑 / pyright 新規エラー0 / 5.0.1・4.4.3 実機 smoke OK。**
 
 > PR #1 の Codex レビュー対応で M4 を追補（§6b 参照）: ①request-status のロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（settle）③発見系を implemented 済みに限定 ④サーバ/クライアントのタイムアウト整合（DISPATCH_TIMEOUT < CLIENT_READ_TIMEOUT）⑤TIMEOUT 時に request id を提示。
 
@@ -103,7 +105,7 @@
 - **TTL purge は終端のみ**: `RequestRegistry._purge` は DONE/FAILED のみ掃除し、実行中（PENDING/RUNNING）は settle まで保持する。`lookup`/`begin` 双方で適用。長時間ジョブの id が消えて再送が二重実行される（IN_PROGRESS 冪等性が壊れる）のを防ぐ。
 - **ping もタイムアウト写像を共通化**: `_call_or_exit` を抽出し `_rpc`/`ping` 双方で使用。ping も実機では Dispatcher 経由のため TIMEOUT→exit2 + id 提示に統一（doctor は診断目的でエラーを握るため対象外）。
 
-## 6c. M5 完了（情報取得）✅（PR #2 レビュー中）
+## 6c. M5 完了（情報取得）✅ main マージ済み（PR #2）
 - **判断3点（着手時確定）**: ①`list-objects --type` = freeform STR（大小無視照合・版差/将来型に強い）②output_ref の GC は M10 へ繰越（M5 は退避+検証を優先）③CLI 既定は参照のみ・`--fetch` で展開。
 - **T5.1 出力退避** — `bli_core/output_ref.py`（新規・純Python・依存ゼロ）: `INLINE_THRESHOLD=64KiB` / `maybe_offload(schema, data, outputs_dir)→(inline, descriptor)` / `load_verified(ref)→data` / `build_descriptor`。退避は temp→`os.replace` でアトミック。**退避 id はコンテンツアドレス（sha256 先頭16桁）**＝request id を ops 層へ配線せず M4 のハンドラ契約 `(method, params, info, settle)` を再変更しない設計。`_safe_output_path` で outputs 配下逸脱を拒否、改竄は `StaleOutputError`。`runtime.outputs_dir()`=`BLI_STATE_DIR/outputs`（git 非管理）。
   - `ops._ok` の `output_ref` を **dict 化**、`_ok_offload` で `scene-info` を閾値超なら退避（inline 時は従来どおり `data=<...>`/`output_ref=None`）。
@@ -111,6 +113,16 @@
 - **T5.2 情報拡充** — `object-info`: `gateway.world_bbox`（`matrix_world @ bound_box` の world AABB min/max/size）を `object_summary` に追加。**fingerprint が変わる**（object_summary 内包・5.0/4.4 で一致 `f7d31df4ef48be6c`）。`list-objects`（新規）: definitions 登録（type/regex 任意・required_mode=OBJECT）/ `gateway.list_objects`（name/type/location の軽量サマリ・不正 regex は USER_INPUT）/ `ops._list_objects` + `_BPY_HANDLERS` 登録 / CLI サブコマンド。
 - **テスト**: `test_output_ref.py`（L1: 閾値/往復/改竄/配下逸脱/id 決定性 9件）、`test_ops_dispatch.py`（list-objects param 検証 +2）、`test_cli_help.py`（list-objects 発見 +1）、`test_cli_scene_info.py`（退避/--fetch/STALE_OUTPUT/人間向け 4件）。`smoke_ops.py` に bbox golden・list-objects・退避往復を追加。**pytest=95 passed / ruff・format・AST guard 緑 / Blender 5.0.1・4.4.3 実機 OPS SMOKE OK**。
 - **繰越**: output_ref の GC（24h/200件/200MiB）→M10。`bli/main.py:83` の既存 pyright narrowing（M5 以前から・実行時安全）→別途。
+
+## 6d. M6 汎用編集（実装中 / feature/m6-edit）
+M6 は7コマンドと大きいため **サブPRに分割**して進める（ユーザー判断で確定）。順序: T6.1 → T6.2 → T6.3 → T6.4。
+- **判断（着手時確定）**: ①M6 はサブPR分割 ②`transform --mode delta` の scale は **乗算**（loc/rot は加算）③`select` は実装（select_set + active 設定・他コマンドは従来どおり --targets で独立解決）。
+- **T6.1 完了**（select / transform / apply-transform）:
+  - `definitions.py`: `transform` を `implemented=True` に（delta scale=乗算へ summary 更新）。`select`（targets/type/active）・`apply-transform`（targets + location/rotation/scale の BOOL フラグ・全省略=全適用）を追加。
+  - `gateway.py`: `transform_object`（直接プロパティ・op不要・rotation は度→ラジアン・delta は loc/rot 加算 / scale 乗算）/ `apply_transform`（`bpy.ops.object.transform_apply` を `isolate_users=True` で共有mesh自動単一化）/ `select_objects`（`select_set` + `view_layer.objects.active` 直接設定・op不要）。
+  - `ops.py`: `_select` / `_transform` / `_apply_transform` + `_BPY_HANDLERS` 登録。`bli/main.py`: 3サブコマンド（`--id` 冪等付き）+ `_parse_vec3`（"x,y,z"→[float]×3・不正は exit4）。
+  - **テスト**: ops dispatch の param 検証 +5、CLI 発見/vec3パース/mode検証 +3。`test_cli_help.py` の未実装例を `transform`→`exec-python` に更新。pytest=103 passed。smoke_ops に transform(set/delta)・apply-transform(scale bake→dims×2)・select の golden を追加。5.0.1/4.4.3 実機 OK。
+- **T6.2–6.4 未着手**（NEXT-M6.md 参照）: T6.2 duplicate/delete、T6.3 material(assign/create/list)、T6.4 modifier(add/remove/list/apply: MIRROR/SUBSURF/SOLIDIFY/DECIMATE/BOOLEAN)。
 
 ## 7. 再開手順（コピペ可）
 ```bash
