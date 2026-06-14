@@ -359,14 +359,18 @@ def select_objects(
     message: str | None = None,
 ) -> dict[str, Any]:
     """targets(name|regex) を選択し active を設定する（select_set / active 直接設定・op不要）。"""
-    matched = resolve_targets(targets)  # 完全名 > regex
+    # 選択は view layer 操作。グローバル解決後に **アクティブ view layer 内**へ絞る。
+    # 別シーン/除外コレクションの object を弾いてから状態を変更する（Codex P2: 状態を汚さない）。
+    view_layer = bpy.context.view_layer
+    vl_names = {o.name for o in view_layer.objects}
+    matched = [o for o in resolve_targets(targets) if o.name in vl_names]  # 完全名 > regex
     if type_filter is not None:
         want = type_filter.upper()
         matched = [o for o in matched if o.type == want]
     if not matched:
         raise _op_error(
             ErrorCode.E_TARGET_NOT_FOUND,
-            f"対象が見つかりません: {targets}",
+            f"対象が見つかりません（アクティブ view layer 内）: {targets}",
             category=ErrorCategory.USER_INPUT,
         )
 
@@ -382,7 +386,6 @@ def select_objects(
     else:
         active_obj = matched[0]
 
-    view_layer = bpy.context.view_layer
     for o in view_layer.objects:
         o.select_set(False)
     for o in matched:

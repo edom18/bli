@@ -60,6 +60,16 @@ def test_transform_bad_mode_local_validation():
     assert "INVALID_PARAMS" in res.output
 
 
+def test_apply_transform_flags_have_no_schema_default():
+    # presence-sensitive な BOOL フラグは schema に default を出さない（Codex P2）。
+    # default:false を広告すると、既定埋めクライアントが全 false を送ってしまう。
+    res = runner.invoke(app, ["help", "--command", "apply-transform", "--json"])
+    assert res.exit_code == 0
+    props = json.loads(res.output)["schema"]["properties"]
+    for ch in ("location", "rotation", "scale"):
+        assert "default" not in props[ch], (ch, props[ch])
+
+
 def test_help_all_json():
     res = runner.invoke(app, ["help", "--json"])
     assert res.exit_code == 0

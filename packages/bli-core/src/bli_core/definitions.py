@@ -100,11 +100,14 @@ command(
 command(
     "apply-transform",
     "オブジェクトの位置/回転/拡縮をメッシュデータに適用する（全省略時は全適用）",
+    # location/rotation/scale は「キーの有無」で意味が決まる presence-sensitive フラグ。
+    # schema に default を出すと、既定値を埋める生成クライアントが全 false を送って
+    # しまうため、default は持たせない（Codex P2）。
     params=(
         p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
-        p("location", ParamType.BOOL, default=False, help="位置を適用"),
-        p("rotation", ParamType.BOOL, default=False, help="回転を適用"),
-        p("scale", ParamType.BOOL, default=False, help="拡縮を適用"),
+        p("location", ParamType.BOOL, help="位置を適用"),
+        p("rotation", ParamType.BOOL, help="回転を適用"),
+        p("scale", ParamType.BOOL, help="拡縮を適用"),
     ),
     mutates=True,
     required_mode=Mode.OBJECT,
