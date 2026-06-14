@@ -141,3 +141,21 @@ def test_timeout_exposes_generated_id(monkeypatch):
     payload = json.loads(res.output)
     assert payload["request_id"]  # 非空
     assert payload["request_id"] == seen["id"]  # 送信に使った id と一致
+
+
+def test_ping_timeout_maps_exit2_with_id(monkeypatch):
+    # ping も実機では Dispatcher 経由 → TIMEOUT は exit2 + id 提示（_rpc と同じ写像）
+    from bli import client as cli_client
+
+    seen = {}
+
+    def fake_call(method, params=None, *, port=None, request_id=None, timeout=None):
+        seen["id"] = request_id
+        raise _fake_timeout_error()
+
+    monkeypatch.setattr(cli_client, "call", fake_call)
+    res = runner.invoke(app, ["ping", "--json"])
+    assert res.exit_code == 2  # 旧実装では exit1 / id なしだった
+    payload = json.loads(res.output)
+    assert payload["kind"] == "TIMEOUT"
+    assert payload["request_id"] == seen["id"]

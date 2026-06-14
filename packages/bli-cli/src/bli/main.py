@@ -59,6 +59,34 @@ def _exit_code_for(err: dict[str, Any]) -> ExitCode:
     return ExitCode.FAILURE
 
 
+def _call_or_exit(
+    method: str,
+    params: dict[str, Any] | None,
+    *,
+    json_out: bool,
+    port: int | None,
+    request_id: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """client.call をラップし、接続/業務エラーを終了コードへ写像する（id 提示つき）。
+
+    成功時は (result, hello)。TIMEOUT は exit 2 + request-status ヒント、接続不能は exit 3。
+    RPC を送る全コマンド（_rpc / ping）で共通利用する。
+    """
+    try:
+        return client.call(method, params, request_id=request_id, port=port)
+    except client.ConnectError as e:
+        _emit_error(json_out, "CONNECTION", str(e), request_id=request_id)
+        raise typer.Exit(int(ExitCode.CONNECTION)) from None
+    except client.RpcRemoteError as e:
+        kind = e.error.get("message", "RPC_ERROR")
+        data = e.error.get("data") if isinstance(e.error.get("data"), dict) else {}
+        symptom = data.get("userVisibleSymptom") or str(e)
+        if kind == ErrorCode.TIMEOUT:
+            symptom = f"{symptom}（後追い: bli request-status --id {request_id}）"
+        _emit_error(json_out, kind, symptom, request_id=request_id)
+        raise typer.Exit(int(_exit_code_for(e.error))) from None
+
+
 def _rpc(
     method: str,
     params: dict[str, Any],
@@ -78,19 +106,9 @@ def _rpc(
     # request id は CLI 側で確定させる。TIMEOUT 等でも request-status で後追いできるよう、
     # 生成した id を必ずユーザに提示する（--id 省略時に id が見えない問題を防ぐ）。
     request_id = request_id or str(uuid.uuid4())
-    try:
-        result, _hello = client.call(method, params, request_id=request_id, port=port)
-    except client.ConnectError as e:
-        _emit_error(json_out, "CONNECTION", str(e), request_id=request_id)
-        raise typer.Exit(int(ExitCode.CONNECTION)) from None
-    except client.RpcRemoteError as e:
-        kind = e.error.get("message", "RPC_ERROR")
-        data = e.error.get("data") if isinstance(e.error.get("data"), dict) else {}
-        symptom = data.get("userVisibleSymptom") or str(e)
-        if kind == ErrorCode.TIMEOUT:
-            symptom = f"{symptom}（後追い: bli request-status --id {request_id}）"
-        _emit_error(json_out, kind, symptom, request_id=request_id)
-        raise typer.Exit(int(_exit_code_for(e.error))) from None
+    result, _hello = _call_or_exit(
+        method, params, json_out=json_out, port=port, request_id=request_id
+    )
 
     payload: dict[str, Any] = {
         "ok": True,
@@ -109,17 +127,14 @@ def ping(
     port: int | None = typer.Option(None, "--port", help="接続ポート（既定は connection.json）"),
 ) -> None:
     """アドオンへ疎通確認する（HELLO→ping）。"""
-    try:
-        result, hello = client.call("ping", port=port)
-    except client.ConnectError as e:
-        _emit_error(json_out, "CONNECTION", str(e))
-        raise typer.Exit(int(ExitCode.CONNECTION)) from None
-    except client.RpcRemoteError as e:
-        _emit_error(json_out, e.error.get("message", "RPC_ERROR"), str(e))
-        raise typer.Exit(int(ExitCode.FAILURE)) from None
+    # ping も実機では Dispatcher 経由で実行されるため TIMEOUT があり得る。
+    # 共通の終了コード写像（TIMEOUT→exit2 + id 提示）を _rpc と揃える。
+    request_id = str(uuid.uuid4())
+    result, hello = _call_or_exit("ping", None, json_out=json_out, port=port, request_id=request_id)
 
     payload = {
         "ok": True,
+        "request_id": request_id,
         "protocol_version": hello.get("protocol_version"),
         "blender_version": hello.get("blender_version"),
         "schema_hash": hello.get("schema_hash"),
