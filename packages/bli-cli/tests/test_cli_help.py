@@ -48,14 +48,14 @@ def test_m6_commands_discoverable():
 
 def test_transform_bad_vec3_exit_input():
     # 不正な --location（3要素でない）は送信前に exit 4
-    res = runner.invoke(app, ["transform", "Cube", "--location", "1,2", "--json"])
+    res = runner.invoke(app, ["transform", "--targets", "Cube", "--location", "1,2", "--json"])
     assert res.exit_code == 4
     assert "INVALID_PARAMS" in res.output
 
 
 def test_transform_bad_mode_local_validation():
     # 不正な --mode は送信前ローカル Pydantic 検証で exit 4
-    res = runner.invoke(app, ["transform", "Cube", "--mode", "bogus", "--json"])
+    res = runner.invoke(app, ["transform", "--targets", "Cube", "--mode", "bogus", "--json"])
     assert res.exit_code == 4
     assert "INVALID_PARAMS" in res.output
 
@@ -93,7 +93,7 @@ def test_help_unknown_command_exit_input():
 
 def test_local_validation_rejects_bad_enum_before_connect():
     # 不正な --to は送信前に exit 4（接続を試みない）
-    res = runner.invoke(app, ["set-origin", "Cube", "--to", "bogus", "--json"])
+    res = runner.invoke(app, ["set-origin", "--targets", "Cube", "--to", "bogus", "--json"])
     assert res.exit_code == 4
     assert "INVALID_PARAMS" in res.output
 
@@ -161,7 +161,9 @@ def test_timeout_exposes_supplied_id(monkeypatch):
         raise _fake_timeout_error()
 
     monkeypatch.setattr(cli_client, "call", fake_call)
-    res = runner.invoke(app, ["set-origin", "Cube", "--to", "geometry", "--id", "my-id", "--json"])
+    res = runner.invoke(
+        app, ["set-origin", "--targets", "Cube", "--to", "geometry", "--id", "my-id", "--json"]
+    )
     assert res.exit_code == 2  # TIMEOUT_PENDING
     payload = json.loads(res.output)
     assert payload["kind"] == "TIMEOUT"
@@ -179,7 +181,7 @@ def test_timeout_exposes_generated_id(monkeypatch):
         raise _fake_timeout_error()
 
     monkeypatch.setattr(cli_client, "call", fake_call)
-    res = runner.invoke(app, ["set-origin", "Cube", "--to", "geometry", "--json"])
+    res = runner.invoke(app, ["set-origin", "--targets", "Cube", "--to", "geometry", "--json"])
     assert res.exit_code == 2
     payload = json.loads(res.output)
     assert payload["request_id"]  # 非空

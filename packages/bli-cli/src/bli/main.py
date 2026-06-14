@@ -287,7 +287,7 @@ def list_objects_cmd(
 
 @app.command("object-info")
 def object_info(
-    targets: str = typer.Argument(..., help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
@@ -304,7 +304,7 @@ def object_info(
 
 @app.command("set-origin")
 def set_origin(
-    targets: str = typer.Argument(..., help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
     to: str = typer.Option(..., "--to", help="原点の決め方: geometry|cursor|world"),
     center: str | None = typer.Option(None, "--center", help="geometry時の中心: median|bounds"),
     x: float | None = typer.Option(None, "--x", help="world時のX"),
@@ -340,7 +340,7 @@ def set_origin(
 
 @app.command()
 def select(
-    targets: str = typer.Argument(..., help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
     type_filter: str | None = typer.Option(None, "--type", help="型フィルタ（MESH/CURVE/...）"),
     active: str | None = typer.Option(None, "--active", help="active にする対象名"),
     request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
@@ -362,7 +362,7 @@ def select(
 
 @app.command()
 def transform(
-    targets: str = typer.Argument(..., help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
     location: str | None = typer.Option(None, "--location", help="位置 x,y,z"),
     rotation: str | None = typer.Option(None, "--rotation", help="回転 x,y,z（度）"),
     scale: str | None = typer.Option(None, "--scale", help="拡縮 x,y,z"),
@@ -397,7 +397,7 @@ def transform(
 
 @app.command("apply-transform")
 def apply_transform_cmd(
-    targets: str = typer.Argument(..., help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
     location: bool = typer.Option(False, "--location", help="位置を適用"),
     rotation: bool = typer.Option(False, "--rotation", help="回転を適用"),
     scale: bool = typer.Option(False, "--scale", help="拡縮を適用"),
