@@ -25,6 +25,10 @@ OUTPUTS_DIRNAME = "outputs"
 DISPATCH_TIMEOUT = 30.0
 CLIENT_READ_TIMEOUT = 40.0
 
+# duplicate の複製数上限（暴走で Blender を固めるのを防ぐ）。CLI（送信前）/ サーバ（ops）双方が
+# この単一定数を参照し、上限のマジックナンバー散在と片側欠落を防ぐ。
+MAX_DUPLICATE_COUNT = 1000
+
 
 def user_state_dir() -> Path:
     """OS 別のユーザローカル状態ディレクトリ（token/connection.json 用）。"""

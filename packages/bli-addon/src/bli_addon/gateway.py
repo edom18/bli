@@ -268,6 +268,14 @@ def selection_fingerprint(selected: list[str], active: str) -> str:
     return _digest16({"selected": sorted(selected), "active": active})
 
 
+def names_fingerprint(names: list[str]) -> str:
+    """オブジェクト名集合の決定的フィンガープリント（duplicate の drift 検証用）。
+
+    順序非依存にするため sort してからハッシュする。
+    """
+    return _digest16({"names": sorted(names)})
+
+
 # ---- モード / 単一ユーザ化 ----
 
 
@@ -490,3 +498,67 @@ def select_objects(
         "count": len(matched),
         "active": active_obj.name,
     }
+
+
+# ---- 複製 / 削除（M6 T6.2 / 生 bpy.ops 不要・bpy.data 直接操作）----
+
+
+def duplicate_object(
+    obj: Any,
+    *,
+    linked: bool = False,
+    count: int = 1,
+    offset: list[float] | None = None,
+    message: str | None = None,
+) -> list[str]:
+    """obj を count 回複製し、生成オブジェクト名の一覧を返す（op 不要・bpy.data 直接）。
+
+    linked=False（既定）はデータ（mesh 等）も複製して独立させる。linked=True は
+    obj.data を共有する（軽量だが片方の編集が両方に波及する）。offset は **world 空間**
+    のオフセットで、i 番目（0始まり）の複製を (i+1)*offset だけ累積して world 位置へ置く
+    （T6.1 の location と一貫）。
+
+    offset の基準は **元 obj の評価済み matrix_world**（複製直後の new.matrix_world は
+    depsgraph 未評価で誤値になり得るため、信頼できる単一基準を使う）。これにより親付き
+    obj の複製でも world 位置が正しく確定する。各複製は元 object が属する全 collection に
+    link する（属さない場合はシーンの既定 collection にフォールバックし、view layer から
+    見えなくなる不整合を防ぐ）。
+    """
+    from mathutils import Vector  # type: ignore  # lazy: bpy 依存を閉じる
+
+    collections = list(obj.users_collection) or [bpy.context.scene.collection]
+    base = obj.matrix_world.copy()  # 評価済みの信頼できる基準（親付きでも world）
+    bt = base.translation
+    created: list[str] = []
+    for i in range(count):
+        new = obj.copy()
+        if not linked and obj.data is not None:
+            new.data = obj.data.copy()
+        for coll in collections:
+            coll.objects.link(new)
+        if offset is not None:
+            factor = i + 1
+            mw = base.copy()
+            mw.translation = Vector(
+                (
+                    bt.x + offset[0] * factor,
+                    bt.y + offset[1] * factor,
+                    bt.z + offset[2] * factor,
+                )
+            )
+            new.matrix_world = mw
+        created.append(new.name)
+    if message:
+        push_undo(message)
+    return created
+
+
+def delete_object(obj: Any, *, message: str | None = None) -> None:
+    """obj をシーン/データから削除する（do_unlink=True・op 不要・bpy.data 直接）。
+
+    共有 mesh（users>=2）でも安全: object だけを除去し、データは他の利用者が残れば保持される
+    （NEXT-M6 §4-B）。削除前のサマリ取得は呼び出し側（ops）が行う。
+    """
+    bpy.data.objects.remove(obj, do_unlink=True)
+    if message:
+        push_undo(message)

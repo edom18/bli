@@ -46,6 +46,41 @@ def test_m6_commands_discoverable():
     assert {"select", "transform", "apply-transform"} <= names
 
 
+def test_m6_t62_commands_discoverable():
+    # M6 T6.2 の duplicate/delete が実装済み一覧に出る
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    names = {c["name"] for c in data["commands"]}
+    assert {"duplicate", "delete"} <= names
+    # duplicate のスキーマ: offset は VEC3（任意・default なし）、count は INT
+    schema = json.loads(runner.invoke(app, ["help", "--command", "duplicate", "--json"]).output)[
+        "schema"
+    ]
+    assert set(schema["properties"]) == {"targets", "linked", "count", "offset"}
+    assert schema["required"] == ["targets"]
+    assert schema["properties"]["offset"]["type"] == "array"
+
+
+def test_duplicate_bad_offset_exit_input():
+    # 不正な --offset（3要素でない）は送信前に exit 4
+    res = runner.invoke(app, ["duplicate", "--targets", "Cube", "--offset", "1,2", "--json"])
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
+def test_duplicate_nonfinite_offset_exit_input():
+    # nan/inf は送信前に弾く（matrix を壊さない）
+    res = runner.invoke(app, ["duplicate", "--targets", "Cube", "--offset", "inf,0,0", "--json"])
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
+def test_duplicate_count_below_min_exit_input():
+    # --count<1 は送信前に exit 4
+    res = runner.invoke(app, ["duplicate", "--targets", "Cube", "--count", "0", "--json"])
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
 def test_transform_bad_vec3_exit_input():
     # 不正な --location（3要素でない）は送信前に exit 4
     res = runner.invoke(app, ["transform", "--targets", "Cube", "--location", "1,2", "--json"])

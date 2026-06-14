@@ -1,6 +1,6 @@
 # bli (Blender CLI) — 引き継ぎ資料 (HANDOFF)
 
-最終更新: 2026-06-14 / 状態: **PR #1（M0–M4）・PR #2（M5）マージ済み。M6 を `feature/m6-edit` で実装中（T6.1 完了→PR予定）**。
+最終更新: 2026-06-14 / 状態: **PR #1（M0–M4）・PR #2（M5）・PR #3（M6 T6.1）マージ済み。次は M6 T6.2（duplicate/delete）を `feature/m6-dup-delete` で実装**。
 
 > 新規セッションはこの1枚を読めば再開できる。詳細は `specs/blender-cli-core/` を参照。
 > **次の作業（M6）の着手手順とタスクは `.handoff/NEXT-M6.md` を参照**（このファイルは全体史 + 規約）。
@@ -61,11 +61,10 @@
 | **M3 アドオン実行基盤**（ops/gateway/dispatcher結線・CLI 3コマンド） | ✅ | pytest 45件 + Blender5.0/4.4実機 smoke_ops OK |
 | **M4 CLI骨格 & 診断コマンド**（Pydanticラッパ/help/list-commands/request-status/--id） | ✅ | pytest 79件 + parity緑 + 実機 request-status OK |
 | **M5 情報取得**（list-objects / object-info bbox / scene-info の output_ref 退避） | ✅ main（PR #2） | pytest 95 + 5.0/4.4 実機 smoke OK |
-| **M6 汎用編集**（T6.1 select/transform/apply-transform 実装。T6.2–6.4 未） | 🔨 実装中（feature/m6-edit） | pytest 103 + 5.0/4.4 実機 smoke OK |
+| **M6 汎用編集**（T6.1 select/transform/apply-transform ✅ main。T6.2–6.4 未） | 🔨 進行中（次=T6.2 / feature/m6-dup-delete） | pytest 107 + 5.0/4.4 実機 smoke OK |
 | M7–M14 | 未着手 | — |
 
-**main の全テスト/lint状態（M5まで）: `uv run pytest` = 95 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK。**
-**feature/m6-edit（T6.1）: pytest = 103 passed / lint 緑 / pyright 新規エラー0 / 5.0.1・4.4.3 実機 smoke OK。**
+**main の全テスト/lint状態（M6 T6.1 まで・PR #3 マージ済み）: `uv run pytest` = 107 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright は既存1件のみ（`bli/main.py` の narrowing・実行時安全）。**
 
 > PR #1 の Codex レビュー対応で M4 を追補（§6b 参照）: ①request-status のロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（settle）③発見系を implemented 済みに限定 ④サーバ/クライアントのタイムアウト整合（DISPATCH_TIMEOUT < CLIENT_READ_TIMEOUT）⑤TIMEOUT 時に request id を提示。
 
@@ -114,15 +113,32 @@
 - **テスト**: `test_output_ref.py`（L1: 閾値/往復/改竄/配下逸脱/id 決定性 9件）、`test_ops_dispatch.py`（list-objects param 検証 +2）、`test_cli_help.py`（list-objects 発見 +1）、`test_cli_scene_info.py`（退避/--fetch/STALE_OUTPUT/人間向け 4件）。`smoke_ops.py` に bbox golden・list-objects・退避往復を追加。**pytest=95 passed / ruff・format・AST guard 緑 / Blender 5.0.1・4.4.3 実機 OPS SMOKE OK**。
 - **繰越**: output_ref の GC（24h/200件/200MiB）→M10。`bli/main.py:83` の既存 pyright narrowing（M5 以前から・実行時安全）→別途。
 
-## 6d. M6 汎用編集（実装中 / feature/m6-edit）
+## 6d. M6 汎用編集（進行中）
 M6 は7コマンドと大きいため **サブPRに分割**して進める（ユーザー判断で確定）。順序: T6.1 → T6.2 → T6.3 → T6.4。
 - **判断（着手時確定）**: ①M6 はサブPR分割 ②`transform --mode delta` の scale は **乗算**（loc/rot は加算）③`select` は実装（select_set + active 設定・他コマンドは従来どおり --targets で独立解決）。
-- **T6.1 完了**（select / transform / apply-transform）:
-  - `definitions.py`: `transform` を `implemented=True` に（delta scale=乗算へ summary 更新）。`select`（targets/type/active）・`apply-transform`（targets + location/rotation/scale の BOOL フラグ・全省略=全適用）を追加。
-  - `gateway.py`: `transform_object`（直接プロパティ・op不要・rotation は度→ラジアン・delta は loc/rot 加算 / scale 乗算）/ `apply_transform`（`bpy.ops.object.transform_apply` を `isolate_users=True` で共有mesh自動単一化）/ `select_objects`（`select_set` + `view_layer.objects.active` 直接設定・op不要）。
-  - `ops.py`: `_select` / `_transform` / `_apply_transform` + `_BPY_HANDLERS` 登録。`bli/main.py`: 3サブコマンド（`--id` 冪等付き）+ `_parse_vec3`（"x,y,z"→[float]×3・不正は exit4）。
-  - **テスト**: ops dispatch の param 検証 +5、CLI 発見/vec3パース/mode検証 +3。`test_cli_help.py` の未実装例を `transform`→`exec-python` に更新。pytest=103 passed。smoke_ops に transform(set/delta)・apply-transform(scale bake→dims×2)・select の golden を追加。5.0.1/4.4.3 実機 OK。
-- **T6.2–6.4 未着手**（NEXT-M6.md 参照）: T6.2 duplicate/delete、T6.3 material(assign/create/list)、T6.4 modifier(add/remove/list/apply: MIRROR/SUBSURF/SOLIDIFY/DECIMATE/BOOLEAN)。
+
+### T6.1 完了 ✅ main マージ済み（PR #3）— select / transform / apply-transform
+- `definitions.py`: `transform` を `implemented=True` 化。`select`（targets/type/active）・`apply-transform`（targets + location/rotation/scale の **presence-sensitive BOOL**・全省略=全適用・`make_single_user`）を追加。
+- `gateway.py`: `transform_object`（直接プロパティ・op不要。**location は world 空間**=`matrix_world.translation` を in-place 更新 / rotation は度→ラジアンで **rotation_mode の native 表現**へ反映 = QUATERNION/AXIS_ANGLE 対応・delta は loc/rot 加算 ただし scale 乗算・quaternion は合成 / location を最後に適用）。`apply_transform`（`transform_apply` を `_override_for` の `selected_editable_objects=[obj]` で **--targets のみに限定**・非mesh型は事前 `E_PRECONDITION`）。`select_objects`（`select_set`+active 直接・op不要・**アクティブ view layer 内へ限定**・active を変更前に検証・`selected` は sorted）。`_rotation_euler_deg`（報告も mode 非依存）。
+- `ops.py`: `_select`/`_transform`/`_apply_transform` + `_BPY_HANDLERS`。**再利用ヘルパ**: `_require_input(cond, symptom, remediation)`（bpy 到達前の USER_INPUT 検証）/ `_guard_shared_mesh(gateway, obj, params)`（users>=2 は `--make-single-user` 無しで `E_PRECONDITION`・set-origin と共有）。`bli/main.py`: 3サブコマンド（`--id`）+ `_parse_vec3`（"x,y,z"→float×3・nan/inf/3要素を exit4）。**targets は全コマンド `--targets` オプション**（契約準拠）。
+- **テスト/検証**: pytest=107。smoke_ops に transform(set/delta/複合/非Euler/親付き world)・apply-transform(bake/非mesh/共有mesh ガード/--targets限定)・select(active検証/不正regex/並び決定性) の golden。5.0.1/4.4.3 実機 OPS SMOKE OK（Cube fp 不変 `f7d31df4ef48be6c`）。
+
+### T6.1 レビュー対応（Codex 10件 + セルフレビュー 6件）
+PR #3 で **Codex P2×9 + P1×1** を解消（bbox 非ジオメトリ None / apply false-vs-omit / select 検証順 / select fingerprint / apply schema default / select view-layer / 不正regex→USER_INPUT / 非Euler回転 / `--targets` / location world 化 / **P1 apply の selected_editable_objects 限定**）。その後 Codex が利用上限に達したため、**サブエージェント2体（設計レビュー + 敵対的 correctness 監査）でセルフレビュー**し追加6件を解消（**P1 apply の共有mesh 黙示単一化を廃止し set-origin と同じ `--make-single-user` ガードへ統一** / 複合 transform の並進ずれ / 非mesh apply のエラー品質 / nan-inf 弾き / transform 全省略弾き / select 並び決定化）。**この過程で確立した再利用パターンは T6.2–6.4 でも踏襲すること**（下記 §6e）。
+
+### T6.2–6.4 未着手 → **次の作業（`.handoff/NEXT-M6.md` を参照）**
+- T6.2 `duplicate`（copy()+data.copy()+link）/ `delete`（backup/確認）→ **次・ブランチ `feature/m6-dup-delete` 作成済み**
+- T6.3 `material`（assign/create/list）
+- T6.4 `modifier`（add/remove/list/apply: MIRROR/SUBSURF/SOLIDIFY/DECIMATE/BOOLEAN）
+
+## 6e. M6 で確立した再利用パターン（T6.2 以降で踏襲）
+- **破壊的 mesh 操作は共有ガード**: `ops._guard_shared_mesh(gateway, obj, params)` を呼ぶ（delete も対象になり得る）。`--make-single-user` 無しで users>=2 は `E_PRECONDITION`。
+- **bpy 到達前の入力検証**: `ops._require_input(cond, symptom, remediation)` で USER_INPUT を投げる（pytest が bpy 無しで到達できる＝テスト容易）。param/前提チェックは `from . import gateway` より前に。
+- **targets は `--targets` オプション**（positional 不可）。複数解決は `gateway.resolve_targets`（完全名>regex・**不正regex は USER_INPUT** 済み・view layer 限定が要るなら名前で絞る）。単一は `require_single`。
+- **presence-sensitive な BOOL フラグは schema default を持たせない**（`help --json` の default:false で生成クライアントが誤送信するため）。通常の許可フラグ（make_single_user 等）は default=False で可。
+- **world 座標は matrix_world 経由**・回転は `rotation_mode` を尊重・出力（selected/一覧等）は決定的順序（sorted）に。
+- **エンベロープ**: 破壊系は `_ok(op, data, fingerprint=...)`。drift 検証用に意味ある fingerprint を返す（select は selection_fingerprint）。
+- **AST guard**: `bpy.ops.*()` は gateway.py のみ。`obj.copy()`/`data.copy()`/`collection.objects.link/.remove` は bpy.data 直接操作で **ops でなく gateway に**置く（生 ops ではないが bpy 接点は gateway 集約の方針）。
 
 ## 7. 再開手順（コピペ可）
 ```bash

@@ -30,12 +30,14 @@
 | `select` | `--targets` `--type?` `--active?` | 選択結果/fingerprint | ✓ | - | OBJECT | s |
 | `transform` | `--targets` `--location?` `--rotation?` `--scale?` `--mode set\|delta` | 適用後transform | ✓ | - | OBJECT | s |
 | `apply-transform` | `--targets` `--location?` `--rotation?` `--scale?` | verified | ✓ | - | OBJECT | s |
-| `duplicate` | `--targets` `--linked?` `--count?` `--offset?` | 新オブジェクト名 | ✓ | - | OBJECT | s |
-| `delete` | `--targets` `--backup?` | 削除結果 | ✓ | - | OBJECT | s |
+| `duplicate` | `--targets` `--linked?` `--count?`(1〜1000) `--offset?` | 新オブジェクト名 | ✓ | - | OBJECT | s |
+| `delete` | `--targets` | 削除結果（削除前 summary を backup として常時返却） | ✓ | - | OBJECT | s |
 | `material` | `assign\|create\|list` `--targets` `--name?` `--color?` | 材質状態 | ✓ | - | OBJECT | s |
 | `modifier` | `add\|remove\|list\|apply` `--targets` `--type?` `[params]` | modifier状態 | ✓ | - | OBJECT | s |
 
 `modifier --type`（v1必須）: `MIRROR` / `SUBSURF` / `SOLIDIFY` / `DECIMATE` / `BOOLEAN`。
+
+> `delete` は削除前の object summary を `backup` として結果に常時含める（即実行・確認フラグなし）。`.blend` への退避バックアップ（`backup.on_overwrite`）は save 依存のため **M9 へ繰越**。`duplicate --count` は 1〜1000（暴走防止の上限・`bli_core.runtime.MAX_DUPLICATE_COUNT`）。
 
 ## メッシュ編集（編集モード / bmesh一次）
 | method | params | result | M | H | Mode | St |

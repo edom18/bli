@@ -114,6 +114,27 @@ command(
     required_mode=Mode.OBJECT,
 )
 
+# ---- 汎用編集（複製/削除 / M6 T6.2）----
+command(
+    "duplicate",
+    "オブジェクトを複製する（count 回・world offset 累積・linked でデータ共有）",
+    params=(
+        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("linked", ParamType.BOOL, default=False, help="データを共有する（リンク複製）"),
+        p("count", ParamType.INT, default=1, help="複製数（1〜1000）"),
+        p("offset", ParamType.VEC3, help="複製ごとの world オフセット x,y,z（累積）"),
+    ),
+    mutates=True,
+    required_mode=Mode.OBJECT,
+)
+command(
+    "delete",
+    "オブジェクトを削除する（削除前サマリを backup として結果に残す）",
+    params=(p("targets", ParamType.STR, required=True, help="対象（name|regex）"),),
+    mutates=True,
+    required_mode=Mode.OBJECT,
+)
+
 # ---- 逃げ道（既定 off / path 型確認用 / 実装は M11）----
 command(
     "exec-python",
