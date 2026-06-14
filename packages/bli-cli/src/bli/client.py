@@ -57,12 +57,16 @@ def call(
     *,
     port: int | None = None,
     request_id: str | None = None,
-    timeout: float = 30.0,
+    timeout: float | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """HELLO→RPC を1往復し (result, hello_ok) を返す。
 
     接続不能 → ConnectError、サーバ error → RpcRemoteError。
+    timeout 未指定時は CLIENT_READ_TIMEOUT（サーバ DISPATCH_TIMEOUT より長い）を使い、
+    サーバが返す retryable な TIMEOUT 応答を取りこぼさないようにする。
     """
+    if timeout is None:
+        timeout = runtime.CLIENT_READ_TIMEOUT
     host, port_, token, _ = load_connection(port)
     request_id = request_id or str(uuid.uuid4())
     try:

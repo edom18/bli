@@ -35,6 +35,7 @@ from bli_addon import ops  # noqa: E402
 from bli_addon import server as srv_mod  # noqa: E402
 from bli_addon.capability import CapabilityRegistry  # noqa: E402
 from bli_addon.dispatcher import Dispatcher  # noqa: E402
+from bli_core import runtime  # noqa: E402
 from bli_core.commands import load_definitions  # noqa: E402
 from bli_core.schema import schema_hash  # noqa: E402
 
@@ -132,7 +133,11 @@ def main():
     dispatcher = Dispatcher()  # background では timer を使わず手動 pump
 
     def executor(method, params, info, settle):
-        return dispatcher.submit(lambda: ops.dispatch(method, params, info), settle=settle)
+        return dispatcher.submit(
+            lambda: ops.dispatch(method, params, info),
+            timeout=runtime.DISPATCH_TIMEOUT,
+            settle=settle,
+        )
 
     srv_mod.start(
         blender_version=bpy.app.version_string,
