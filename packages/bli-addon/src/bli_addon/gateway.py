@@ -562,3 +562,96 @@ def delete_object(obj: Any, *, message: str | None = None) -> None:
     bpy.data.objects.remove(obj, do_unlink=True)
     if message:
         push_undo(message)
+
+
+# ---- マテリアル（M6 T6.3 / 生 bpy.ops 不要・bpy.data 直接。M0.5 スパイクで 5.0/4.4 確認済み）----
+
+
+def _principled(mat: Any) -> Any:
+    """マテリアルの Principled BSDF ノードを返す（無ければ None）。"""
+    if not mat.use_nodes or mat.node_tree is None:
+        return None
+    for node in mat.node_tree.nodes:
+        if node.type == "BSDF_PRINCIPLED":
+            return node
+    return None
+
+
+def _base_color(mat: Any) -> list[float] | None:
+    """マテリアルの Base Color（RGBA）を返す（取得不可は None）。"""
+    if mat is None:
+        return None
+    bsdf = _principled(mat)
+    if bsdf is not None:
+        bc = bsdf.inputs.get("Base Color")
+        if bc is not None:
+            return [round(v, 6) for v in bc.default_value]
+    return [round(v, 6) for v in mat.diffuse_color]
+
+
+def require_material_support(obj: Any) -> None:
+    """materials を持てない型（EMPTY/LIGHT/CAMERA 等）は E_PRECONDITION で弾く。"""
+    if obj.data is None or not hasattr(obj.data, "materials"):
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"マテリアル操作は mesh/curve 等のデータを持つ型のみ対応（type={obj.type}）",
+        )
+
+
+def find_material(name: str) -> Any | None:
+    """名前でマテリアルを解決する（完全一致・無ければ None）。"""
+    return bpy.data.materials.get(name)
+
+
+def create_material(name: str, color: list[float] | None) -> Any:
+    """新規マテリアルを作る（use_nodes + Principled Base Color + diffuse_color）。
+
+    name は既存と衝突すると Blender が name.001 等に自動採番する（戻り値の mat.name が真）。
+    color(RGBA) 指定時は Principled の Base Color とビューポート表示色の双方へ反映する。
+    """
+    mat = bpy.data.materials.new(name)
+    mat.use_nodes = True
+    if color is not None:
+        rgba = (float(color[0]), float(color[1]), float(color[2]), float(color[3]))
+        bsdf = _principled(mat)
+        if bsdf is not None:
+            bc = bsdf.inputs.get("Base Color")
+            if bc is not None:
+                bc.default_value = rgba
+        mat.diffuse_color = rgba
+    return mat
+
+
+def assign_material(obj: Any, mat: Any) -> int:
+    """mat を obj に付与する（空スロットなら append・あれば active スロットを置換）。
+
+    付与したスロット index を返す（判断: active 置換・空なら追加。複数スロット運用は後続）。
+    """
+    mats = obj.data.materials
+    if len(mats) == 0:
+        mats.append(mat)
+        return 0
+    idx = obj.active_material_index
+    if idx < 0 or idx >= len(mats):
+        idx = 0
+    mats[idx] = mat
+    return idx
+
+
+def list_object_materials(obj: Any) -> list[dict[str, Any]]:
+    """obj のマテリアルスロット一覧（slot index / name / base_color）を返す。"""
+    out: list[dict[str, Any]] = []
+    for i, mat in enumerate(obj.data.materials):
+        out.append(
+            {
+                "slot": i,
+                "name": mat.name if mat is not None else None,
+                "base_color": _base_color(mat),
+            }
+        )
+    return out
+
+
+def material_fingerprint(obj: Any) -> str:
+    """obj のマテリアル状態の決定的フィンガープリント（material の drift 検証用）。"""
+    return _digest16({"name": obj.name, "materials": list_object_materials(obj)})

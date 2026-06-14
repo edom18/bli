@@ -24,6 +24,7 @@ _PY_TYPE: dict[ParamType, Any] = {
     ParamType.FLOAT: float,
     ParamType.BOOL: bool,
     ParamType.VEC3: tuple[float, float, float],
+    ParamType.VEC4: tuple[float, float, float, float],
 }
 
 

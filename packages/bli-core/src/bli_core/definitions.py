@@ -135,6 +135,28 @@ command(
     required_mode=Mode.OBJECT,
 )
 
+# ---- 汎用編集（マテリアル / M6 T6.3）----
+command(
+    "material",
+    "マテリアルを割り当て/作成/一覧する（create は対象へ作成と同時に割り当て）",
+    # targets/name は action により必須が変わる（条件付き必須）。schema 上は任意にし、
+    # ops 側で action 別に検証する（set-origin の center/x/y/z と同じ流儀）。
+    params=(
+        p(
+            "action",
+            ParamType.ENUM,
+            required=True,
+            choices=["assign", "create", "list"],
+            help="操作: assign|create|list",
+        ),
+        p("targets", ParamType.STR, help="対象（name|regex）"),
+        p("name", ParamType.STR, help="マテリアル名（assign=既存名 / create=新規名）"),
+        p("color", ParamType.VEC4, help="RGBA r,g,b,a（create の Base Color）"),
+    ),
+    mutates=True,
+    required_mode=Mode.OBJECT,
+)
+
 # ---- 逃げ道（既定 off / path 型確認用 / 実装は M11）----
 command(
     "exec-python",

@@ -205,3 +205,70 @@ def test_set_origin_nonfinite_float_server_rejected():
     with pytest.raises(JsonRpcError) as ei:
         ops.dispatch("set-origin", {"targets": "Cube", "to": "world", "x": float("inf")}, INFO)
     assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_material_missing_action_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("material", {"targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_material_bad_action_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("material", {"action": "bogus", "targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_material_bad_color_vec4_invalid_params():
+    # color は VEC4（4要素）。要素不足は型エラーで INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "material",
+            {"action": "create", "targets": "Cube", "name": "M", "color": [1, 2, 3]},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_material_nonfinite_color_server_rejected():
+    # VEC4 の nan/inf もサーバ側で弾く（色を壊さない・CLI 非経由 RPC 防御）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "material",
+            {"action": "create", "targets": "Cube", "name": "M", "color": [float("inf"), 0, 0, 1]},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_material_missing_targets_invalid_params():
+    # list でも対象は必要（bpy 到達前に USER_INPUT）
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("material", {"action": "list"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_material_create_missing_name_invalid_params():
+    # create には --name が必要（bpy 到達前に USER_INPUT）
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("material", {"action": "create", "targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_material_color_on_assign_invalid_params():
+    # --color は create 専用。assign/list で渡したら silent ignore せず弾く（bpy 到達前）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "material",
+            {"action": "assign", "targets": "Cube", "name": "M", "color": [1, 0, 0, 1]},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"

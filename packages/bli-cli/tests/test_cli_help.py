@@ -81,6 +81,69 @@ def test_duplicate_count_below_min_exit_input():
     assert "INVALID_PARAMS" in res.output
 
 
+def test_m6_t63_material_discoverable():
+    # M6 T6.3 の material が実装済み一覧に出る + VEC4 color のスキーマ
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    names = {c["name"] for c in data["commands"]}
+    assert "material" in names
+    schema = json.loads(runner.invoke(app, ["help", "--command", "material", "--json"]).output)[
+        "schema"
+    ]
+    assert set(schema["properties"]) == {"action", "targets", "name", "color"}
+    assert schema["required"] == ["action"]  # targets/name は action 別に ops 側で必須化
+    color = schema["properties"]["color"]
+    assert color["type"] == "array" and color["minItems"] == 4 and color["maxItems"] == 4
+
+
+def test_material_bad_color_vec4_exit_input():
+    # 不正な --color（4要素でない）は送信前に exit 4
+    res = runner.invoke(
+        app,
+        [
+            "material",
+            "--action",
+            "create",
+            "--targets",
+            "Cube",
+            "--name",
+            "M",
+            "--color",
+            "1,0,0",
+            "--json",
+        ],
+    )
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
+def test_material_nonfinite_color_exit_input():
+    # nan/inf の color は送信前に弾く（色を壊さない）
+    res = runner.invoke(
+        app,
+        [
+            "material",
+            "--action",
+            "create",
+            "--targets",
+            "Cube",
+            "--name",
+            "M",
+            "--color",
+            "inf,0,0,1",
+            "--json",
+        ],
+    )
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
+def test_material_bad_action_local_validation():
+    # 不正な --action は送信前ローカル Pydantic 検証で exit 4
+    res = runner.invoke(app, ["material", "--action", "bogus", "--targets", "Cube", "--json"])
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
 def test_transform_bad_vec3_exit_input():
     # 不正な --location（3要素でない）は送信前に exit 4
     res = runner.invoke(app, ["transform", "--targets", "Cube", "--location", "1,2", "--json"])

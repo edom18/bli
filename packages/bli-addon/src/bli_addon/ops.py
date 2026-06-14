@@ -303,6 +303,73 @@ def _delete(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     return _ok("delete", {"deleted": name, "backup": backup}, fingerprint=fp)
 
 
+def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("material")
+    _validate(cmd, params)
+    action = str(params["action"])
+    targets = params.get("targets")
+    name = params.get("name")
+    color = params.get("color")
+
+    # 条件付き必須を bpy 到達前に検証する（schema は action 非依存で targets/name 任意）。
+    _require_input(
+        targets is not None,
+        symptom="対象(--targets)が必要です",
+        remediation="--targets を指定してください",
+    )
+    if action in ("assign", "create"):
+        _require_input(
+            name is not None,
+            symptom=f"{action} には --name が必要です",
+            remediation="--name を指定してください",
+        )
+    # color は create 専用（assign/list で渡されたら silent ignore せず弾く）。
+    if action != "create" and color is not None:
+        _require_input(
+            False,
+            symptom="--color は create のときのみ有効です",
+            remediation="create で使うか --color を外してください",
+        )
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(targets))
+    gateway.require_material_support(obj)
+
+    if action == "list":
+        data = {"name": obj.name, "action": "list", "materials": gateway.list_object_materials(obj)}
+        return _ok("material", data, fingerprint=gateway.material_fingerprint(obj))
+
+    if action == "create":
+        mat = gateway.create_material(str(name), list(color) if color is not None else None)
+    else:  # assign（既存マテリアルのみ。無ければ E_TARGET_NOT_FOUND＝create と責務分離）
+        mat = gateway.find_material(str(name))
+        if mat is None:
+            raise JsonRpcError(
+                RPC_BUSINESS_ERROR,
+                ErrorCode.E_TARGET_NOT_FOUND,
+                make_error(
+                    ErrorCode.E_TARGET_NOT_FOUND,
+                    category=ErrorCategory.USER_INPUT,
+                    retryable=False,
+                    symptom=f"マテリアルが見つかりません: {name}",
+                    remediation="既存のマテリアル名を指定するか create で作成してください",
+                ),
+            )
+
+    slot = gateway.assign_material(obj, mat)
+    gateway.push_undo(f"material {action}")
+    data = {
+        "name": obj.name,
+        "action": action,
+        "material": mat.name,
+        "slot": slot,
+        "materials": gateway.list_object_materials(obj),
+    }
+    return _ok("material", data, fingerprint=gateway.material_fingerprint(obj))
+
+
 def _set_origin(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     cmd = _command("set-origin")
     _validate(cmd, params)
@@ -346,6 +413,7 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "apply-transform": _apply_transform,
     "duplicate": _duplicate,
     "delete": _delete,
+    "material": _material,
     "set-origin": _set_origin,
 }
 

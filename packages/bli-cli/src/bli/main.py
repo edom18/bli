@@ -48,11 +48,14 @@ def _emit_error(json_out: bool, kind: str, message: str, request_id: str | None 
         typer.echo(f"エラー[{kind}]: {message}{tail}", err=True)
 
 
-def _parse_vec3(name: str, raw: str) -> list[float]:
-    """ "x,y,z" 文字列を3要素の float リストへ変換する（不正は ValueError）。"""
+def _parse_vec(name: str, raw: str, n: int) -> list[float]:
+    """ "a,b,..." 文字列を n 要素の float リストへ変換する（不正は ValueError）。
+
+    VEC3（x,y,z）/ VEC4（r,g,b,a）共通。nan/inf は行列/色を壊すため弾く。
+    """
     parts = [p.strip() for p in raw.split(",")]
-    if len(parts) != 3:
-        raise ValueError(f"{name} は x,y,z 形式（3要素）で指定してください: {raw!r}")
+    if len(parts) != n:
+        raise ValueError(f"{name} は {n} 要素（カンマ区切り）で指定してください: {raw!r}")
     try:
         vals = [float(p) for p in parts]
     except ValueError as e:
@@ -381,11 +384,11 @@ def transform(
     params: dict[str, Any] = {"targets": targets, "mode": mode}
     try:
         if location is not None:
-            params["location"] = _parse_vec3("location", location)
+            params["location"] = _parse_vec("location", location, 3)
         if rotation is not None:
-            params["rotation"] = _parse_vec3("rotation", rotation)
+            params["rotation"] = _parse_vec("rotation", rotation, 3)
         if scale is not None:
-            params["scale"] = _parse_vec3("scale", scale)
+            params["scale"] = _parse_vec("scale", scale, 3)
     except ValueError as e:
         _emit_error(json_out, ErrorCode.INVALID_PARAMS, str(e))
         raise typer.Exit(int(ExitCode.INPUT)) from None
@@ -459,7 +462,7 @@ def duplicate(
         params["linked"] = True
     try:
         if offset is not None:
-            params["offset"] = _parse_vec3("offset", offset)
+            params["offset"] = _parse_vec("offset", offset, 3)
     except ValueError as e:
         _emit_error(json_out, ErrorCode.INVALID_PARAMS, str(e))
         raise typer.Exit(int(ExitCode.INPUT)) from None
@@ -485,6 +488,45 @@ def delete(
         return f"deleted '{data.get('deleted')}' (backup: type={bk.get('type')} loc={bk.get('location')})"
 
     _rpc("delete", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command()
+def material(
+    action: str = typer.Option(..., "--action", help="操作: assign|create|list"),
+    targets: str | None = typer.Option(None, "--targets", help="対象オブジェクト（name|regex）"),
+    name: str | None = typer.Option(
+        None, "--name", help="マテリアル名（assign=既存 / create=新規）"
+    ),
+    color: str | None = typer.Option(None, "--color", help="RGBA r,g,b,a（create の Base Color）"),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """マテリアルを割り当て/作成/一覧する（create は対象へ作成と同時に割り当て）。"""
+    params: dict[str, Any] = {"action": action}
+    if targets is not None:
+        params["targets"] = targets
+    if name is not None:
+        params["name"] = name
+    try:
+        if color is not None:
+            params["color"] = _parse_vec("color", color, 4)
+    except ValueError as e:
+        _emit_error(json_out, ErrorCode.INVALID_PARAMS, str(e))
+        raise typer.Exit(int(ExitCode.INPUT)) from None
+
+    def human(data: dict[str, Any]) -> str:
+        if data.get("action") == "list":
+            slots = ", ".join(
+                f"{m['slot']}:{m['name']}={m['base_color']}" for m in data.get("materials", [])
+            )
+            return f"{data.get('name')} materials [{slots}]"
+        return (
+            f"{data.get('action')} '{data.get('material')}' -> "
+            f"{data.get('name')} slot={data.get('slot')}"
+        )
+
+    _rpc("material", params, json_out=json_out, port=port, human=human, request_id=request_id)
 
 
 @app.command("request-status")

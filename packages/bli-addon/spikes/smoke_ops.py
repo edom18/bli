@@ -25,6 +25,9 @@ GUI 常駐の挙動を近似する（HANDOFF §6.5 / research 付録C 準拠）�
   → duplicate linked/親付き          : linked で mesh_users +1 / 親付き Child の world offset 整合
   → delete (M6 T6.2)                : 複製を削除 → シーンから消える・backup返却・元Cubeは健在
   → delete ガード                    : 存在しない名は E_TARGET_NOT_FOUND（USER_INPUT）
+  → material (M6 T6.3)              : create-and-assign（Base Color 往復）/ list / assign（置換）
+  → material ガード                  : 存在しないmat=E_TARGET_NOT_FOUND / 非mesh=E_PRECONDITION /
+                                       --color on assign=INVALID_PARAMS
 """
 
 import os
@@ -397,6 +400,59 @@ def run_calls():
         assert e.error.get("message") == "E_TARGET_NOT_FOUND", e.error
         assert e.error.get("data", {}).get("category") == "USER_INPUT", e.error
     print("delete_missing_guard_ok")
+
+    # 16) material（M6 T6.3）: create-and-assign → Base Color 往復 → list で確認。
+    red = [0.8, 0.1, 0.2, 1.0]
+    mc, _ = call_retry(
+        "material", {"action": "create", "targets": "Cube", "name": "SmRed", "color": red}
+    )
+    assert mc["data"]["action"] == "create", mc["data"]
+    created_mat = mc["data"]["material"]  # "SmRed"（衝突時は自動採番）
+    assert mc.get("fingerprint") and len(mc["fingerprint"]) == 16, mc
+    ml, _ = call_retry("material", {"action": "list", "targets": "Cube"})
+    slot_entry = next(m for m in ml["data"]["materials"] if m["name"] == created_mat)
+    assert approx(slot_entry["base_color"], red), slot_entry
+    print("material_create_ok", created_mat, "slot", mc["data"]["slot"], "color", slot_entry["base_color"])
+
+    # 別マテリアルを create（active スロット置換）→ assign で既存 SmRed に戻す。
+    call_retry(
+        "material",
+        {"action": "create", "targets": "Cube", "name": "SmBlue", "color": [0.1, 0.2, 0.8, 1.0]},
+    )
+    ma, _ = call_retry("material", {"action": "assign", "targets": "Cube", "name": created_mat})
+    assert ma["data"]["material"] == created_mat, ma["data"]
+    active_slot = ma["data"]["slot"]
+    ml2, _ = call_retry("material", {"action": "list", "targets": "Cube"})
+    assert ml2["data"]["materials"][active_slot]["name"] == created_mat, ml2["data"]
+    print("material_assign_ok", created_mat, "slot", active_slot)
+
+    # 存在しないマテリアルの assign → E_TARGET_NOT_FOUND（USER_INPUT）。
+    try:
+        call_retry("material", {"action": "assign", "targets": "Cube", "name": "NoSuchMat"})
+        raise AssertionError("assign missing material should error")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "E_TARGET_NOT_FOUND", e.error
+        assert e.error.get("data", {}).get("category") == "USER_INPUT", e.error
+    print("material_assign_missing_ok")
+
+    # 非対応型（QRot=EMPTY）への material → E_PRECONDITION。
+    try:
+        call_retry("material", {"action": "list", "targets": "QRot"})
+        raise AssertionError("material on empty should error")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "E_PRECONDITION", e.error
+    print("material_nonmesh_guard_ok")
+
+    # --color を assign で渡す → INVALID_PARAMS（create 専用・silent ignore しない）。
+    try:
+        call_retry(
+            "material",
+            {"action": "assign", "targets": "Cube", "name": created_mat, "color": red},
+        )
+        raise AssertionError("color on assign should error")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "INVALID_PARAMS", e.error
+    print("material_color_on_assign_ok")
 
 
 def main():
