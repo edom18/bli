@@ -76,13 +76,24 @@ def push_undo(message: str) -> None:
 
 
 def resolve_targets(selector: str, *, regex: bool = False) -> list[Any]:
-    """selector からオブジェクト群を解決する（完全名 > regex）。"""
+    """selector からオブジェクト群を解決する（完全名 > regex）。
+
+    完全名に一致しない場合は regex 照合。不正な正規表現は INTERNAL ではなく
+    USER_INPUT エラーにする（共有リゾルバなので targets を取る全コマンドに効く。Codex P2）。
+    """
     objs = bpy.data.objects
     if not regex:
         obj = objs.get(selector)
         if obj is not None:
             return [obj]
-    pattern = re.compile(selector)
+    try:
+        pattern = re.compile(selector)
+    except re.error as e:
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"正規表現が不正です: {selector!r}: {e}",
+            category=ErrorCategory.USER_INPUT,
+        ) from e
     return [o for o in objs if pattern.search(o.name)]
 
 

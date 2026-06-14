@@ -206,6 +206,15 @@ def run_calls():
     assert bpy.data.objects["Cube"].select_get(), "選択状態が失敗時に保持されていない"
     print("select_bad_active_ok state-preserved")
 
+    # 不正な正規表現 targets: USER_INPUT エラーにする（INTERNAL にしない・Codex P2）
+    try:
+        call_retry("object-info", {"targets": "["})
+        raise AssertionError("malformed regex should error")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "E_PRECONDITION", e.error
+        assert e.error.get("data", {}).get("category") == "USER_INPUT", e.error
+    print("bad_regex_target_ok user-input-error")
+
 
 def main():
     print("=== BLI_OPS_SMOKE_BEGIN ===")
