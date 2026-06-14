@@ -142,6 +142,60 @@ def _object_info(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     )
 
 
+def _select(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("select")
+    _validate(cmd, params)
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    type_filter = params.get("type")
+    active = params.get("active")
+    data = gateway.select_objects(
+        str(params["targets"]),
+        type_filter=str(type_filter) if type_filter is not None else None,
+        active=str(active) if active is not None else None,
+        message="select",
+    )
+    return _ok("select", data)
+
+
+def _transform(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("transform")
+    _validate(cmd, params)
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(params["targets"]))
+    mode = str(params.get("mode", "set"))
+    data = gateway.transform_object(
+        obj,
+        location=params.get("location"),
+        rotation=params.get("rotation"),
+        scale=params.get("scale"),
+        mode=mode,
+        message=f"transform {mode}",
+    )
+    return _ok("transform", data, fingerprint=gateway.object_fingerprint(obj))
+
+
+def _apply_transform(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("apply-transform")
+    _validate(cmd, params)
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(params["targets"]))
+    loc = bool(params.get("location", False))
+    rot = bool(params.get("rotation", False))
+    scl = bool(params.get("scale", False))
+    if not (loc or rot or scl):  # 全省略時は全チャンネル適用
+        loc = rot = scl = True
+    data = gateway.apply_transform(
+        obj, location=loc, rotation=rot, scale=scl, message="apply-transform"
+    )
+    return _ok("apply-transform", data, fingerprint=gateway.object_fingerprint(obj))
+
+
 def _set_origin(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     cmd = _command("set-origin")
     _validate(cmd, params)
@@ -193,6 +247,9 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "scene-info": _scene_info,
     "object-info": _object_info,
     "list-objects": _list_objects,
+    "select": _select,
+    "transform": _transform,
+    "apply-transform": _apply_transform,
     "set-origin": _set_origin,
 }
 

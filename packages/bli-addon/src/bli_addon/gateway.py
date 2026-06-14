@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from typing import Any
 
@@ -268,3 +269,116 @@ def set_origin_world(obj: Any, x: float, y: float, z: float) -> list[float]:
     mat.translation = new_origin
     loc = obj.matrix_world.translation
     return [round(loc.x, 6), round(loc.y, 6), round(loc.z, 6)]
+
+
+# ---- 汎用編集（transform / apply-transform / select / M6 T6.1）----
+
+
+def transform_object(
+    obj: Any,
+    *,
+    location: list[float] | None = None,
+    rotation: list[float] | None = None,
+    scale: list[float] | None = None,
+    mode: str = "set",
+    message: str | None = None,
+) -> dict[str, Any]:
+    """オブジェクトの loc/rot/scale を set または delta で変更する（直接プロパティ・op不要）。
+
+    rotation は度入力 → ラジアン。delta: location/rotation は加算、scale は成分ごとの乗算。
+    """
+    if mode == "delta":
+        if location is not None:
+            cur = obj.location
+            obj.location = (cur[0] + location[0], cur[1] + location[1], cur[2] + location[2])
+        if rotation is not None:
+            r = obj.rotation_euler
+            obj.rotation_euler = (
+                r[0] + math.radians(rotation[0]),
+                r[1] + math.radians(rotation[1]),
+                r[2] + math.radians(rotation[2]),
+            )
+        if scale is not None:
+            s = obj.scale
+            obj.scale = (s[0] * scale[0], s[1] * scale[1], s[2] * scale[2])
+    else:  # set
+        if location is not None:
+            obj.location = tuple(location)
+        if rotation is not None:
+            obj.rotation_euler = tuple(math.radians(a) for a in rotation)
+        if scale is not None:
+            obj.scale = tuple(scale)
+    if message:
+        push_undo(message)
+    return object_summary(obj)
+
+
+def apply_transform(
+    obj: Any,
+    *,
+    location: bool,
+    rotation: bool,
+    scale: bool,
+    message: str | None = None,
+) -> dict[str, Any]:
+    """transform を mesh データへ適用する（operator 経由）。
+
+    共有 mesh は `isolate_users=True` で自動的に単一ユーザ化してから適用する
+    （他オブジェクトへの波及を防ぐ。M0.5 で 4.4/5.0 とも存在を確認）。
+    """
+    run_operator(
+        bpy.ops.object.transform_apply,
+        obj,
+        message=message,
+        location=location,
+        rotation=rotation,
+        scale=scale,
+        isolate_users=True,
+    )
+    return object_summary(obj)
+
+
+def select_objects(
+    targets: str,
+    *,
+    type_filter: str | None = None,
+    active: str | None = None,
+    message: str | None = None,
+) -> dict[str, Any]:
+    """targets(name|regex) を選択し active を設定する（select_set / active 直接設定・op不要）。"""
+    matched = resolve_targets(targets)  # 完全名 > regex
+    if type_filter is not None:
+        want = type_filter.upper()
+        matched = [o for o in matched if o.type == want]
+    if not matched:
+        raise _op_error(
+            ErrorCode.E_TARGET_NOT_FOUND,
+            f"対象が見つかりません: {targets}",
+            category=ErrorCategory.USER_INPUT,
+        )
+
+    view_layer = bpy.context.view_layer
+    for o in view_layer.objects:
+        o.select_set(False)
+    for o in matched:
+        o.select_set(True)
+
+    if active is not None:
+        active_obj = next((o for o in matched if o.name == active), None)
+        if active_obj is None:
+            raise _op_error(
+                ErrorCode.E_PRECONDITION,
+                f"--active の対象が選択集合にありません: {active}",
+                category=ErrorCategory.USER_INPUT,
+            )
+    else:
+        active_obj = matched[0]
+    view_layer.objects.active = active_obj
+
+    if message:
+        push_undo(message)
+    return {
+        "selected": [o.name for o in matched],
+        "count": len(matched),
+        "active": active_obj.name,
+    }

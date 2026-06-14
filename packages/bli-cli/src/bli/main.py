@@ -47,6 +47,17 @@ def _emit_error(json_out: bool, kind: str, message: str, request_id: str | None 
         typer.echo(f"エラー[{kind}]: {message}{tail}", err=True)
 
 
+def _parse_vec3(name: str, raw: str) -> list[float]:
+    """ "x,y,z" 文字列を3要素の float リストへ変換する（不正は ValueError）。"""
+    parts = [p.strip() for p in raw.split(",")]
+    if len(parts) != 3:
+        raise ValueError(f"{name} は x,y,z 形式（3要素）で指定してください: {raw!r}")
+    try:
+        return [float(p) for p in parts]
+    except ValueError as e:
+        raise ValueError(f"{name} の数値が不正です: {raw!r}") from e
+
+
 def _exit_code_for(err: dict[str, Any]) -> ExitCode:
     """サーバ error の kind/category から終了コードを決める（spec §8）。"""
     kind = err.get("message", "")
@@ -325,6 +336,93 @@ def set_origin(
         return f"origin of {data.get('name')} -> {data.get('to')} @ {data.get('origin_world')}"
 
     _rpc("set-origin", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command()
+def select(
+    targets: str = typer.Argument(..., help="対象オブジェクト（name|regex）"),
+    type_filter: str | None = typer.Option(None, "--type", help="型フィルタ（MESH/CURVE/...）"),
+    active: str | None = typer.Option(None, "--active", help="active にする対象名"),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """オブジェクトを選択し active を設定する。"""
+    params: dict[str, Any] = {"targets": targets}
+    if type_filter is not None:
+        params["type"] = type_filter
+    if active is not None:
+        params["active"] = active
+
+    def human(data: dict[str, Any]) -> str:
+        return f"selected {data.get('count')}: {data.get('selected')} active={data.get('active')}"
+
+    _rpc("select", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command()
+def transform(
+    targets: str = typer.Argument(..., help="対象オブジェクト（name|regex）"),
+    location: str | None = typer.Option(None, "--location", help="位置 x,y,z"),
+    rotation: str | None = typer.Option(None, "--rotation", help="回転 x,y,z（度）"),
+    scale: str | None = typer.Option(None, "--scale", help="拡縮 x,y,z"),
+    mode: str = typer.Option(
+        "set", "--mode", help="set|delta（delta は loc/rot 加算・scale 乗算）"
+    ),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """オブジェクトの位置/回転/拡縮を設定または相対適用する。"""
+    params: dict[str, Any] = {"targets": targets, "mode": mode}
+    try:
+        if location is not None:
+            params["location"] = _parse_vec3("location", location)
+        if rotation is not None:
+            params["rotation"] = _parse_vec3("rotation", rotation)
+        if scale is not None:
+            params["scale"] = _parse_vec3("scale", scale)
+    except ValueError as e:
+        _emit_error(json_out, ErrorCode.INVALID_PARAMS, str(e))
+        raise typer.Exit(int(ExitCode.INPUT)) from None
+
+    def human(data: dict[str, Any]) -> str:
+        return (
+            f"{data.get('name')}: loc={data.get('location')} "
+            f"rot={data.get('rotation_euler_deg')} scale={data.get('scale')}"
+        )
+
+    _rpc("transform", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command("apply-transform")
+def apply_transform_cmd(
+    targets: str = typer.Argument(..., help="対象オブジェクト（name|regex）"),
+    location: bool = typer.Option(False, "--location", help="位置を適用"),
+    rotation: bool = typer.Option(False, "--rotation", help="回転を適用"),
+    scale: bool = typer.Option(False, "--scale", help="拡縮を適用"),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """オブジェクトの transform をメッシュデータに適用する（全省略時は全適用）。"""
+    params: dict[str, Any] = {"targets": targets}
+    if location:
+        params["location"] = True
+    if rotation:
+        params["rotation"] = True
+    if scale:
+        params["scale"] = True
+
+    def human(data: dict[str, Any]) -> str:
+        return (
+            f"applied to {data.get('name')}: "
+            f"scale={data.get('scale')} dims={data.get('dimensions')}"
+        )
+
+    _rpc(
+        "apply-transform", params, json_out=json_out, port=port, human=human, request_id=request_id
+    )
 
 
 @app.command("request-status")

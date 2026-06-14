@@ -76,3 +76,34 @@ def test_list_objects_bad_type_invalid_params():
     with pytest.raises(JsonRpcError) as ei:
         ops.dispatch("list-objects", {"type": 123}, INFO)
     assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_transform_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("transform", {}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_transform_bad_mode_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("transform", {"targets": "Cube", "mode": "bogus"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_transform_bad_vec3_invalid_params():
+    # location は3要素必須（VEC3）
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("transform", {"targets": "Cube", "location": [1, 2]}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_select_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("select", {}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_apply_transform_unknown_param_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("apply-transform", {"targets": "Cube", "bogus": 1}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
