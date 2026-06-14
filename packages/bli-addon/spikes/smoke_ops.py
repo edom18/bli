@@ -7,11 +7,14 @@
 GUI 常駐の挙動を近似する（HANDOFF §6.5 / research 付録C 準拠）。
 
 検証（golden）:
-  ping → scene-info → object-info(Cube)
+  ping → scene-info → object-info(Cube) [dims + world bbox]
   → set-origin world (1,0,0)        : 直接行列フォールバック（geometry 固定）
   → object-info(Cube)               : location==[1,0,0], dims 不変
   → set-origin geometry median      : operator 経路。原点が幾何中心(=world原点)へ戻る
   → object-info(Cube)               : location≈[0,0,0]
+  → request-status (M4)             : 既知IDの決着回収 / 未知IDは known=False
+  → list-objects (M5)               : type=MESH は ["Cube"] のみ / regex フィルタ
+  → scene-info output_ref (M5)      : 閾値を下げて退避を強制 → sha256 検証で読み戻し
 """
 
 import os
@@ -81,11 +84,15 @@ def run_calls():
     assert "Cube" in names, names
     print("scene_info_ok", si["data"]["object_count"], names)
 
-    # 3) object-info Cube
+    # 3) object-info Cube（M5: world bbox の golden を追加）
     oi, _ = call_retry("object-info", {"targets": "Cube"})
     dims = oi["data"]["dimensions"]
     assert approx(dims, [2.0, 2.0, 2.0]), dims
-    print("object_info_ok dims=", dims, "fp=", oi.get("fingerprint"))
+    bbox = oi["data"]["bbox"]
+    assert approx(bbox["min"], [-1.0, -1.0, -1.0]), bbox
+    assert approx(bbox["max"], [1.0, 1.0, 1.0]), bbox
+    assert approx(bbox["size"], [2.0, 2.0, 2.0]), bbox
+    print("object_info_ok dims=", dims, "bbox=", bbox, "fp=", oi.get("fingerprint"))
 
     # 4) set-origin world (1,0,0): 直接行列。geometry は固定。
     so, _ = call_retry("set-origin", {"targets": "Cube", "to": "world", "x": 1.0})
@@ -123,6 +130,37 @@ def run_calls():
         "unknown_known=",
         rs2["data"]["known"],
     )
+
+    # 9) list-objects（M5）: type=MESH は Cube のみ（大小無視）/ regex フィルタ
+    lo, _ = call_retry("list-objects", {"type": "mesh"})
+    lo_names = [o["name"] for o in lo["data"]["objects"]]
+    assert lo_names == ["Cube"], lo_names
+    assert lo["data"]["count"] == 1, lo["data"]
+    lo2, _ = call_retry("list-objects", {"regex": "^Cu"})
+    assert any(o["name"] == "Cube" for o in lo2["data"]["objects"]), lo2["data"]
+    print("list_objects_ok mesh=", lo_names)
+
+    # 非ジオメトリ（Light）の object-info: bbox は None（Codex P2: 偽の零サイズを出さない）
+    oi_light, _ = call_retry("object-info", {"targets": "Light"})
+    assert oi_light["data"]["bbox"] is None, oi_light["data"].get("bbox")
+    print("nongeometry_bbox_none_ok Light")
+
+    # 10) scene-info output_ref 退避（M5）: 閾値を一時的に下げて shared-fs 退避を強制し、
+    #     退避ファイルを sha256 検証付きで読み戻す（往復）。
+    import bli_core.output_ref as outref
+
+    saved_threshold = outref.INLINE_THRESHOLD
+    outref.INLINE_THRESHOLD = 50
+    try:
+        si2, _ = call_retry("scene-info", {"depth": 1})
+    finally:
+        outref.INLINE_THRESHOLD = saved_threshold
+    ref = si2["output_ref"]
+    assert si2["data"] is None, si2
+    assert ref is not None and ref["transport"] == "shared-fs", ref
+    restored = outref.load_verified(ref)
+    assert any(o["name"] == "Cube" for o in restored["objects"]), restored
+    print("scene_info_offload_ok size=", ref["size"], "sha256=", ref["sha256"][:12])
 
 
 def main():

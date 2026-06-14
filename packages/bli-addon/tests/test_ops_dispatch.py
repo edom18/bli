@@ -62,3 +62,17 @@ def test_scene_info_unknown_param_invalid_params():
     with pytest.raises(JsonRpcError) as ei:
         ops.dispatch("scene-info", {"nope": 1}, INFO)
     assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_list_objects_unknown_param_invalid_params():
+    # type/regex は任意だが、未知 param は bpy 到達前に INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("list-objects", {"bogus": 1}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_list_objects_bad_type_invalid_params():
+    # type は STR。非文字列は型エラーで INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("list-objects", {"type": 123}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS

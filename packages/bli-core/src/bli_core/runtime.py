@@ -15,6 +15,7 @@ DEFAULT_PORT = 9876
 
 CONNECTION_FILENAME = "connection.json"
 TOKEN_FILENAME = "session.token"
+OUTPUTS_DIRNAME = "outputs"
 
 # タイムアウト調整（spec §7）。サーバの主スレッド実行ウォッチドッグ（DISPATCH_TIMEOUT）が
 # クライアントのソケット読み取り猶予（CLIENT_READ_TIMEOUT）より「先に」発火しなければならない。
@@ -48,3 +49,13 @@ def connection_path() -> Path:
 
 def token_path() -> Path:
     return user_state_dir() / TOKEN_FILENAME
+
+
+def outputs_dir() -> Path:
+    """出力退避（output_ref）の保存先（`BLI_STATE_DIR/outputs` 既定・git 非管理）。
+
+    アドオン（書込）と CLI（読込）が同じ場所を参照する。テストは env で差し替える。
+    """
+    d = user_state_dir() / OUTPUTS_DIRNAME
+    d.mkdir(parents=True, exist_ok=True)
+    return d

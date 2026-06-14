@@ -95,8 +95,14 @@ def _rpc(
     port: int | None,
     human: Callable[[dict[str, Any]], str],
     request_id: str | None = None,
+    fetch: bool = False,
 ) -> None:
-    """RPC を1往復し結果を出力する（接続/業務エラーは終了コードへ写像）。"""
+    """RPC を1往復し結果を出力する（接続/業務エラーは終了コードへ写像）。
+
+    結果が output_ref(shared-fs) を含む場合、既定は **参照のみ** を返す（エージェント向け
+    オンデマンド取得）。`fetch=True` のときだけ退避ファイルを読み sha256 検証して data へ
+    展開する。整合不一致は STALE_OUTPUT（exit 1）。
+    """
     try:
         models.validate_params(method, params)  # 送信前のローカル Pydantic 検証
     except models.ParamValidationError as e:
@@ -110,6 +116,19 @@ def _rpc(
         method, params, json_out=json_out, port=port, request_id=request_id
     )
 
+    raw_ref = result.get("output_ref")
+    output_ref: dict[str, Any] | None = raw_ref if isinstance(raw_ref, dict) else None
+    offloaded = output_ref is not None and output_ref.get("transport") == "shared-fs"
+    if offloaded and fetch and output_ref is not None:
+        from bli_core import output_ref as outref
+
+        try:
+            result = {**result, "data": outref.load_verified(output_ref)}
+        except outref.StaleOutputError as e:
+            _emit_error(json_out, ErrorCode.STALE_OUTPUT, str(e), request_id=request_id)
+            raise typer.Exit(int(ExitCode.FAILURE)) from None
+        offloaded = False
+
     payload: dict[str, Any] = {
         "ok": True,
         "operation": result.get("operation", method),
@@ -118,7 +137,16 @@ def _rpc(
     for key in ("verified", "fingerprint", "output_ref", "data"):
         if key in result:
             payload[key] = result[key]
-    _emit(json_out, human(result.get("data") or {}), payload)
+
+    if offloaded and output_ref is not None:
+        human_msg = (
+            f"[output_ref] schema={output_ref.get('schema')} "
+            f"size={output_ref.get('size')}B sha256={str(output_ref.get('sha256'))[:12]} "
+            f"path={output_ref.get('path')}  (--fetch で展開)"
+        )
+    else:
+        human_msg = human(result.get("data") or {})
+    _emit(json_out, human_msg, payload)
 
 
 @app.command()
@@ -207,16 +235,43 @@ def init(
 @app.command("scene-info")
 def scene_info(
     depth: int = typer.Option(1, "--depth", help="階層の深さ"),
+    fetch: bool = typer.Option(
+        False, "--fetch", help="退避(output_ref)を読み込み sha256 検証して展開する"
+    ),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
-    """シーンのオブジェクト一覧/単位設定を取得する。"""
+    """シーンのオブジェクト一覧/単位設定を取得する（大きい結果は output_ref で退避）。"""
 
     def human(data: dict[str, Any]) -> str:
         names = ", ".join(o["name"] for o in data.get("objects", []))
         return f"scene '{data.get('scene')}': {data.get('object_count')} objects [{names}]"
 
-    _rpc("scene-info", {"depth": depth}, json_out=json_out, port=port, human=human)
+    _rpc("scene-info", {"depth": depth}, json_out=json_out, port=port, human=human, fetch=fetch)
+
+
+@app.command("list-objects")
+def list_objects_cmd(
+    type_filter: str | None = typer.Option(
+        None, "--type", help="型フィルタ（MESH/CURVE/EMPTY/LIGHT/CAMERA 等・大小無視）"
+    ),
+    regex: str | None = typer.Option(None, "--regex", help="名前の正規表現フィルタ（部分一致）"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """シーン内オブジェクトを type/regex でフィルタして一覧する。"""
+    params: dict[str, Any] = {}
+    if type_filter is not None:
+        params["type"] = type_filter
+    if regex is not None:
+        params["regex"] = regex
+
+    def human(data: dict[str, Any]) -> str:
+        objs = data.get("objects", [])
+        names = ", ".join(f"{o['name']}({o['type']})" for o in objs)
+        return f"{data.get('count', len(objs))} objects [{names}]"
+
+    _rpc("list-objects", params, json_out=json_out, port=port, human=human)
 
 
 @app.command("object-info")

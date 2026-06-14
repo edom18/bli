@@ -35,8 +35,17 @@ command(
 )
 command(
     "object-info",
-    "オブジェクトの寸法/頂点数/transform/材質/modifier を取得",
+    "オブジェクトの寸法/頂点数/transform/bbox/材質/modifier を取得",
     params=(p("targets", ParamType.STR, required=True, help="対象（name|regex）"),),
+    required_mode=Mode.OBJECT,
+)
+command(
+    "list-objects",
+    "シーン内オブジェクトを type/regex でフィルタして一覧する",
+    params=(
+        p("type", ParamType.STR, help="型フィルタ（MESH/CURVE/EMPTY/LIGHT/CAMERA 等・大小無視）"),
+        p("regex", ParamType.STR, help="名前の正規表現フィルタ（部分一致）"),
+    ),
     required_mode=Mode.OBJECT,
 )
 
