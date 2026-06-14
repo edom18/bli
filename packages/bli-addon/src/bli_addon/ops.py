@@ -340,6 +340,10 @@ def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         data = {"name": obj.name, "action": "list", "materials": gateway.list_object_materials(obj)}
         return _ok("material", data, fingerprint=gateway.material_fingerprint(obj))
 
+    # assign/create は DATA slot を書き換えるため、共有 mesh は set-origin/apply-transform と
+    # 同様に単一ユーザ化を要求する（--make-single-user 無しは E_PRECONDITION。Codex P2-A）。
+    _guard_shared_mesh(gateway, obj, params)
+
     if action == "create":
         mat = gateway.create_material(str(name), list(color) if color is not None else None)
     else:  # assign（既存マテリアルのみ。無ければ E_TARGET_NOT_FOUND＝create と責務分離）

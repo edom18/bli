@@ -152,6 +152,7 @@ command(
         p("targets", ParamType.STR, help="対象（name|regex）"),
         p("name", ParamType.STR, help="マテリアル名（assign=既存名 / create=新規名）"),
         p("color", ParamType.VEC4, help="RGBA r,g,b,a（create の Base Color）"),
+        p("make_single_user", ParamType.BOOL, default=False, help="共有mesh時に単一ユーザ化を許可"),
     ),
     mutates=True,
     required_mode=Mode.OBJECT,

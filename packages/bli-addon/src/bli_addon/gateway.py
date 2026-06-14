@@ -626,26 +626,35 @@ def assign_material(obj: Any, mat: Any) -> int:
     """mat を obj に付与する（空スロットなら append・あれば active スロットを置換）。
 
     付与したスロット index を返す（判断: active 置換・空なら追加。複数スロット運用は後続）。
+    書き込みは `material_slots[idx].material` 経由で **slot.link を尊重**する（OBJECT リンクの
+    slot では object 側、DATA リンクでは mesh データ側へ正しく反映する。Codex P2-B）。共有 mesh
+    の DATA slot 置換が兄弟へ波及する件は呼び出し側（ops._guard_shared_mesh）が単一ユーザ化で防ぐ。
     """
     mats = obj.data.materials
     if len(mats) == 0:
-        mats.append(mat)
+        mats.append(mat)  # 新規スロット作成は data 経由（DATA リンクで生成される）
         return 0
     idx = obj.active_material_index
     if idx < 0 or idx >= len(mats):
         idx = 0
-    mats[idx] = mat
+    obj.material_slots[idx].material = mat
     return idx
 
 
 def list_object_materials(obj: Any) -> list[dict[str, Any]]:
-    """obj のマテリアルスロット一覧（slot index / name / base_color）を返す。"""
+    """obj のマテリアルスロット一覧（slot index / name / link / base_color）を返す。
+
+    実効スロット（slot.link 尊重）を `material_slots` 経由で読む。OBJECT リンクの slot では
+    object 側のマテリアルを報告する（data.materials を直接見ると乖離する。Codex P2-B）。
+    """
     out: list[dict[str, Any]] = []
-    for i, mat in enumerate(obj.data.materials):
+    for i, slot in enumerate(obj.material_slots):
+        mat = slot.material
         out.append(
             {
                 "slot": i,
                 "name": mat.name if mat is not None else None,
+                "link": slot.link,
                 "base_color": _base_color(mat),
             }
         )

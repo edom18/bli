@@ -498,6 +498,9 @@ def material(
         None, "--name", help="マテリアル名（assign=既存 / create=新規）"
     ),
     color: str | None = typer.Option(None, "--color", help="RGBA r,g,b,a（create の Base Color）"),
+    make_single_user: bool = typer.Option(
+        False, "--make-single-user", help="共有mesh時に単一ユーザ化を許可"
+    ),
     request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
@@ -508,6 +511,8 @@ def material(
         params["targets"] = targets
     if name is not None:
         params["name"] = name
+    if make_single_user:
+        params["make_single_user"] = True
     try:
         if color is not None:
             params["color"] = _parse_vec("color", color, 4)

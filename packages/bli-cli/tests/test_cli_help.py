@@ -89,7 +89,7 @@ def test_m6_t63_material_discoverable():
     schema = json.loads(runner.invoke(app, ["help", "--command", "material", "--json"]).output)[
         "schema"
     ]
-    assert set(schema["properties"]) == {"action", "targets", "name", "color"}
+    assert set(schema["properties"]) == {"action", "targets", "name", "color", "make_single_user"}
     assert schema["required"] == ["action"]  # targets/name は action 別に ops 側で必須化
     color = schema["properties"]["color"]
     assert color["type"] == "array" and color["minItems"] == 4 and color["maxItems"] == 4
