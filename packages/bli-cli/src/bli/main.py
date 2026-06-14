@@ -8,6 +8,7 @@ set-origin / list-commands / help。
 from __future__ import annotations
 
 import json
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -35,14 +36,15 @@ def _emit(json_out: bool, human: str, payload: dict[str, Any]) -> None:
         typer.echo(human)
 
 
-def _emit_error(json_out: bool, kind: str, message: str) -> None:
+def _emit_error(json_out: bool, kind: str, message: str, request_id: str | None = None) -> None:
     if json_out:
-        typer.echo(
-            json.dumps({"ok": False, "kind": kind, "message": message}, ensure_ascii=False),
-            err=True,
-        )
+        payload: dict[str, Any] = {"ok": False, "kind": kind, "message": message}
+        if request_id is not None:
+            payload["request_id"] = request_id
+        typer.echo(json.dumps(payload, ensure_ascii=False), err=True)
     else:
-        typer.echo(f"エラー[{kind}]: {message}", err=True)
+        tail = f" (id={request_id})" if request_id is not None else ""
+        typer.echo(f"エラー[{kind}]: {message}{tail}", err=True)
 
 
 def _exit_code_for(err: dict[str, Any]) -> ExitCode:
@@ -72,18 +74,29 @@ def _rpc(
     except models.ParamValidationError as e:
         _emit_error(json_out, ErrorCode.INVALID_PARAMS, e.detail)
         raise typer.Exit(int(ExitCode.INPUT)) from None
+
+    # request id は CLI 側で確定させる。TIMEOUT 等でも request-status で後追いできるよう、
+    # 生成した id を必ずユーザに提示する（--id 省略時に id が見えない問題を防ぐ）。
+    request_id = request_id or str(uuid.uuid4())
     try:
         result, _hello = client.call(method, params, request_id=request_id, port=port)
     except client.ConnectError as e:
-        _emit_error(json_out, "CONNECTION", str(e))
+        _emit_error(json_out, "CONNECTION", str(e), request_id=request_id)
         raise typer.Exit(int(ExitCode.CONNECTION)) from None
     except client.RpcRemoteError as e:
+        kind = e.error.get("message", "RPC_ERROR")
         data = e.error.get("data") if isinstance(e.error.get("data"), dict) else {}
         symptom = data.get("userVisibleSymptom") or str(e)
-        _emit_error(json_out, e.error.get("message", "RPC_ERROR"), symptom)
+        if kind == ErrorCode.TIMEOUT:
+            symptom = f"{symptom}（後追い: bli request-status --id {request_id}）"
+        _emit_error(json_out, kind, symptom, request_id=request_id)
         raise typer.Exit(int(_exit_code_for(e.error))) from None
 
-    payload: dict[str, Any] = {"ok": True, "operation": result.get("operation", method)}
+    payload: dict[str, Any] = {
+        "ok": True,
+        "operation": result.get("operation", method),
+        "request_id": request_id,
+    }
     for key in ("verified", "fingerprint", "output_ref", "data"):
         if key in result:
             payload[key] = result[key]

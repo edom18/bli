@@ -93,3 +93,51 @@ def test_help_command_introspects_unimplemented():
     assert res.exit_code == 0
     data = json.loads(res.output)
     assert data["command"]["implemented"] is False
+
+
+def _fake_timeout_error():
+    from bli import client as cli_client
+
+    return cli_client.RpcRemoteError(
+        {
+            "message": "TIMEOUT",
+            "data": {
+                "category": "ENVIRONMENT",
+                "userVisibleSymptom": "タイムアウト",
+                "retryable": True,
+            },
+        }
+    )
+
+
+def test_timeout_exposes_supplied_id(monkeypatch):
+    # --id 指定時: TIMEOUT(exit2) で その id を提示する
+    from bli import client as cli_client
+
+    def fake_call(method, params=None, *, port=None, request_id=None, timeout=None):
+        raise _fake_timeout_error()
+
+    monkeypatch.setattr(cli_client, "call", fake_call)
+    res = runner.invoke(app, ["set-origin", "Cube", "--to", "geometry", "--id", "my-id", "--json"])
+    assert res.exit_code == 2  # TIMEOUT_PENDING
+    payload = json.loads(res.output)
+    assert payload["kind"] == "TIMEOUT"
+    assert payload["request_id"] == "my-id"
+
+
+def test_timeout_exposes_generated_id(monkeypatch):
+    # --id 省略時: CLI が生成した id を必ず提示する（後追い可能にする）
+    from bli import client as cli_client
+
+    seen = {}
+
+    def fake_call(method, params=None, *, port=None, request_id=None, timeout=None):
+        seen["id"] = request_id  # _rpc が生成した id が渡る
+        raise _fake_timeout_error()
+
+    monkeypatch.setattr(cli_client, "call", fake_call)
+    res = runner.invoke(app, ["set-origin", "Cube", "--to", "geometry", "--json"])
+    assert res.exit_code == 2
+    payload = json.loads(res.output)
+    assert payload["request_id"]  # 非空
+    assert payload["request_id"] == seen["id"]  # 送信に使った id と一致
