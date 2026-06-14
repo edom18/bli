@@ -70,8 +70,14 @@ class RequestRegistry:
             return entry.state if entry else None
 
     def lookup(self, rid: str) -> tuple[str | None, dict[str, Any] | None]:
-        """状態と保存結果を返す（request-status 用）。未知なら (None, None)。"""
+        """状態と保存結果を返す（request-status 用）。未知/TTL超過なら (None, None)。
+
+        status のみをポーリングする経路でも TTL 掃除が効くよう、読み取り前に purge する
+        （begin() と同じ扱い。さもないと未確定エントリが恒久的に残る）。
+        """
+        now = time.time()
         with self._lock:
+            self._purge(now)
             entry = self._entries.get(rid)
             if entry is None:
                 return None, None
