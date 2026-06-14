@@ -405,3 +405,70 @@ def test_modifier_apply_with_type_param_invalid_params():
     assert ei.value.code == RPC_INVALID_PARAMS
     assert ei.value.data is not None
     assert ei.value.data.category == "USER_INPUT"
+
+
+# ---- M7 T7.1 mesh（recalc-normals / merge-by-distance）の param 検証（bpy 不要）----
+
+
+def test_mesh_missing_op_invalid_params():
+    # op（必須）が無い → bpy 到達前に INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_mesh_bad_op_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "bogus", "targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_mesh_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "recalc-normals"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_mesh_recalc_with_distance_invalid_params():
+    # distance は merge-by-distance 専用。recalc に渡すと silent ignore せず弾く（bpy 到達前）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "recalc-normals", "targets": "Cube", "distance": 0.1}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_merge_with_inside_invalid_params():
+    # inside は recalc-normals 専用。merge に渡すと弾く（bpy 到達前）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "merge-by-distance", "targets": "Cube", "inside": True}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_merge_negative_distance_invalid_params():
+    # 負の距離は remove_doubles で未定義。0 以上を要求する（bpy 到達前）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "merge-by-distance", "targets": "Cube", "distance": -1.0}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_nonfinite_distance_server_rejected():
+    # FLOAT（distance）の nan/inf もサーバ側で弾く（既存の有限性チェック）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "mesh",
+            {"op": "merge-by-distance", "targets": "Cube", "distance": float("inf")},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_mesh_bad_distance_type_invalid_params():
+    # distance は FLOAT。文字列は型エラーで INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "merge-by-distance", "targets": "Cube", "distance": "x"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS

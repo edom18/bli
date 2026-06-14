@@ -841,3 +841,52 @@ def modifiers_fingerprint(obj: Any) -> str:
     object_fingerprint より param 変化に敏感。add/remove/list の drift 検証に使う。
     """
     return _digest16({"name": obj.name, "modifiers": list_modifiers(obj)})
+
+
+# ---- メッシュ編集の前提/統計/fingerprint（M7 T7.1 / bmesh 操作は bmesh_ops.py）----
+
+
+def require_mesh(obj: Any) -> None:
+    """mesh 型でない（EMPTY/CURVE/LIGHT 等）対象は E_PRECONDITION で弾く。
+
+    require_modifier_support/require_material_support と同じ流儀。USER_INPUT 的な型ミスを
+    INTERNAL にしないための前提検証（bmesh 編集は mesh データを直接書き換えるため）。
+    """
+    if obj.type != "MESH" or obj.data is None:
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"メッシュ編集は mesh 型のみ対応です（type={obj.type}）",
+        )
+
+
+def mesh_stats(obj: Any) -> dict[str, int]:
+    """mesh データの頂点/辺/面数（編集結果の before/after 報告に使う）。"""
+    me = obj.data
+    return {
+        "vertices": len(me.vertices),
+        "edges": len(me.edges),
+        "polygons": len(me.polygons),
+    }
+
+
+def mesh_fingerprint(obj: Any) -> str:
+    """mesh データの幾何の決定的フィンガープリント（mesh 編集の drift 検証用）。
+
+    頂点/辺/面数に加え、面法線（巻き順の本質）を取り込む。これにより、頂点数が
+    変わらない recalc-normals（法線の向きだけが変わる）でも drift を検出できる
+    （object_fingerprint は object_summary 由来で頂点数しか見ず recalc を検出できない。§6e）。
+    法線は丸めてハッシュするので 5.0/4.4 で軸整列メッシュは同値になる。
+    """
+    me = obj.data
+    norms = hashlib.sha256()
+    for poly in me.polygons:
+        n = poly.normal
+        norms.update(f"{n.x:.4f},{n.y:.4f},{n.z:.4f};".encode())
+    return _digest16(
+        {
+            "vertices": len(me.vertices),
+            "edges": len(me.edges),
+            "polygons": len(me.polygons),
+            "normals": norms.hexdigest()[:16],
+        }
+    )
