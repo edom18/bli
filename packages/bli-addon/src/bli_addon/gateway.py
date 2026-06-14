@@ -876,17 +876,12 @@ def mesh_fingerprint(obj: Any) -> str:
     変わらない recalc-normals（法線の向きだけが変わる）でも drift を検出できる
     （object_fingerprint は object_summary 由来で頂点数しか見ず recalc を検出できない。§6e）。
     法線は丸めてハッシュするので 5.0/4.4 で軸整列メッシュは同値になる。
+    `+ 0.0` で符号付きゼロを正規化する（`f"{-0.0:.4f}"` は `"-0.0000"` となり `"0.0000"` と
+    文字列が変わる＝法線反転で生じる -0.0 が版間で fingerprint をぶらすのを防ぐ）。
     """
-    me = obj.data
     norms = hashlib.sha256()
-    for poly in me.polygons:
+    for poly in obj.data.polygons:
         n = poly.normal
-        norms.update(f"{n.x:.4f},{n.y:.4f},{n.z:.4f};".encode())
-    return _digest16(
-        {
-            "vertices": len(me.vertices),
-            "edges": len(me.edges),
-            "polygons": len(me.polygons),
-            "normals": norms.hexdigest()[:16],
-        }
-    )
+        norms.update(f"{n.x + 0.0:.4f},{n.y + 0.0:.4f},{n.z + 0.0:.4f};".encode())
+    # 幾何カウントは mesh_stats を単一の真実とする（重複定義のドリフトを防ぐ）。
+    return _digest16({**mesh_stats(obj), "normals": norms.hexdigest()[:16]})

@@ -788,6 +788,12 @@ def run_calls():
         "->",
         mm["data"]["after"],
     )
+    # 明示 --distance が remove_doubles(dist=...) に届くことを確認: MeshDbl は今 clean cube（8頂点）。
+    # 大きい distance で離れた頂点も collapse する（既定 0.0001 では起きない＝param が効いている）。
+    mm2, _ = call_retry("mesh", {"op": "merge-by-distance", "targets": "MeshDbl", "distance": 3.0})
+    assert mm2["data"]["distance"] == 3.0, mm2["data"]
+    assert mm2["data"]["after"] < 8, mm2["data"]  # 大距離で頂点が大きく減る（param 反映）
+    print("mesh_merge_distance_param_ok after=", mm2["data"]["after"])
 
     # 非 mesh 型（QRot=EMPTY）→ E_PRECONDITION（INTERNAL にしない・modifier/material と同様）。
     try:

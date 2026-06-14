@@ -472,3 +472,12 @@ def test_mesh_bad_distance_type_invalid_params():
     with pytest.raises(JsonRpcError) as ei:
         ops.dispatch("mesh", {"op": "merge-by-distance", "targets": "Cube", "distance": "x"}, INFO)
     assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_mesh_make_single_user_not_rejected_as_op_param():
+    # make_single_user は共有ガードの knob であり op 専用 param ではない（_ALL_MESH_OP_PARAMS に
+    # 含めない）。両 op で USER_INPUT として弾かれず検証を通過し、bpy/bmesh の遅延 import まで
+    # 到達する（bpy 不在の pytest では ModuleNotFoundError）。_ALL_MESH_OP_PARAMS 退行ガード。
+    for op in ("recalc-normals", "merge-by-distance"):
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("mesh", {"op": op, "targets": "Cube", "make_single_user": True}, INFO)

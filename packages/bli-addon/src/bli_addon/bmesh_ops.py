@@ -42,9 +42,10 @@ def _flipped_count(
 def recalc_normals(obj: Any, *, inside: bool = False, message: str | None = None) -> dict[str, Any]:
     """面法線を一貫化（巻き順を修正）する。inside=True は内向きへ反転する。
 
-    結果は `flipped`（この操作で向きが変わった面数）= 不整合だった面数の指標。clean な
-    cube を outward で recalc すると flipped=0、1 面だけ不整合なら flipped=1、clean を
-    inside にすると全面反転で flipped=面数。
+    結果の `flipped` は **この操作で向きが変わった面数**（操作前後の法線を index 対応で比較。
+    methods.md の定義と一致）。inside=False では「不整合だった面数」に一致し、inside=True では
+    「元の向きから反転した面数」を表す。例: clean cube を outward recalc → flipped=0 /
+    1 面だけ不整合 → flipped=1 / clean を inside → 全面反転で flipped=面数。
     """
     before = _face_normals(obj.data)
     bm = bmesh.new()

@@ -134,18 +134,21 @@ bli <command> [--targets <name|regex>] [options] [--json] [--id <uuid>] [--dry-r
 - v1必須: `MIRROR` / `SUBSURF` / `SOLIDIFY` / `DECIMATE` / `BOOLEAN`。
 - `add`（パラメータ付き）/ `remove` / `list` / `apply` をサポート。
 
-### メッシュ編集（編集モード）
-- 編集モード操作は `bmesh` 経由を基本とし、`bpy.ops` のcontext依存を回避する。
-- v1必須コマンド:
+### メッシュ編集（bmesh 一次 / 単一 `mesh` コマンド + `--op`）
+- **bmesh-on-data** を基本とする（`from_mesh`→`bmesh.ops`→`to_mesh`・**OBJECT モードのまま** mesh データを編集＝`bpy.ops` の context 依存を回避。5.0.1/4.4.3 で確認済み）。当面 Mode=OBJECT（EDIT モード実機は L4）。
+- material/modifier と同じく **単一 `mesh` コマンド + `--op` ENUM**（操作ごとに別コマンドにはしない）。op 別 params は schema 上は任意・サーバが op 別に検証する（条件付き必須・無効 param は弾く・op 専用 param は schema default を持たせない）。stability はコマンド単位なので（experimental op を含むため）`mesh` 全体を experimental とする。
+- v1 の op（**T7.1 実装済み**: recalc-normals / merge-by-distance / **T7.2–7.3 予定**: extrude / bevel / inset / boolean / decimate）:
 ```
-bli mesh extrude  --targets <name> [--offset x,y,z] [--faces <selector>]
-bli mesh bevel    --targets <name> --width <f> [--segments N]
-bli mesh inset    --targets <name> --thickness <f>
-bli mesh boolean  --targets <name> --with <other> --op union|difference|intersect
-bli mesh decimate --targets <name> --ratio <f>          # 破壊的削減（編集確定）
-bli mesh recalc-normals --targets <name> [--inside]
-bli mesh merge-by-distance --targets <name> [--distance <f>]
+bli mesh --op recalc-normals     --targets <name> [--inside]
+bli mesh --op merge-by-distance  --targets <name> [--distance <f>]   # 既定 0.0001・0 以上
+# 以下 T7.2–7.3 で追加予定
+bli mesh --op extrude  --targets <name> [--offset x,y,z] [--faces <selector>]
+bli mesh --op bevel    --targets <name> --width <f> [--segments N]
+bli mesh --op inset    --targets <name> --thickness <f>
+bli mesh --op boolean  --targets <name> --with <other> --operation union|difference|intersect
+bli mesh --op decimate --targets <name> --ratio <f>          # 破壊的削減（編集確定）
 ```
+- mesh データを直接書き換える破壊的操作のため、共有 mesh は `--make-single-user` 必須（apply 系と同じ）。非 mesh 型は `E_PRECONDITION`。
 - 選択（`--faces`/頂点グループ等）の指定子は v1で最小限の表現に絞る（Deferred: 高度なセレクタ）。
 
 ### シナリオ1: 原点変更

@@ -544,6 +544,9 @@ def _mesh(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     # 非 mesh 型（EMPTY/CURVE 等）を INTERNAL でなく E_PRECONDITION で弾く（material と同様）。
     gateway.require_mesh(obj)
     # 破壊的（mesh データを直接書き換える）→ 共有 mesh は単一ユーザ化を要求（apply 系と同様）。
+    # 現状の op（recalc/merge）は必ず obj.data を書き換える前提でガードを掛ける。将来 no-op に
+    # なり得る op（例: decimate ratio=1.0）を足す際は、material のように「実書き込み時のみ」
+    # ガードする方式（false-positive な単一ユーザ化を避ける）を検討すること。
     _guard_shared_mesh(gateway, obj, params)
 
     if op == "recalc-normals":
