@@ -59,6 +59,20 @@ def ensure_cube():
     return cube
 
 
+def ensure_quaternion_empty():
+    """QUATERNION モードの Empty を用意（非 Euler 回転の検証用・メインスレッドで呼ぶ）。
+
+    Empty にするのは MESH フィルタ（list-objects）の golden を壊さないため。
+    """
+    obj = bpy.data.objects.get("QRot")
+    if obj is None:
+        obj = bpy.data.objects.new("QRot", None)  # data=None → EMPTY
+        bpy.context.scene.collection.objects.link(obj)
+    obj.rotation_mode = "QUATERNION"
+    obj.rotation_quaternion = (1.0, 0.0, 0.0, 0.0)  # identity
+    return obj
+
+
 def call_retry(method, params=None, request_id=None, attempts=40):
     """SESSION_BUSY（接続クローズ直後のロック解放待ち）を少し待って再試行する。"""
     last = None
@@ -215,11 +229,20 @@ def run_calls():
         assert e.error.get("data", {}).get("category") == "USER_INPUT", e.error
     print("bad_regex_target_ok user-input-error")
 
+    # 非 Euler（QUATERNION）モードでも rotation が native 表現に反映される（Codex P2）。
+    # 報告 euler は rotation_quaternion から導出するため、quaternion が変わらなければ 0 のまま。
+    tq, _ = call_retry(
+        "transform", {"targets": "QRot", "rotation": [0.0, 0.0, 90.0], "mode": "set"}
+    )
+    assert approx(tq["data"]["rotation_euler_deg"], [0.0, 0.0, 90.0]), tq["data"]
+    print("transform_quaternion_mode_ok", tq["data"]["rotation_euler_deg"])
+
 
 def main():
     print("=== BLI_OPS_SMOKE_BEGIN ===")
     print("python", sys.version.split()[0], "blender", bpy.app.version_string)
     ensure_cube()
+    ensure_quaternion_empty()  # 非 Euler 回転モード検証用（メインスレッドで生成）
 
     dispatcher = Dispatcher()  # background では timer を使わず手動 pump
 
