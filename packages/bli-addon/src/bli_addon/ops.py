@@ -358,10 +358,12 @@ def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
                 ),
             )
 
-    # assign/create は DATA slot を書き換えるため、共有 mesh は set-origin/apply-transform と
-    # 同様に単一ユーザ化を要求する（--make-single-user 無しは E_PRECONDITION。Codex P2-A）。
-    # マテリアル解決（上）を通過した後に実行する＝失敗時に mesh を分離しない。
-    _guard_shared_mesh(gateway, obj, params)
+    # 共有 mesh ガード（Codex P2-A）。ただし書き込み先が OBJECT リンク slot のときは object
+    # 限定の書き込みで共有 mesh を触らないため掛けない（false-positive な E_PRECONDITION や
+    # --make-single-user による不要な分離を避ける。Codex P2）。DATA slot 書き込み・空スロット
+    # append のみガード対象。マテリアル解決（上）を通過した後に実行＝失敗時に mesh を分離しない。
+    if gateway.material_write_touches_mesh_data(obj):
+        _guard_shared_mesh(gateway, obj, params)
 
     if action == "create":
         mat = gateway.create_material(str(name), list(color) if color is not None else None)

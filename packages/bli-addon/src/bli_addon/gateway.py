@@ -622,6 +622,23 @@ def create_material(name: str, color: list[float] | None) -> Any:
     return mat
 
 
+def material_write_touches_mesh_data(obj: Any) -> bool:
+    """assign/create の付与がメッシュデータ（共有され得る）を書き換えるか判定する（Codex P2）。
+
+    空スロット（append で DATA slot を新設）か、active スロットが DATA リンクなら True。
+    active スロットが OBJECT リンクなら object 限定の書き込みで共有 mesh を触らないため False
+    （共有ガード不要・--make-single-user による不要な分離も避ける）。判定は assign_material と
+    同じ active_material_index クランプを使い、実際の書き込み先と一致させる。
+    """
+    mats = obj.data.materials
+    if len(mats) == 0:
+        return True  # append は DATA slot を作る（共有 mesh に波及し得る）
+    idx = obj.active_material_index
+    if idx < 0 or idx >= len(mats):
+        idx = 0
+    return obj.material_slots[idx].link == "DATA"
+
+
 def assign_material(obj: Any, mat: Any) -> int:
     """mat を obj に付与する（空スロットなら append・あれば active スロットを置換）。
 
