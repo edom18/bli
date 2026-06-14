@@ -33,10 +33,25 @@ def test_lookup_unknown_id():
     assert reg.lookup("nope") == (None, None)
 
 
-def test_lookup_purges_expired_entries():
-    # status のみをポーリングする経路でも TTL 掃除が効く（Codex P2 指摘の修正）
+def test_lookup_purges_expired_terminal_entries():
+    # 終端（DONE/FAILED）エントリは status ポーリング経路でも TTL 掃除される
     reg = RequestRegistry(ttl=0.05)
     reg.complete("rid", {"v": 1}, ok=True)
     assert reg.lookup("rid")[0] == "DONE"
+    time.sleep(0.06)
+    assert reg.lookup("rid") == (None, None)
+
+
+def test_lookup_does_not_purge_running_entries():
+    # 実行中（RUNNING）は TTL 超過でも保持し、冪等性を守る（Codex P2 指摘の修正）
+    reg = RequestRegistry(ttl=0.05)
+    assert reg.begin("rid")[0] == "new"  # RUNNING に遷移
+    time.sleep(0.06)
+    # ポーリングしても RUNNING は消えない
+    assert reg.lookup("rid")[0] == "RUNNING"
+    # 同一 id 再送は IN_PROGRESS のまま（変更操作を二重実行しない）
+    assert reg.begin("rid")[0] == "in_progress"
+    # 完走後は終端化し、以降は TTL 掃除の対象になる
+    reg.complete("rid", {"v": 1}, ok=True)
     time.sleep(0.06)
     assert reg.lookup("rid") == (None, None)

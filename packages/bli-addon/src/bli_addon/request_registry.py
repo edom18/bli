@@ -31,7 +31,14 @@ class RequestRegistry:
         self._entries: dict[str, _Entry] = {}
 
     def _purge(self, now: float) -> None:
-        expired = [k for k, e in self._entries.items() if now - e.ts > self._ttl]
+        # 終端状態（DONE/FAILED）のみ TTL で掃除する。実行中（PENDING/RUNNING）は
+        # settle まで保持する。さもないと長時間ジョブの id が消え、再送が begin() で
+        # 新規扱いされ変更操作を二重実行してしまう（冪等性 IN_PROGRESS が壊れる）。
+        expired = [
+            k
+            for k, e in self._entries.items()
+            if e.state in (DONE, FAILED) and now - e.ts > self._ttl
+        ]
         for k in expired:
             del self._entries[k]
 
