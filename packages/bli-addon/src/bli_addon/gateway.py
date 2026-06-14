@@ -717,13 +717,32 @@ def material_fingerprint(obj: Any) -> str:
 
 _MIRROR_AXES = ("X", "Y", "Z")
 
+# モディファイアを持てるオブジェクト型（これ以外は E_PRECONDITION。非対応型への
+# obj.modifiers.new() は生 RuntimeError になり INTERNAL 誤分類されるのを防ぐ）。
+_MODIFIER_OBJECT_TYPES = frozenset(
+    {"MESH", "CURVE", "SURFACE", "FONT", "LATTICE", "VOLUME", "GREASEPENCIL", "POINTCLOUD"}
+)
+
+
+def require_modifier_support(obj: Any) -> None:
+    """モディファイアを持てない型（EMPTY/LIGHT/CAMERA 等）は E_PRECONDITION で弾く。
+
+    material の require_material_support と同じ流儀。USER_INPUT 的な型ミスを INTERNAL に
+    しないための前提検証（個別 modifier×型 の細かな非対応は add_modifier 側で捕捉する）。
+    """
+    if obj.type not in _MODIFIER_OBJECT_TYPES:
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"モディファイアを持てない型です（type={obj.type}）",
+        )
+
 
 def _modifier_summary(mod: Any) -> dict[str, Any]:
     """モディファイア1件の要約（name/type + 種類別の主要プロパティ）。"""
     data: dict[str, Any] = {"name": mod.name, "type": mod.type}
     t = mod.type
     if t == "MIRROR":
-        data["axes"] = [ax for ax, on in zip(_MIRROR_AXES, mod.use_axis, strict=False) if on]
+        data["axes"] = [ax for ax, on in zip(_MIRROR_AXES, mod.use_axis, strict=True) if on]
     elif t == "SUBSURF":
         data["levels"] = mod.levels
     elif t == "SOLIDIFY":
@@ -764,8 +783,15 @@ def add_modifier(
     """obj にモディファイアを追加し、要約を返す（op 不要・obj.modifiers 直接）。
 
     name 省略時は Blender 既定名（type 名）。種類別の主要プロパティのみ設定する（最小）。
+    対象型がこの modifier を受け付けない場合（生 RuntimeError）は E_PRECONDITION に変換する。
     """
-    mod = obj.modifiers.new(name or mod_type.title(), mod_type)
+    try:
+        mod = obj.modifiers.new(name or mod_type.title(), mod_type)
+    except RuntimeError as e:
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"この型にこのモディファイアは追加できません（type={obj.type}, modifier={mod_type}）: {e}",
+        ) from e
     if mod_type == "MIRROR" and axis is not None:
         for i, ax in enumerate(_MIRROR_AXES):
             mod.use_axis[i] = ax == axis
@@ -806,3 +832,12 @@ def apply_modifier(obj: Any, name: str, *, message: str | None = None) -> dict[s
     """
     run_operator(bpy.ops.object.modifier_apply, obj, message=message, modifier=name)
     return {"applied": name, "modifiers": list_modifiers(obj)}
+
+
+def modifiers_fingerprint(obj: Any) -> str:
+    """obj のモディファイアスタック状態の決定的フィンガープリント（drift 検証用）。
+
+    型別の主要プロパティ込み（list_modifiers）でハッシュするため、名前のみの
+    object_fingerprint より param 変化に敏感。add/remove/list の drift 検証に使う。
+    """
+    return _digest16({"name": obj.name, "modifiers": list_modifiers(obj)})

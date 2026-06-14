@@ -377,7 +377,10 @@ _MODIFIER_TYPE_PARAMS: dict[str, set[str]] = {
     "DECIMATE": {"ratio"},
     "BOOLEAN": {"operation", "with_object"},
 }
-_ALL_MODIFIER_TYPE_PARAMS = {"axis", "levels", "thickness", "ratio", "operation", "with_object"}
+# 全 type 別パラメータの和集合（手書きにせず導出＝type 追加時の追従漏れを防ぐ）。
+_ALL_MODIFIER_TYPE_PARAMS: set[str] = set().union(*_MODIFIER_TYPE_PARAMS.values())
+# SUBSURF levels の上限（巨大値で mesh 評価が指数的に膨らみ Blender を固めるのを防ぐ）。
+_MAX_SUBSURF_LEVELS = 6
 
 
 def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
@@ -409,6 +412,19 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
                 symptom="BOOLEAN の add には --with（相手オブジェクト）が必要です",
                 remediation="--with <object> を指定してください",
             )
+        # 数値 param の範囲を bpy 到達前に弾く（暴走防止・silent クランプ回避）。
+        if "levels" in params:
+            _require_input(
+                0 <= int(params["levels"]) <= _MAX_SUBSURF_LEVELS,
+                symptom=f"levels は 0〜{_MAX_SUBSURF_LEVELS} で指定してください（指定: {params['levels']}）",
+                remediation=f"--levels を 0〜{_MAX_SUBSURF_LEVELS} にしてください",
+            )
+        if "ratio" in params:
+            _require_input(
+                0.0 <= float(params["ratio"]) <= 1.0,
+                symptom=f"ratio は 0.0〜1.0 で指定してください（指定: {params['ratio']}）",
+                remediation="--ratio を 0.0〜1.0 にしてください",
+            )
     else:
         # remove/apply/list は type 別パラメータ不可（add 専用）。
         _require_input(
@@ -427,10 +443,12 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
 
     _check_mode(cmd, gateway.current_mode())
     obj = gateway.require_single(str(params["targets"]))
+    # 非対応型（EMPTY/LIGHT/CAMERA 等）を INTERNAL でなく E_PRECONDITION で弾く（material と同様）。
+    gateway.require_modifier_support(obj)
 
     if action == "list":
         data = {"name": obj.name, "action": "list", "modifiers": gateway.list_modifiers(obj)}
-        return _ok("modifier", data, fingerprint=gateway.object_fingerprint(obj))
+        return _ok("modifier", data, fingerprint=gateway.modifiers_fingerprint(obj))
 
     if action == "remove":
         gateway.remove_modifier(obj, str(name), message=f"modifier remove {name}")
@@ -440,7 +458,7 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             "removed": str(name),
             "modifiers": gateway.list_modifiers(obj),
         }
-        return _ok("modifier", data, fingerprint=gateway.object_fingerprint(obj))
+        return _ok("modifier", data, fingerprint=gateway.modifiers_fingerprint(obj))
 
     if action == "apply":
         # 無効名は **共有ガード（単一ユーザ化）の前** に弾く（失敗時に mesh を分離しない）。
@@ -448,13 +466,24 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         # apply は mesh へ焼き込む破壊的操作 → 共有 mesh は単一ユーザ化を要求（apply-transform と同様）。
         _guard_shared_mesh(gateway, obj, params)
         result = gateway.apply_modifier(obj, str(name), message=f"modifier apply {name}")
+        # apply は mesh が変わる → mesh 込みの object_fingerprint で drift を示す。
         data = {"name": obj.name, "action": "apply", **result}
         return _ok("modifier", data, fingerprint=gateway.object_fingerprint(obj))
 
-    # add（type 別 param を設定。BOOLEAN は相手を require_single で解決）。
+    # add（type 別 param を設定。BOOLEAN は相手を require_single で解決し型/自己参照を検証）。
     operand = None
     if mtype == "BOOLEAN":
         operand = gateway.require_single(str(params["with_object"]))
+        _require_input(
+            operand.name != obj.name,
+            symptom="BOOLEAN の相手に自分自身は指定できません",
+            remediation="別のオブジェクトを --with に指定してください",
+        )
+        _require_input(
+            operand.type == "MESH",
+            symptom=f"BOOLEAN の相手は mesh が必要です（--with={operand.name} type={operand.type}）",
+            remediation="mesh オブジェクトを --with に指定してください",
+        )
     summary = gateway.add_modifier(
         obj,
         str(mtype),
@@ -473,7 +502,7 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         "modifier": summary,
         "modifiers": gateway.list_modifiers(obj),
     }
-    return _ok("modifier", data, fingerprint=gateway.object_fingerprint(obj))
+    return _ok("modifier", data, fingerprint=gateway.modifiers_fingerprint(obj))
 
 
 def _set_origin(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:

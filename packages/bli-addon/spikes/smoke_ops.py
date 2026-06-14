@@ -636,11 +636,41 @@ def run_calls():
         assert e.error.get("data", {}).get("category") == "USER_INPUT", e.error
     print("modifier_remove_missing_ok")
 
-    # apply（先頭 MIRROR を Cube=単一ユーザに焼き込み・ガード不要）→ スタックから消える。
+    # apply（先頭 MIRROR を Cube=単一ユーザに焼き込み・ガード不要）→ スタックから消え、
+    # かつ **mesh が実際に変わる**（MIRROR で頂点が増える＝remove と区別できる）。
+    vbefore = call_retry("object-info", {"targets": "Cube"})[0]["data"]["vertices"]
     mir_name = next(m["name"] for m in lm2["data"]["modifiers"] if m["type"] == "MIRROR")
     ap, _ = call_retry("modifier", {"action": "apply", "targets": "Cube", "name": mir_name})
     assert mir_name not in [m["name"] for m in ap["data"]["modifiers"]], ap["data"]
-    print("modifier_apply_ok", mir_name)
+    vafter = call_retry("object-info", {"targets": "Cube"})[0]["data"]["vertices"]
+    assert vafter > vbefore, (vbefore, vafter)  # MIRROR を焼き込んだので頂点が増える
+    print("modifier_apply_ok", mir_name, "verts", vbefore, "->", vafter)
+
+    # 非対応型（QRot=EMPTY）への add → E_PRECONDITION（INTERNAL にしない）。
+    try:
+        call_retry("modifier", {"action": "add", "targets": "QRot", "type": "MIRROR", "axis": "X"})
+        raise AssertionError("modifier on non-mesh should error")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "E_PRECONDITION", e.error
+    print("modifier_nonmesh_guard_ok")
+
+    # BOOLEAN の相手が非mesh（QRot）/ 自分自身 → USER_INPUT（INTERNAL にしない）。
+    for bad_with in ("QRot", "Cube"):
+        try:
+            call_retry(
+                "modifier",
+                {
+                    "action": "add",
+                    "targets": "Cube",
+                    "type": "BOOLEAN",
+                    "operation": "DIFFERENCE",
+                    "with_object": bad_with,
+                },
+            )
+            raise AssertionError("bad boolean operand should error")
+        except client.RpcRemoteError as e:
+            assert e.error.get("message") == "INVALID_PARAMS", (bad_with, e.error)
+    print("modifier_boolean_operand_guard_ok")
 
     # apply 共有ガード: OLnkA/OLnkB は OLnkMesh 共有（mesh_users=2）。MIRROR を add して
     # apply を --make-single-user 無しで実行 → E_PRECONDITION（apply-transform と同じ）。

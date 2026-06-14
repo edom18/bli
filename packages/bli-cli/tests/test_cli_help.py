@@ -156,7 +156,7 @@ def test_m6_t64_modifier_discoverable():
         schema["properties"]
     )
     assert set(schema["required"]) == {"action", "targets"}
-    # type/operation は ENUM（choices が出る）、levels は INT
+    # type/operation/axis は ENUM（choices が出る）、levels は INT
     assert schema["properties"]["type"]["enum"] == [
         "MIRROR",
         "SUBSURF",
@@ -164,6 +164,8 @@ def test_m6_t64_modifier_discoverable():
         "DECIMATE",
         "BOOLEAN",
     ]
+    assert schema["properties"]["operation"]["enum"] == ["UNION", "DIFFERENCE", "INTERSECT"]
+    assert schema["properties"]["axis"]["enum"] == ["X", "Y", "Z"]
     assert schema["properties"]["levels"]["type"] == "integer"
 
 
@@ -176,6 +178,16 @@ def test_modifier_bad_action_local_validation():
 def test_modifier_bad_type_local_validation():
     res = runner.invoke(
         app, ["modifier", "--action", "add", "--targets", "Cube", "--type", "BOGUS", "--json"]
+    )
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
+def test_modifier_bad_operation_local_validation():
+    # 不正な --operation は送信前ローカル Pydantic 検証で exit 4
+    res = runner.invoke(
+        app,
+        ["modifier", "--action", "add", "--targets", "Cube", "--operation", "BOGUS", "--json"],
     )
     assert res.exit_code == 4
     assert "INVALID_PARAMS" in res.output

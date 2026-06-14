@@ -126,7 +126,7 @@ bli <command> [--targets <name|regex>] [options] [--json] [--id <uuid>] [--dry-r
 | `bli transform --targets <name> [--location x,y,z] [--rotation x,y,z(deg)] [--scale x,y,z] [--mode set\|delta]` | 位置/回転/拡縮 |
 | `bli apply-transform --targets <name> [--location] [--rotation] [--scale]` | トランスフォーム適用 |
 | `bli duplicate --targets <name> [--linked] [--count N] [--offset x,y,z]` | 複製（`bpy.data`直接） |
-| `bli modifier add\|remove\|list\|apply --targets <name> --type <T> [params]` | モディファイア操作 |
+| `bli modifier --action add\|remove\|list\|apply --targets <name> [--type <T>] [--name] [型別params] [--make-single-user]` | モディファイア操作（add は --type 必須 / 型別: MIRROR=--axis, SUBSURF=--levels, SOLIDIFY=--thickness, DECIMATE=--ratio, BOOLEAN=--operation+--with / apply は破壊的・共有meshは--make-single-user） |
 | `bli material --action assign\|create\|list [--targets <name>] [--name] [--color r,g,b,a] [--make-single-user]` | マテリアル操作（create=作成+割当 / list は slot/name/link/base_color / 共有mesh DATA slotは--make-single-user） |
 | `bli delete --targets <name>` | 削除（既定でバックアップ／確認セマンティクス） |
 

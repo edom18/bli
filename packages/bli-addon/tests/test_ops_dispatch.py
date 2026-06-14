@@ -372,3 +372,36 @@ def test_modifier_nonfinite_thickness_server_rejected():
             INFO,
         )
     assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_modifier_levels_above_max_invalid_params():
+    # SUBSURF levels の上限超過は暴走防止のため bpy 到達前に弾く。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier", {"action": "add", "targets": "Cube", "type": "SUBSURF", "levels": 100}, INFO
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_modifier_ratio_out_of_range_invalid_params():
+    # DECIMATE ratio は 0..1。範囲外は bpy 到達前に弾く（silent クランプ回避）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier", {"action": "add", "targets": "Cube", "type": "DECIMATE", "ratio": 5.0}, INFO
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_modifier_apply_with_type_param_invalid_params():
+    # type 別パラメータは add 専用。apply で渡したら弾く（bpy 到達前）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier", {"action": "apply", "targets": "Cube", "name": "Mirror", "axis": "X"}, INFO
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"

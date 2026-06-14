@@ -33,9 +33,11 @@
 | `duplicate` | `--targets` `--linked?` `--count?`(1〜1000) `--offset?` | 新オブジェクト名 | ✓ | - | OBJECT | s |
 | `delete` | `--targets` | 削除結果（削除前 summary を backup として常時返却） | ✓ | - | OBJECT | s |
 | `material` | `--action assign\|create\|list` `--targets?` `--name?` `--color r,g,b,a?` `--make-single-user?` | 材質状態（list は slot/name/link/base_color） | ✓ | - | OBJECT | s |
-| `modifier` | `add\|remove\|list\|apply` `--targets` `--type?` `[params]` | modifier状態 | ✓ | - | OBJECT | s |
+| `modifier` | `--action add\|remove\|list\|apply` `--targets` `--type?` `[type別params]` `--make-single-user?` | modifier状態（list は name/type/型別値） | ✓ | - | OBJECT | s |
 
 `modifier --type`（v1必須）: `MIRROR` / `SUBSURF` / `SOLIDIFY` / `DECIMATE` / `BOOLEAN`。
+
+> `modifier`: 操作は `--action`（ENUM）。`--type` は add で必須（schema 上は任意・サーバが action 別に検証）。型別 params（**add 専用**）= MIRROR:`--axis X\|Y\|Z` / SUBSURF:`--levels`(0〜6) / SOLIDIFY:`--thickness` / DECIMATE:`--ratio`(0〜1) / BOOLEAN:`--operation`+`--with`(相手mesh・必須)。`remove`/`apply` は `--name` 必須。**apply のみ** mesh へ焼き込む破壊的操作で、共有 mesh は `--make-single-user` 必須（add/remove/list はオブジェクト単位で不要）。非対応型は `E_PRECONDITION`。
 
 > `material`: 操作は `--action`（ENUM）。`create` は対象へ作成と同時に割当（create-and-assign）。`--color` は RGBA(VEC4)・create の Base Color。`targets`/`name` の必須は action 別（schema 上は任意・サーバが action ごとに検証）。スロットは active 置換・空なら追加。共有 mesh の **DATA slot** 書き込みは `--make-single-user` 必須（OBJECT リンク slot は object 限定で不要）。
 
