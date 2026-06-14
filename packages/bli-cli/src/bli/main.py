@@ -8,6 +8,7 @@ set-origin / list-commands / help。
 from __future__ import annotations
 
 import json
+import math
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -53,9 +54,12 @@ def _parse_vec3(name: str, raw: str) -> list[float]:
     if len(parts) != 3:
         raise ValueError(f"{name} は x,y,z 形式（3要素）で指定してください: {raw!r}")
     try:
-        return [float(p) for p in parts]
+        vals = [float(p) for p in parts]
     except ValueError as e:
         raise ValueError(f"{name} の数値が不正です: {raw!r}") from e
+    if not all(math.isfinite(v) for v in vals):
+        raise ValueError(f"{name} に有限でない値（nan/inf）は指定できません: {raw!r}")
+    return vals
 
 
 def _exit_code_for(err: dict[str, Any]) -> ExitCode:
@@ -401,6 +405,9 @@ def apply_transform_cmd(
     location: bool = typer.Option(False, "--location", help="位置を適用"),
     rotation: bool = typer.Option(False, "--rotation", help="回転を適用"),
     scale: bool = typer.Option(False, "--scale", help="拡縮を適用"),
+    make_single_user: bool = typer.Option(
+        False, "--make-single-user", help="共有mesh時に単一ユーザ化を許可"
+    ),
     request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
@@ -413,6 +420,8 @@ def apply_transform_cmd(
         params["rotation"] = True
     if scale:
         params["scale"] = True
+    if make_single_user:
+        params["make_single_user"] = True
 
     def human(data: dict[str, Any]) -> str:
         return (

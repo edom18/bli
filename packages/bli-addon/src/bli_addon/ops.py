@@ -162,9 +162,52 @@ def _select(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     return _ok("select", data, fingerprint=fp)
 
 
+def _require_input(condition: bool, symptom: str, remediation: str) -> None:
+    """USER_INPUT 前提を満たさなければ INVALID_PARAMS を投げる（bpy 到達前に弾ける）。"""
+    if not condition:
+        raise JsonRpcError(
+            RPC_INVALID_PARAMS,
+            ErrorCode.INVALID_PARAMS,
+            make_error(
+                ErrorCode.INVALID_PARAMS,
+                category=ErrorCategory.USER_INPUT,
+                retryable=False,
+                symptom=symptom,
+                remediation=remediation,
+            ),
+        )
+
+
+def _guard_shared_mesh(gateway: Any, obj: Any, params: dict[str, Any]) -> None:
+    """共有 mesh（users>=2）は --make-single-user 明示が無い限り拒否する（spec §破壊防止）。
+
+    set-origin / apply-transform など mesh データを書き換える破壊的操作で共通利用する。
+    """
+    if gateway.mesh_user_count(obj) >= 2:
+        if not bool(params.get("make_single_user", False)):
+            raise JsonRpcError(
+                RPC_BUSINESS_ERROR,
+                ErrorCode.E_PRECONDITION,
+                make_error(
+                    ErrorCode.E_PRECONDITION,
+                    category=ErrorCategory.PRECONDITION,
+                    retryable=False,
+                    symptom=f"共有 mesh（users={gateway.mesh_user_count(obj)}）です",
+                    remediation="--make-single-user を付けて単一ユーザ化を許可してください",
+                ),
+            )
+        gateway.make_single_user_mesh(obj)
+
+
 def _transform(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     cmd = _command("transform")
     _validate(cmd, params)
+    # 変更チャンネル皆無は無音 no-op + 空 undo になるため弾く（apply-transform と整合）。
+    _require_input(
+        any(k in params for k in ("location", "rotation", "scale")),
+        symptom="transform に変更するチャンネルがありません",
+        remediation="--location/--rotation/--scale のいずれかを指定してください",
+    )
     from . import gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
@@ -195,23 +238,19 @@ def _apply_transform(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]
         loc = bool(params.get("location", False))
         rot = bool(params.get("rotation", False))
         scl = bool(params.get("scale", False))
-        if not (loc or rot or scl):  # 明示的に全 false = 適用対象なし
-            raise JsonRpcError(
-                RPC_INVALID_PARAMS,
-                ErrorCode.INVALID_PARAMS,
-                make_error(
-                    ErrorCode.INVALID_PARAMS,
-                    category=ErrorCategory.USER_INPUT,
-                    retryable=False,
-                    symptom="apply-transform に適用するチャンネルがありません（全 false）",
-                    remediation="--location/--rotation/--scale のいずれかを指定（全省略で全適用）",
-                ),
-            )
+        # 明示的に全 false = 適用対象なし
+        _require_input(
+            loc or rot or scl,
+            symptom="apply-transform に適用するチャンネルがありません（全 false）",
+            remediation="--location/--rotation/--scale のいずれかを指定（全省略で全適用）",
+        )
 
     from . import gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
     obj = gateway.require_single(str(params["targets"]))
+    # 破壊的（mesh データへ焼き込む）。共有 mesh は set-origin と同様にガードする。
+    _guard_shared_mesh(gateway, obj, params)
     data = gateway.apply_transform(
         obj, location=loc, rotation=rot, scale=scl, message="apply-transform"
     )
@@ -228,20 +267,7 @@ def _set_origin(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     to = str(params["to"])
 
     # 共有 mesh は明示許可（make_single_user）が無い限り拒否する。
-    if gateway.mesh_user_count(obj) >= 2:
-        if not bool(params.get("make_single_user", False)):
-            raise JsonRpcError(
-                RPC_BUSINESS_ERROR,
-                ErrorCode.E_PRECONDITION,
-                make_error(
-                    ErrorCode.E_PRECONDITION,
-                    category=ErrorCategory.PRECONDITION,
-                    retryable=False,
-                    symptom=f"共有 mesh（users={gateway.mesh_user_count(obj)}）です",
-                    remediation="--make-single-user を付けて単一ユーザ化を許可してください",
-                ),
-            )
-        gateway.make_single_user_mesh(obj)
+    _guard_shared_mesh(gateway, obj, params)
 
     if to == "geometry":
         center = "BOUNDS" if params.get("center") == "bounds" else "MEDIAN"

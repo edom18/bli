@@ -108,6 +108,7 @@ command(
         p("location", ParamType.BOOL, help="位置を適用"),
         p("rotation", ParamType.BOOL, help="回転を適用"),
         p("scale", ParamType.BOOL, help="拡縮を適用"),
+        p("make_single_user", ParamType.BOOL, default=False, help="共有mesh時に明示許可"),
     ),
     mutates=True,
     required_mode=Mode.OBJECT,

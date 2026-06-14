@@ -421,9 +421,15 @@ def apply_transform(
 ) -> dict[str, Any]:
     """transform を mesh データへ適用する（operator 経由）。
 
-    共有 mesh は `isolate_users=True` で自動的に単一ユーザ化してから適用する
-    （他オブジェクトへの波及を防ぐ。M0.5 で 4.4/5.0 とも存在を確認）。
+    共有 mesh の単一ユーザ化は呼び出し側（ops._guard_shared_mesh）が --make-single-user
+    明示時のみ行う。ここでは黙って分離しない（spec §破壊防止）。焼き込み先データを持たない
+    型（EMPTY/LIGHT/CAMERA）は事前に弾き、分かりやすい precondition エラーを返す。
     """
+    if obj.data is None or not hasattr(obj.data, "transform"):
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"transform 適用は mesh/curve 等のデータを持つ型のみ対応（type={obj.type}）",
+        )
     run_operator(
         bpy.ops.object.transform_apply,
         obj,
@@ -431,7 +437,6 @@ def apply_transform(
         location=location,
         rotation=rotation,
         scale=scale,
-        isolate_users=True,
     )
     return object_summary(obj)
 
@@ -479,8 +484,9 @@ def select_objects(
 
     if message:
         push_undo(message)
+    # selected は fingerprint（sorted）と並びを揃え、解決順（版/履歴依存）に依らず決定的にする。
     return {
-        "selected": [o.name for o in matched],
+        "selected": sorted(o.name for o in matched),
         "count": len(matched),
         "active": active_obj.name,
     }

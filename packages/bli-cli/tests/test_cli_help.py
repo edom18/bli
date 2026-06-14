@@ -60,6 +60,14 @@ def test_transform_bad_mode_local_validation():
     assert "INVALID_PARAMS" in res.output
 
 
+def test_transform_nonfinite_vec3_exit_input():
+    # nan/inf は送信前に弾く（matrix を壊さない）
+    for bad in ("nan,0,0", "inf,0,0"):
+        res = runner.invoke(app, ["transform", "--targets", "Cube", "--location", bad, "--json"])
+        assert res.exit_code == 4, bad
+        assert "INVALID_PARAMS" in res.output
+
+
 def test_apply_transform_flags_have_no_schema_default():
     # presence-sensitive な BOOL フラグは schema に default を出さない（Codex P2）。
     # default:false を広告すると、既定埋めクライアントが全 false を送ってしまう。

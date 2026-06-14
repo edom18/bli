@@ -103,6 +103,15 @@ def test_select_missing_targets_invalid_params():
     assert ei.value.code == RPC_INVALID_PARAMS
 
 
+def test_transform_no_channels_invalid_params():
+    # location/rotation/scale すべて省略は無音 no-op になるため USER_INPUT で弾く（bpy 到達前）
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("transform", {"targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
 def test_apply_transform_unknown_param_invalid_params():
     with pytest.raises(JsonRpcError) as ei:
         ops.dispatch("apply-transform", {"targets": "Cube", "bogus": 1}, INFO)
