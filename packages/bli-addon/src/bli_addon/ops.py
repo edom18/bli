@@ -257,6 +257,52 @@ def _apply_transform(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]
     return _ok("apply-transform", data, fingerprint=gateway.object_fingerprint(obj))
 
 
+_MAX_DUPLICATE_COUNT = 1000
+
+
+def _duplicate(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("duplicate")
+    _validate(cmd, params)
+    # count は 1..上限。暴走（巨大 count で Blender を固める）を bpy 到達前に弾く。
+    count = int(params.get("count", 1))
+    _require_input(
+        1 <= count <= _MAX_DUPLICATE_COUNT,
+        symptom=f"count は 1〜{_MAX_DUPLICATE_COUNT} の範囲で指定してください（指定: {count}）",
+        remediation=f"--count を 1〜{_MAX_DUPLICATE_COUNT} にしてください",
+    )
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(params["targets"]))
+    offset = params.get("offset")
+    linked = bool(params.get("linked", False))
+    created = gateway.duplicate_object(
+        obj,
+        linked=linked,
+        count=count,
+        offset=list(offset) if offset is not None else None,
+        message="duplicate",
+    )
+    data = {"source": obj.name, "created": created, "count": len(created), "linked": linked}
+    return _ok("duplicate", data, fingerprint=gateway.names_fingerprint(created))
+
+
+def _delete(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("delete")
+    _validate(cmd, params)
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(params["targets"]))
+    # 削除前にサマリ/fingerprint を取得する（削除後は obj が無効化されアクセス不可）。
+    # 共有 mesh でも安全（object のみ除去・データは他利用者が残れば保持）→ ガード不要。
+    name = obj.name
+    backup = gateway.object_summary(obj)
+    fp = gateway.object_fingerprint(obj)
+    gateway.delete_object(obj, message="delete")
+    return _ok("delete", {"deleted": name, "backup": backup}, fingerprint=fp)
+
+
 def _set_origin(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     cmd = _command("set-origin")
     _validate(cmd, params)
@@ -298,6 +344,8 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "select": _select,
     "transform": _transform,
     "apply-transform": _apply_transform,
+    "duplicate": _duplicate,
+    "delete": _delete,
     "set-origin": _set_origin,
 }
 

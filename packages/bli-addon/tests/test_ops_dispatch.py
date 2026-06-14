@@ -130,3 +130,53 @@ def test_apply_transform_all_false_invalid_params():
     assert ei.value.code == RPC_INVALID_PARAMS
     assert ei.value.data is not None
     assert ei.value.data.category == "USER_INPUT"
+
+
+def test_duplicate_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("duplicate", {}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_duplicate_bad_count_type_invalid_params():
+    # count は INT。非整数は型エラーで INVALID_PARAMS（bool は int 扱いしない）
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("duplicate", {"targets": "Cube", "count": "x"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_duplicate_count_below_min_invalid_params():
+    # count<1 は無音 no-op になるため USER_INPUT で弾く（bpy 到達前）
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("duplicate", {"targets": "Cube", "count": 0}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_duplicate_count_above_max_invalid_params():
+    # 暴走防止: 上限超過も bpy 到達前に弾く
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("duplicate", {"targets": "Cube", "count": 100000}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_duplicate_bad_offset_invalid_params():
+    # offset は VEC3（3要素）。要素不足は型エラーで INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("duplicate", {"targets": "Cube", "offset": [1, 2]}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_delete_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("delete", {}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_delete_unknown_param_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("delete", {"targets": "Cube", "bogus": 1}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS

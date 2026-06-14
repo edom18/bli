@@ -434,6 +434,53 @@ def apply_transform_cmd(
     )
 
 
+@app.command()
+def duplicate(
+    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    linked: bool = typer.Option(False, "--linked", help="データを共有する（リンク複製）"),
+    count: int = typer.Option(1, "--count", help="複製数（1以上）"),
+    offset: str | None = typer.Option(None, "--offset", help="複製ごとの world オフセット x,y,z"),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """オブジェクトを複製する（count 回・world offset 累積）。"""
+    if count < 1:
+        _emit_error(json_out, ErrorCode.INVALID_PARAMS, f"--count は 1 以上です: {count}")
+        raise typer.Exit(int(ExitCode.INPUT))
+    params: dict[str, Any] = {"targets": targets, "count": count}
+    if linked:
+        params["linked"] = True
+    try:
+        if offset is not None:
+            params["offset"] = _parse_vec3("offset", offset)
+    except ValueError as e:
+        _emit_error(json_out, ErrorCode.INVALID_PARAMS, str(e))
+        raise typer.Exit(int(ExitCode.INPUT)) from None
+
+    def human(data: dict[str, Any]) -> str:
+        return f"duplicated '{data.get('source')}' -> {data.get('created')} (count={data.get('count')})"
+
+    _rpc("duplicate", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command()
+def delete(
+    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """オブジェクトを削除する（削除前サマリを backup として結果に残す）。"""
+    params: dict[str, Any] = {"targets": targets}
+
+    def human(data: dict[str, Any]) -> str:
+        bk = data.get("backup") or {}
+        return f"deleted '{data.get('deleted')}' (backup: type={bk.get('type')} loc={bk.get('location')})"
+
+    _rpc("delete", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
 @app.command("request-status")
 def request_status(
     request_id: str = typer.Option(..., "--id", help="リクエストID(UUIDv4)"),
