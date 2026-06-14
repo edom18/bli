@@ -104,6 +104,27 @@ def require_single(selector: str, *, regex: bool = False) -> Any:
     return found[0]
 
 
+def world_bbox(obj: Any) -> dict[str, list[float]]:
+    """オブジェクトの **ワールド空間** 軸並行バウンディングボックス（min/max/size）。
+
+    `obj.bound_box`（object 空間の8隅）を matrix_world で変換し、各軸 min/max を取る。
+    既定 Cube（size=2・原点）なら min=[-1,-1,-1] max=[1,1,1] size=[2,2,2]。
+    """
+    from mathutils import Vector  # type: ignore  # lazy: bpy 依存を閉じる
+
+    corners = [obj.matrix_world @ Vector(c) for c in obj.bound_box]
+    xs = [c.x for c in corners]
+    ys = [c.y for c in corners]
+    zs = [c.z for c in corners]
+    mn = [min(xs), min(ys), min(zs)]
+    mx = [max(xs), max(ys), max(zs)]
+    return {
+        "min": [round(v, 6) for v in mn],
+        "max": [round(v, 6) for v in mx],
+        "size": [round(mx[i] - mn[i], 6) for i in range(3)],
+    }
+
+
 def object_summary(obj: Any) -> dict[str, Any]:
     """オブジェクトの要約（info 系の共通項）。"""
     loc = obj.matrix_world.translation
@@ -115,6 +136,7 @@ def object_summary(obj: Any) -> dict[str, Any]:
         "dimensions": [round(dims.x, 6), round(dims.y, 6), round(dims.z, 6)],
         "rotation_euler_deg": [round(a * 57.2957795, 4) for a in obj.rotation_euler],
         "scale": [round(s, 6) for s in obj.scale],
+        "bbox": world_bbox(obj),
     }
     if obj.type == "MESH" and obj.data is not None:
         data["vertices"] = len(obj.data.vertices)
@@ -141,6 +163,41 @@ def scene_summary(depth: int = 1) -> dict[str, Any]:
             "length_unit": us.length_unit,
         },
     }
+
+
+def list_objects(type_filter: str | None = None, regex: str | None = None) -> list[dict[str, Any]]:
+    """シーン内オブジェクトを type/regex でフィルタして軽量サマリ一覧を返す。
+
+    type は大小無視で `obj.type` と完全一致照合（freeform: 版差・将来型に強い）。
+    regex は名前への部分一致。重い object_summary は使わず name/type/location のみ。
+    """
+    pattern = None
+    if regex:
+        try:
+            pattern = re.compile(regex)
+        except re.error as e:
+            raise _op_error(
+                ErrorCode.E_PRECONDITION,
+                f"正規表現が不正です: {e}",
+                category=ErrorCategory.USER_INPUT,
+            ) from e
+    want_type = type_filter.upper() if type_filter else None
+
+    out: list[dict[str, Any]] = []
+    for o in bpy.context.scene.objects:
+        if want_type is not None and o.type != want_type:
+            continue
+        if pattern is not None and not pattern.search(o.name):
+            continue
+        loc = o.matrix_world.translation
+        out.append(
+            {
+                "name": o.name,
+                "type": o.type,
+                "location": [round(loc.x, 6), round(loc.y, 6), round(loc.z, 6)],
+            }
+        )
+    return out
 
 
 def object_fingerprint(obj: Any) -> str:

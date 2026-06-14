@@ -27,6 +27,18 @@ def test_list_commands_json():
     assert so["required_mode"] == "OBJECT"
 
 
+def test_list_objects_discoverable():
+    # M5 で追加した list-objects が発見系（実装済み一覧）に出る
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    names = {c["name"] for c in data["commands"]}
+    assert "list-objects" in names
+    res = runner.invoke(app, ["help", "--command", "list-objects", "--json"])
+    assert res.exit_code == 0
+    schema = json.loads(res.output)["schema"]
+    assert set(schema["properties"]) == {"type", "regex"}
+    assert "required" not in schema  # type/regex は任意
+
+
 def test_help_all_json():
     res = runner.invoke(app, ["help", "--json"])
     assert res.exit_code == 0

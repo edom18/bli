@@ -71,13 +71,16 @@ def _check_mode(cmd: Command, current: str) -> None:
 
 def _ok(
     operation: str,
-    data: dict[str, Any],
+    data: dict[str, Any] | None,
     *,
     verified: bool = True,
     fingerprint: str | None = None,
-    output_ref: str | None = None,
+    output_ref: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """成功レスポンス（data-model §2.5 のエンベロープ）。"""
+    """成功レスポンス（data-model §2.5 のエンベロープ）。
+
+    退避時は data=None / output_ref=descriptor、inline 時は data=<...> / output_ref=None。
+    """
     return {
         "success": True,
         "operation": operation,
@@ -86,6 +89,17 @@ def _ok(
         "output_ref": output_ref,
         "data": data,
     }
+
+
+def _ok_offload(
+    operation: str, data: dict[str, Any], schema: str, *, fingerprint: str | None = None
+) -> dict[str, Any]:
+    """閾値超ならファイル退避し output_ref を、未満なら inline data を載せて返す（M5）。"""
+    from bli_core import output_ref as outref
+    from bli_core import runtime
+
+    inline, descriptor = outref.maybe_offload(schema, data, runtime.outputs_dir())
+    return _ok(operation, inline, fingerprint=fingerprint, output_ref=descriptor)
 
 
 # ---- ハンドラ（bpy 系）----
@@ -98,7 +112,22 @@ def _scene_info(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
 
     _check_mode(cmd, gateway.current_mode())
     data = gateway.scene_summary(int(params.get("depth", 1)))
-    return _ok("scene-info", data)
+    return _ok_offload("scene-info", data, "scene-info/v1")
+
+
+def _list_objects(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("list-objects")
+    _validate(cmd, params)
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    type_filter = params.get("type")
+    regex = params.get("regex")
+    objs = gateway.list_objects(
+        str(type_filter) if type_filter is not None else None,
+        str(regex) if regex is not None else None,
+    )
+    return _ok("list-objects", {"objects": objs, "count": len(objs)})
 
 
 def _object_info(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
@@ -163,6 +192,7 @@ def _set_origin(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
 _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]] = {
     "scene-info": _scene_info,
     "object-info": _object_info,
+    "list-objects": _list_objects,
     "set-origin": _set_origin,
 }
 
