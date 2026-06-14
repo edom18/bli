@@ -58,3 +58,4 @@
 - M4 追補（PR #1 Codex レビュー対応, 2026-06-13）。pytest **70件** pass。①request-status のセッションロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（Dispatcher.submit settle + サーバ TIMEOUT/exit2、registry は RUNNING 維持）③発見系を Command.implemented でフィルタ（transform/exec-python は未実装扱い）。
 - M4 追補2（PR #1 Codex レビュー対応, 2026-06-14）。pytest **73件** pass。④サーバ/クライアントのタイムアウト整合（runtime に DISPATCH_TIMEOUT<CLIENT_READ_TIMEOUT を追加し、サーバが先に TIMEOUT を返す）⑤TIMEOUT 時に CLI が request id を生成・提示（--id 省略でも request-status で後追い可能）。
 - M4 追補3（PR #1 Codex レビュー対応, 2026-06-14）。pytest **78件** pass。⑥request-status のポーリングだけでも TTL 掃除が効くよう `RequestRegistry.lookup` で purge ⑦`_call_or_exit` を抽出し ping にも TIMEOUT→exit2 + request id 提示を適用（doctor は診断目的のため対象外）。
+- M4 追補4（PR #1 Codex レビュー対応, 2026-06-14）。pytest **79件** pass。⑧`_purge` を終端状態（DONE/FAILED）限定に修正（追補3 の回帰修正）。実行中（RUNNING/PENDING）は settle まで保持し、長時間ジョブ id の消失→再送二重実行（IN_PROGRESS 冪等性破壊）を防ぐ。
