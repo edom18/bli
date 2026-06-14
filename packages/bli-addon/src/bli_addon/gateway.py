@@ -104,12 +104,21 @@ def require_single(selector: str, *, regex: bool = False) -> Any:
     return found[0]
 
 
-def world_bbox(obj: Any) -> dict[str, list[float]]:
+def world_bbox(obj: Any) -> dict[str, list[float]] | None:
     """オブジェクトの **ワールド空間** 軸並行バウンディングボックス（min/max/size）。
 
     `obj.bound_box`（object 空間の8隅）を matrix_world で変換し、各軸 min/max を取る。
     既定 Cube（size=2・原点）なら min=[-1,-1,-1] max=[1,1,1] size=[2,2,2]。
+
+    非ジオメトリ（EMPTY/LIGHT/CAMERA 等）や bound_box 未提供の文脈では Blender が
+    8隅すべて同一値を返す（5.0/4.4 とも全 (0,0,0) / 版により全 (-1,-1,-1) の番兵）。
+    その退化（全隅同一）を検出して **None** を返し、偽の零サイズ bbox を出さない
+    （番号分岐せず値で判定。Codex P2 指摘）。
     """
+    raw = [tuple(c) for c in obj.bound_box]
+    if len(set(raw)) <= 1:  # 全隅同一 = ジオメトリ無し / bound_box 未提供
+        return None
+
     from mathutils import Vector  # type: ignore  # lazy: bpy 依存を閉じる
 
     corners = [obj.matrix_world @ Vector(c) for c in obj.bound_box]

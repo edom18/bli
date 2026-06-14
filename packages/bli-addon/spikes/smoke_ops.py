@@ -140,6 +140,11 @@ def run_calls():
     assert any(o["name"] == "Cube" for o in lo2["data"]["objects"]), lo2["data"]
     print("list_objects_ok mesh=", lo_names)
 
+    # 非ジオメトリ（Light）の object-info: bbox は None（Codex P2: 偽の零サイズを出さない）
+    oi_light, _ = call_retry("object-info", {"targets": "Light"})
+    assert oi_light["data"]["bbox"] is None, oi_light["data"].get("bbox")
+    print("nongeometry_bbox_none_ok Light")
+
     # 10) scene-info output_ref 退避（M5）: 閾値を一時的に下げて shared-fs 退避を強制し、
     #     退避ファイルを sha256 検証付きで読み戻す（往復）。
     import bli_core.output_ref as outref
