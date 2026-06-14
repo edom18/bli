@@ -73,6 +73,26 @@ def ensure_quaternion_empty():
     return obj
 
 
+def ensure_parented():
+    """親(offset)に子を付けた Empty ペアを用意（world 空間 transform の検証用）。
+
+    親を (10,0,0) に置き、子のローカル原点(0,0,0)＝world(10,0,0) から始める。
+    EMPTY なので list-objects(MESH) golden は壊さない。メインスレッドで呼ぶ。
+    """
+    parent = bpy.data.objects.get("Parent")
+    if parent is None:
+        parent = bpy.data.objects.new("Parent", None)
+        bpy.context.scene.collection.objects.link(parent)
+    parent.location = (10.0, 0.0, 0.0)
+    child = bpy.data.objects.get("Child")
+    if child is None:
+        child = bpy.data.objects.new("Child", None)
+        bpy.context.scene.collection.objects.link(child)
+    child.parent = parent
+    child.location = (0.0, 0.0, 0.0)
+    return parent, child
+
+
 def call_retry(method, params=None, request_id=None, attempts=40):
     """SESSION_BUSY（接続クローズ直後のロック解放待ち）を少し待って再試行する。"""
     last = None
@@ -237,12 +257,25 @@ def run_calls():
     assert approx(tq["data"]["rotation_euler_deg"], [0.0, 0.0, 90.0]), tq["data"]
     print("transform_quaternion_mode_ok", tq["data"]["rotation_euler_deg"])
 
+    # 親付き Child（親は world(10,0,0)）: transform --location は world 空間で反映され、
+    # report（matrix_world）と一致する（Codex P2: 親ローカルにしない）。
+    tc, _ = call_retry(
+        "transform", {"targets": "Child", "location": [0.0, 0.0, 0.0], "mode": "set"}
+    )
+    assert approx(tc["data"]["location"], [0.0, 0.0, 0.0]), tc["data"]
+    tcd, _ = call_retry(
+        "transform", {"targets": "Child", "location": [2.0, 0.0, 0.0], "mode": "delta"}
+    )
+    assert approx(tcd["data"]["location"], [2.0, 0.0, 0.0]), tcd["data"]
+    print("transform_world_location_ok set/delta=", tc["data"]["location"], tcd["data"]["location"])
+
 
 def main():
     print("=== BLI_OPS_SMOKE_BEGIN ===")
     print("python", sys.version.split()[0], "blender", bpy.app.version_string)
     ensure_cube()
     ensure_quaternion_empty()  # 非 Euler 回転モード検証用（メインスレッドで生成）
+    ensure_parented()  # world 空間 transform 検証用（メインスレッドで生成）
 
     dispatcher = Dispatcher()  # background では timer を使わず手動 pump
 

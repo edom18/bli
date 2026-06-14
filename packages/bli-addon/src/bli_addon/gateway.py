@@ -358,6 +358,24 @@ def _write_rotation(obj: Any, rotation_deg: list[float], mode: str) -> None:
         obj.rotation_axis_angle = (angle, axis.x, axis.y, axis.z)
 
 
+def _write_location(obj: Any, location: list[float], mode: str) -> None:
+    """location を **world 空間** で設定/相対移動する（Codex P2）。
+
+    obj.location は親ローカルだが object_summary は matrix_world.translation（world）を
+    報告する。親付きでも要求/報告/見た目が一致するよう、matrix_world 経由で世界座標を
+    書き込む（Blender が親逆行列を考慮してローカルへ反映する）。
+    """
+    from mathutils import Vector  # type: ignore  # lazy: bpy 依存
+
+    mw = obj.matrix_world.copy()
+    if mode == "delta":
+        t = mw.translation
+        mw.translation = Vector((t.x + location[0], t.y + location[1], t.z + location[2]))
+    else:
+        mw.translation = Vector((float(location[0]), float(location[1]), float(location[2])))
+    obj.matrix_world = mw
+
+
 def transform_object(
     obj: Any,
     *,
@@ -369,16 +387,13 @@ def transform_object(
 ) -> dict[str, Any]:
     """オブジェクトの loc/rot/scale を set または delta で変更する（直接プロパティ・op不要）。
 
-    rotation は度入力 → ラジアン。delta: location/rotation は加算（rotation は rotation_mode に
-    応じて加算/quaternion 合成）、scale は成分ごとの乗算。回転は rotation_mode の native
-    表現へ反映する（QUATERNION/AXIS_ANGLE でも有効）。
+    location は world 空間（親付きでも report と一致）。rotation は度入力 → ラジアンで
+    rotation_mode の native 表現へ反映（QUATERNION/AXIS_ANGLE でも有効）。delta は
+    location/rotation 加算（rotation は mode に応じ加算/quaternion 合成）、scale は乗算。
+    location を先に適用し、その後 rotation/scale を local で上書きする（原点位置は不変）。
     """
     if location is not None:
-        if mode == "delta":
-            cur = obj.location
-            obj.location = (cur[0] + location[0], cur[1] + location[1], cur[2] + location[2])
-        else:
-            obj.location = tuple(location)
+        _write_location(obj, location, mode)
     if rotation is not None:
         _write_rotation(obj, rotation, mode)
     if scale is not None:
