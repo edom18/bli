@@ -534,6 +534,64 @@ def material(
     _rpc("material", params, json_out=json_out, port=port, human=human, request_id=request_id)
 
 
+@app.command()
+def modifier(
+    action: str = typer.Option(..., "--action", help="add|remove|list|apply"),
+    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    type_: str | None = typer.Option(
+        None, "--type", help="add の種類: MIRROR|SUBSURF|SOLIDIFY|DECIMATE|BOOLEAN"
+    ),
+    name: str | None = typer.Option(None, "--name", help="モディファイア名（remove/apply 対象）"),
+    axis: str | None = typer.Option(None, "--axis", help="MIRROR の軸: X|Y|Z"),
+    levels: int | None = typer.Option(None, "--levels", help="SUBSURF の分割数"),
+    thickness: float | None = typer.Option(None, "--thickness", help="SOLIDIFY の厚み"),
+    ratio: float | None = typer.Option(None, "--ratio", help="DECIMATE の比率（0..1）"),
+    operation: str | None = typer.Option(
+        None, "--operation", help="BOOLEAN の演算: UNION|DIFFERENCE|INTERSECT"
+    ),
+    with_object: str | None = typer.Option(None, "--with", help="BOOLEAN の相手オブジェクト名"),
+    make_single_user: bool = typer.Option(
+        False, "--make-single-user", help="apply 時に共有mesh単一ユーザ化を許可"
+    ),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """モディファイアを追加/削除/一覧/適用する（add は --type 必須・apply は mesh へ焼き込み）。"""
+    params: dict[str, Any] = {"action": action, "targets": targets}
+    if type_ is not None:
+        params["type"] = type_
+    if name is not None:
+        params["name"] = name
+    if axis is not None:
+        params["axis"] = axis
+    if levels is not None:
+        params["levels"] = levels
+    if thickness is not None:
+        params["thickness"] = thickness
+    if ratio is not None:
+        params["ratio"] = ratio
+    if operation is not None:
+        params["operation"] = operation
+    if with_object is not None:
+        params["with_object"] = with_object
+    if make_single_user:
+        params["make_single_user"] = True
+
+    def human(data: dict[str, Any]) -> str:
+        if data.get("action") == "list":
+            mods = ", ".join(f"{m['name']}({m['type']})" for m in data.get("modifiers", []))
+            return f"{data.get('name')} modifiers [{mods}]"
+        if data.get("action") == "add":
+            m = data.get("modifier") or {}
+            return f"added {m.get('type')} '{m.get('name')}' to {data.get('name')}"
+        if data.get("action") == "apply":
+            return f"applied '{data.get('applied')}' to {data.get('name')}"
+        return f"removed '{data.get('removed')}' from {data.get('name')}"
+
+    _rpc("modifier", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
 @app.command("request-status")
 def request_status(
     request_id: str = typer.Option(..., "--id", help="リクエストID(UUIDv4)"),

@@ -369,6 +369,113 @@ def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     return _ok("material", data, fingerprint=gateway.material_fingerprint(obj))
 
 
+# type 別に有効な追加パラメータ（add 時のみ。これ以外が来たら USER_INPUT で弾く）。
+_MODIFIER_TYPE_PARAMS: dict[str, set[str]] = {
+    "MIRROR": {"axis"},
+    "SUBSURF": {"levels"},
+    "SOLIDIFY": {"thickness"},
+    "DECIMATE": {"ratio"},
+    "BOOLEAN": {"operation", "with_object"},
+}
+_ALL_MODIFIER_TYPE_PARAMS = {"axis", "levels", "thickness", "ratio", "operation", "with_object"}
+
+
+def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("modifier")
+    _validate(cmd, params)
+    action = str(params["action"])
+    mtype = params.get("type")
+    name = params.get("name")
+    present_type_params = {k for k in _ALL_MODIFIER_TYPE_PARAMS if k in params}
+
+    # 条件付き必須を bpy 到達前に検証する（schema は action/type 非依存で任意）。
+    if action == "add":
+        _require_input(
+            mtype is not None,
+            symptom="add には --type が必要です",
+            remediation="--type を指定してください",
+        )
+        mtype = str(mtype)
+        # type-param は当該 type のものだけ許可（silent ignore しない）。
+        extra = present_type_params - _MODIFIER_TYPE_PARAMS[mtype]
+        _require_input(
+            not extra,
+            symptom=f"{mtype} に無効なパラメータ: {sorted(extra)}",
+            remediation=f"{mtype} で有効な追加パラメータ: {sorted(_MODIFIER_TYPE_PARAMS[mtype])}",
+        )
+        if mtype == "BOOLEAN":
+            _require_input(
+                "with_object" in params,
+                symptom="BOOLEAN の add には --with（相手オブジェクト）が必要です",
+                remediation="--with <object> を指定してください",
+            )
+    else:
+        # remove/apply/list は type 別パラメータ不可（add 専用）。
+        _require_input(
+            not present_type_params,
+            symptom=f"{action} に type 別パラメータは使えません: {sorted(present_type_params)}",
+            remediation="type 別パラメータは add のときのみ有効です",
+        )
+        if action in ("remove", "apply"):
+            _require_input(
+                name is not None,
+                symptom=f"{action} には --name（対象モディファイア）が必要です",
+                remediation="--name <modifier> を指定してください",
+            )
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(params["targets"]))
+
+    if action == "list":
+        data = {"name": obj.name, "action": "list", "modifiers": gateway.list_modifiers(obj)}
+        return _ok("modifier", data, fingerprint=gateway.object_fingerprint(obj))
+
+    if action == "remove":
+        gateway.remove_modifier(obj, str(name), message=f"modifier remove {name}")
+        data = {
+            "name": obj.name,
+            "action": "remove",
+            "removed": str(name),
+            "modifiers": gateway.list_modifiers(obj),
+        }
+        return _ok("modifier", data, fingerprint=gateway.object_fingerprint(obj))
+
+    if action == "apply":
+        # 無効名は **共有ガード（単一ユーザ化）の前** に弾く（失敗時に mesh を分離しない）。
+        gateway.require_modifier(obj, str(name))
+        # apply は mesh へ焼き込む破壊的操作 → 共有 mesh は単一ユーザ化を要求（apply-transform と同様）。
+        _guard_shared_mesh(gateway, obj, params)
+        result = gateway.apply_modifier(obj, str(name), message=f"modifier apply {name}")
+        data = {"name": obj.name, "action": "apply", **result}
+        return _ok("modifier", data, fingerprint=gateway.object_fingerprint(obj))
+
+    # add（type 別 param を設定。BOOLEAN は相手を require_single で解決）。
+    operand = None
+    if mtype == "BOOLEAN":
+        operand = gateway.require_single(str(params["with_object"]))
+    summary = gateway.add_modifier(
+        obj,
+        str(mtype),
+        name=str(name) if name is not None else None,
+        axis=params.get("axis"),
+        levels=params.get("levels"),
+        thickness=params.get("thickness"),
+        ratio=params.get("ratio"),
+        operation=params.get("operation"),
+        operand=operand,
+        message=f"modifier add {mtype}",
+    )
+    data = {
+        "name": obj.name,
+        "action": "add",
+        "modifier": summary,
+        "modifiers": gateway.list_modifiers(obj),
+    }
+    return _ok("modifier", data, fingerprint=gateway.object_fingerprint(obj))
+
+
 def _set_origin(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     cmd = _command("set-origin")
     _validate(cmd, params)
@@ -413,6 +520,7 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "duplicate": _duplicate,
     "delete": _delete,
     "material": _material,
+    "modifier": _modifier,
     "set-origin": _set_origin,
 }
 

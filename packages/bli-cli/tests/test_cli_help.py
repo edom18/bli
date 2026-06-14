@@ -144,6 +144,43 @@ def test_material_bad_action_local_validation():
     assert "INVALID_PARAMS" in res.output
 
 
+def test_m6_t64_modifier_discoverable():
+    # M6 T6.4 の modifier が実装済み一覧に出る + スキーマ
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    names = {c["name"] for c in data["commands"]}
+    assert "modifier" in names
+    schema = json.loads(runner.invoke(app, ["help", "--command", "modifier", "--json"]).output)[
+        "schema"
+    ]
+    assert {"action", "targets", "type", "name", "axis", "levels", "thickness", "ratio"} <= set(
+        schema["properties"]
+    )
+    assert set(schema["required"]) == {"action", "targets"}
+    # type/operation は ENUM（choices が出る）、levels は INT
+    assert schema["properties"]["type"]["enum"] == [
+        "MIRROR",
+        "SUBSURF",
+        "SOLIDIFY",
+        "DECIMATE",
+        "BOOLEAN",
+    ]
+    assert schema["properties"]["levels"]["type"] == "integer"
+
+
+def test_modifier_bad_action_local_validation():
+    res = runner.invoke(app, ["modifier", "--action", "bogus", "--targets", "Cube", "--json"])
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
+def test_modifier_bad_type_local_validation():
+    res = runner.invoke(
+        app, ["modifier", "--action", "add", "--targets", "Cube", "--type", "BOGUS", "--json"]
+    )
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
 def test_transform_bad_vec3_exit_input():
     # 不正な --location（3要素でない）は送信前に exit 4
     res = runner.invoke(app, ["transform", "--targets", "Cube", "--location", "1,2", "--json"])

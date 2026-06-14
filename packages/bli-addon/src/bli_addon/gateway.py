@@ -708,3 +708,101 @@ def list_object_materials(obj: Any) -> list[dict[str, Any]]:
 def material_fingerprint(obj: Any) -> str:
     """obj のマテリアル状態の決定的フィンガープリント（material の drift 検証用）。"""
     return _digest16({"name": obj.name, "materials": list_object_materials(obj)})
+
+
+# ---- モディファイア（M6 T6.4 / add/remove/list は bpy.data 直接・apply は run_operator）----
+#
+# modifier は **オブジェクト単位**（obj.modifiers）。add/remove/list は mesh データを触らないため
+# 共有 mesh ガード不要。**apply のみ** mesh へ焼き込む（apply-transform と同様にガードが要る）。
+
+_MIRROR_AXES = ("X", "Y", "Z")
+
+
+def _modifier_summary(mod: Any) -> dict[str, Any]:
+    """モディファイア1件の要約（name/type + 種類別の主要プロパティ）。"""
+    data: dict[str, Any] = {"name": mod.name, "type": mod.type}
+    t = mod.type
+    if t == "MIRROR":
+        data["axes"] = [ax for ax, on in zip(_MIRROR_AXES, mod.use_axis, strict=False) if on]
+    elif t == "SUBSURF":
+        data["levels"] = mod.levels
+    elif t == "SOLIDIFY":
+        data["thickness"] = round(mod.thickness, 6)
+    elif t == "DECIMATE":
+        data["ratio"] = round(mod.ratio, 6)
+    elif t == "BOOLEAN":
+        data["operation"] = mod.operation
+        data["object"] = mod.object.name if mod.object is not None else None
+    return data
+
+
+def require_modifier(obj: Any, name: str) -> Any:
+    """名前でモディファイアを解決する。無ければ E_TARGET_NOT_FOUND。"""
+    mod = obj.modifiers.get(name)
+    if mod is None:
+        raise _op_error(
+            ErrorCode.E_TARGET_NOT_FOUND,
+            f"モディファイアが見つかりません: {name}",
+            category=ErrorCategory.USER_INPUT,
+        )
+    return mod
+
+
+def add_modifier(
+    obj: Any,
+    mod_type: str,
+    *,
+    name: str | None = None,
+    axis: str | None = None,
+    levels: int | None = None,
+    thickness: float | None = None,
+    ratio: float | None = None,
+    operation: str | None = None,
+    operand: Any = None,
+    message: str | None = None,
+) -> dict[str, Any]:
+    """obj にモディファイアを追加し、要約を返す（op 不要・obj.modifiers 直接）。
+
+    name 省略時は Blender 既定名（type 名）。種類別の主要プロパティのみ設定する（最小）。
+    """
+    mod = obj.modifiers.new(name or mod_type.title(), mod_type)
+    if mod_type == "MIRROR" and axis is not None:
+        for i, ax in enumerate(_MIRROR_AXES):
+            mod.use_axis[i] = ax == axis
+    elif mod_type == "SUBSURF" and levels is not None:
+        mod.levels = levels
+        mod.render_levels = levels
+    elif mod_type == "SOLIDIFY" and thickness is not None:
+        mod.thickness = thickness
+    elif mod_type == "DECIMATE" and ratio is not None:
+        mod.ratio = ratio
+    elif mod_type == "BOOLEAN":
+        if operation is not None:
+            mod.operation = operation
+        if operand is not None:
+            mod.object = operand
+    if message:
+        push_undo(message)
+    return _modifier_summary(mod)
+
+
+def remove_modifier(obj: Any, name: str, *, message: str | None = None) -> None:
+    """名前でモディファイアを削除する（無効名は E_TARGET_NOT_FOUND・op 不要）。"""
+    mod = require_modifier(obj, name)
+    obj.modifiers.remove(mod)
+    if message:
+        push_undo(message)
+
+
+def list_modifiers(obj: Any) -> list[dict[str, Any]]:
+    """obj のモディファイアスタックを順に要約する（スタック順は意味があるので保持）。"""
+    return [_modifier_summary(m) for m in obj.modifiers]
+
+
+def apply_modifier(obj: Any, name: str, *, message: str | None = None) -> dict[str, Any]:
+    """モディファイアを mesh データへ適用する（operator 経由・破壊的）。
+
+    無効名の事前検証・共有 mesh ガードは呼び出し側（ops）が apply 前に行う。
+    """
+    run_operator(bpy.ops.object.modifier_apply, obj, message=message, modifier=name)
+    return {"applied": name, "modifiers": list_modifiers(obj)}

@@ -158,6 +158,50 @@ command(
     required_mode=Mode.OBJECT,
 )
 
+# ---- 汎用編集（モディファイア / M6 T6.4）----
+command(
+    "modifier",
+    "モディファイアを追加/削除/一覧/適用する（add は --type 必須・apply は mesh へ焼き込み）",
+    # type/name/type別params は action により必須が変わる（条件付き必須）。schema 上は任意にし、
+    # ops 側で action/type 別に検証する（material/set-origin と同じ流儀）。
+    params=(
+        p(
+            "action",
+            ParamType.ENUM,
+            required=True,
+            choices=["add", "remove", "list", "apply"],
+            help="操作: add|remove|list|apply",
+        ),
+        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p(
+            "type",
+            ParamType.ENUM,
+            choices=["MIRROR", "SUBSURF", "SOLIDIFY", "DECIMATE", "BOOLEAN"],
+            help="add 時の種類",
+        ),
+        p("name", ParamType.STR, help="モディファイア名（remove/apply の対象 / add の任意名）"),
+        p("axis", ParamType.ENUM, choices=["X", "Y", "Z"], help="MIRROR の軸"),
+        p("levels", ParamType.INT, help="SUBSURF の分割数"),
+        p("thickness", ParamType.FLOAT, help="SOLIDIFY の厚み"),
+        p("ratio", ParamType.FLOAT, help="DECIMATE の比率（0..1）"),
+        p(
+            "operation",
+            ParamType.ENUM,
+            choices=["UNION", "DIFFERENCE", "INTERSECT"],
+            help="BOOLEAN の演算",
+        ),
+        p("with_object", ParamType.STR, help="BOOLEAN の相手オブジェクト名"),
+        p(
+            "make_single_user",
+            ParamType.BOOL,
+            default=False,
+            help="apply 時に共有mesh単一ユーザ化を許可",
+        ),
+    ),
+    mutates=True,
+    required_mode=Mode.OBJECT,
+)
+
 # ---- 逃げ道（既定 off / path 型確認用 / 実装は M11）----
 command(
     "exec-python",
