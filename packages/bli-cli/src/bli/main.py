@@ -438,15 +438,21 @@ def apply_transform_cmd(
 def duplicate(
     targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
     linked: bool = typer.Option(False, "--linked", help="データを共有する（リンク複製）"),
-    count: int = typer.Option(1, "--count", help="複製数（1以上）"),
+    count: int = typer.Option(1, "--count", help="複製数（1〜1000）"),
     offset: str | None = typer.Option(None, "--offset", help="複製ごとの world オフセット x,y,z"),
     request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
     """オブジェクトを複製する（count 回・world offset 累積）。"""
-    if count < 1:
-        _emit_error(json_out, ErrorCode.INVALID_PARAMS, f"--count は 1 以上です: {count}")
+    from bli_core import runtime
+
+    if not 1 <= count <= runtime.MAX_DUPLICATE_COUNT:
+        _emit_error(
+            json_out,
+            ErrorCode.INVALID_PARAMS,
+            f"--count は 1〜{runtime.MAX_DUPLICATE_COUNT} です: {count}",
+        )
         raise typer.Exit(int(ExitCode.INPUT))
     params: dict[str, Any] = {"targets": targets, "count": count}
     if linked:

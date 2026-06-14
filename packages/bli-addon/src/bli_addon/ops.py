@@ -257,18 +257,18 @@ def _apply_transform(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]
     return _ok("apply-transform", data, fingerprint=gateway.object_fingerprint(obj))
 
 
-_MAX_DUPLICATE_COUNT = 1000
-
-
 def _duplicate(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     cmd = _command("duplicate")
     _validate(cmd, params)
     # count は 1..上限。暴走（巨大 count で Blender を固める）を bpy 到達前に弾く。
+    # 上限は bli-core の単一定数（CLI と共有）。
+    from bli_core import runtime
+
     count = int(params.get("count", 1))
     _require_input(
-        1 <= count <= _MAX_DUPLICATE_COUNT,
-        symptom=f"count は 1〜{_MAX_DUPLICATE_COUNT} の範囲で指定してください（指定: {count}）",
-        remediation=f"--count を 1〜{_MAX_DUPLICATE_COUNT} にしてください",
+        1 <= count <= runtime.MAX_DUPLICATE_COUNT,
+        symptom=f"count は 1〜{runtime.MAX_DUPLICATE_COUNT} の範囲で指定してください（指定: {count}）",
+        remediation=f"--count を 1〜{runtime.MAX_DUPLICATE_COUNT} にしてください",
     )
     from . import gateway  # lazy: bpy 依存
 

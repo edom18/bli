@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from typing import Any
 
 from .commands import Command, Param
@@ -64,14 +65,20 @@ def _check_type(param: Param, value: Any) -> bool:
     if t is ParamType.INT:
         return isinstance(value, int) and not isinstance(value, bool)
     if t is ParamType.FLOAT:
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
+        # nan/inf は行列を壊すため拒否する（サーバが信頼境界。CLI 非経由の RPC も保護）。
+        return (
+            isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+        )
     if t is ParamType.BOOL:
         return isinstance(value, bool)
     if t is ParamType.VEC3:
         return (
             isinstance(value, (list, tuple))
             and len(value) == 3
-            and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value)
+            and all(
+                isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+                for v in value
+            )
         )
     return False
 

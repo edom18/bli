@@ -121,7 +121,7 @@ command(
     params=(
         p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
         p("linked", ParamType.BOOL, default=False, help="データを共有する（リンク複製）"),
-        p("count", ParamType.INT, default=1, help="複製数（1以上）"),
+        p("count", ParamType.INT, default=1, help="複製数（1〜1000）"),
         p("offset", ParamType.VEC3, help="複製ごとの world オフセット x,y,z（累積）"),
     ),
     mutates=True,

@@ -180,3 +180,28 @@ def test_delete_unknown_param_invalid_params():
     with pytest.raises(JsonRpcError) as ei:
         ops.dispatch("delete", {"targets": "Cube", "bogus": 1}, INFO)
     assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_duplicate_linked_bad_type_invalid_params():
+    # linked は BOOL。非真偽値は型エラーで INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("duplicate", {"targets": "Cube", "linked": "yes"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_duplicate_nonfinite_offset_server_rejected():
+    # CLI 非経由でも nan/inf の offset は **サーバ側**（schema 検証）で弾く（matrix を壊さない）。
+    # bpy 到達前に INVALID_PARAMS（USER_INPUT）。
+    for bad in (float("inf"), float("nan"), float("-inf")):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("duplicate", {"targets": "Cube", "offset": [bad, 0.0, 0.0]}, INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, bad
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", bad
+
+
+def test_set_origin_nonfinite_float_server_rejected():
+    # FLOAT パラメータ（set-origin の x）の nan/inf もサーバ側で弾く（同じ防御線）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("set-origin", {"targets": "Cube", "to": "world", "x": float("inf")}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS

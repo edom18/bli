@@ -515,12 +515,20 @@ def duplicate_object(
 
     linked=False（既定）はデータ（mesh 等）も複製して独立させる。linked=True は
     obj.data を共有する（軽量だが片方の編集が両方に波及する）。offset は **world 空間**
-    のオフセットで、i 番目（0始まり）の複製を (i+1)*offset だけ累積して world 位置を移す
-    （T6.1 の location と一貫）。各複製は元 object が属する全 collection に link する。
+    のオフセットで、i 番目（0始まり）の複製を (i+1)*offset だけ累積して world 位置へ置く
+    （T6.1 の location と一貫）。
+
+    offset の基準は **元 obj の評価済み matrix_world**（複製直後の new.matrix_world は
+    depsgraph 未評価で誤値になり得るため、信頼できる単一基準を使う）。これにより親付き
+    obj の複製でも world 位置が正しく確定する。各複製は元 object が属する全 collection に
+    link する（属さない場合はシーンの既定 collection にフォールバックし、view layer から
+    見えなくなる不整合を防ぐ）。
     """
     from mathutils import Vector  # type: ignore  # lazy: bpy 依存を閉じる
 
-    collections = list(obj.users_collection)
+    collections = list(obj.users_collection) or [bpy.context.scene.collection]
+    base = obj.matrix_world.copy()  # 評価済みの信頼できる基準（親付きでも world）
+    bt = base.translation
     created: list[str] = []
     for i in range(count):
         new = obj.copy()
@@ -529,14 +537,13 @@ def duplicate_object(
         for coll in collections:
             coll.objects.link(new)
         if offset is not None:
-            mw = new.matrix_world.copy()
-            t = mw.translation
             factor = i + 1
+            mw = base.copy()
             mw.translation = Vector(
                 (
-                    t.x + offset[0] * factor,
-                    t.y + offset[1] * factor,
-                    t.z + offset[2] * factor,
+                    bt.x + offset[0] * factor,
+                    bt.y + offset[1] * factor,
+                    bt.z + offset[2] * factor,
                 )
             )
             new.matrix_world = mw
