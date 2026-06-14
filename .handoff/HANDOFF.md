@@ -1,8 +1,9 @@
 # bli (Blender CLI) — 引き継ぎ資料 (HANDOFF)
 
-最終更新: 2026-06-13 / ブランチ: `feature/m0-bootstrap`（**未コミット**）
+最終更新: 2026-06-14 / 状態: **PR #1（feature/m0-bootstrap → main）マージ済み。M0–M4 は main 上**。
 
 > 新規セッションはこの1枚を読めば再開できる。詳細は `specs/blender-cli-core/` を参照。
+> **次の作業（M5）の着手手順とタスクは `.handoff/NEXT-M5.md` を参照**（このファイルは全体史 + 規約）。
 
 ---
 
@@ -18,7 +19,7 @@
 - `data-model.md` — エンティティ（Command/プロトコル/Error/Registry/Config/Capability）
 - `contracts/` — `protocol.schema.json`・`methods.md`（RPCメソッドカタログ）
 - `plan.md` — 実装計画・ロードマップ **M0–M14**・タスク分割
-- `tasks.md` + `tasks/01..18` — M0–M2 のチケット台帳（M0,M0.5,M1,M2 は ✅）
+- `tasks.md` + `tasks/01..18` — チケット台帳（**M0–M4 は ✅**。M3/M4 セクションと PR #1 レビュー追補も tasks.md に追記済み）
 
 ## 2. 環境（このマシン）
 - OS: Windows 11 / シェル: Git Bash（Bashツール）。日本語標準出力は `PYTHONUTF8=1` を付ける。
@@ -26,8 +27,10 @@
 - Blender: **5.0.1**（Python 3.11.13・主軸）/ **4.4.3**（ベストエフォート）。
   - `C:\Program Files\Blender Foundation\Blender 5.0\blender.exe`
   - `C:\Program Files\Blender Foundation\Blender 4.4\blender.exe`
-- git: 初期化済み・`feature/m0-bootstrap` 上。**まだ1度もコミットしていない**（全ファイル untracked）。
-  - ルール: main 直接コミット禁止 / 日本語コミット + prefix（feat/fix/docs/chore…）。
+- git: **PR #1（feature/m0-bootstrap → main）マージ済み**。`origin/main` に M0–M4。
+  - **次の作業は `main` を pull してから新しい feature ブランチを切る**（例 `feature/m5-info`）。
+  - ルール: main 直接コミット禁止 / 日本語コミット + prefix（feat/fix/docs/chore…）/ PR 経由でマージ。
+  - レビューは Codex（PR コメント `@codex review`）。指摘対応→push→再依頼のループは前回 PR で実績あり。
 
 ## 3. 確定判断（D1–D14 要点）
 - D1 接続=常駐Blender(GUI)+アドオンTCPソケット ← Python/Typer製CLI
@@ -57,9 +60,10 @@
 | M2 通信層（server/auth/session/registry/shutdown/client/CLI ping） | ✅ | L3 E2E 38件 + Blender5.0実機スモークOK |
 | **M3 アドオン実行基盤**（ops/gateway/dispatcher結線・CLI 3コマンド） | ✅ | pytest 45件 + Blender5.0/4.4実機 smoke_ops OK |
 | **M4 CLI骨格 & 診断コマンド**（Pydanticラッパ/help/list-commands/request-status/--id） | ✅ | pytest 79件 + parity緑 + 実機 request-status OK |
-| M5–M14 | 未着手 | — |
+| **M5 情報取得**（list-objects / object-info bbox / scene-info の output_ref 退避） | 🔜 次 | → `.handoff/NEXT-M5.md` |
+| M6–M14 | 未着手 | — |
 
-**現在の全テスト/lint状態: `uv run pytest` = 79 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK。**
+**main の全テスト/lint状態: `uv run pytest` = 79 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK。**
 
 > PR #1 の Codex レビュー対応で M4 を追補（§6b 参照）: ①request-status のロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（settle）③発見系を implemented 済みに限定 ④サーバ/クライアントのタイムアウト整合（DISPATCH_TIMEOUT < CLIENT_READ_TIMEOUT）⑤TIMEOUT 時に request id を提示。
 
@@ -102,19 +106,24 @@
 ## 7. 再開手順（コピペ可）
 ```bash
 cd "D:/MyDesktop/PythonProjects/blender-auto-cli"
+# 1) main を最新化して新しい作業ブランチを切る（M5 例）
+git checkout main && git pull origin main
+git checkout -b feature/m5-info
+# 2) 環境と現状確認（ベースライン緑を確認してから着手）
 uv sync
-PYTHONUTF8=1 uv run pytest -q                 # 60 passed を確認
+PYTHONUTF8=1 uv run pytest -q                 # 79 passed を確認
 uv run ruff check . && uv run ruff format --check .
 PYTHONUTF8=1 uv run python scripts/check_no_raw_bpy_ops.py packages/bli-addon/src
-# 実機スモーク（ops 一式 + set-origin golden + request-status）:
+# 3) 実機スモーク（ops 一式 + set-origin golden + request-status）:
 "/c/Program Files/Blender Foundation/Blender 5.0/blender.exe" --background \
   --python packages/bli-addon/spikes/smoke_ops.py 2>&1 \
   | sed -n '/BLI_OPS_SMOKE_BEGIN/,/BLI_OPS_SMOKE_END/p'   # → OPS SMOKE OK
-# CLI ローカルコマンド（addon不要）:
+# 4) CLI ローカルコマンド（addon不要）:
 PYTHONUTF8=1 uv run bli list-commands --json
 PYTHONUTF8=1 uv run bli help --command set-origin --json
 ```
-次は **M5 以降**（plan.md §4：M5 情報取得 / M6 汎用編集 / M7 メッシュ編集は概ね並行可）。GUI 常駐での `bpy.app.timers` 実発火は L4 手動検証で別途。
+次は **M5（情報取得）**。具体的なスコープ・タスク・設計は **`.handoff/NEXT-M5.md`** を参照。
+M5/M6/M7 は概ね並行可（plan.md §4）。GUI 常駐での `bpy.app.timers` 実発火は L4 手動検証で別途。
 
 ## 8. 重要な落とし穴
 - **bli-core は純Python・依存ゼロを厳守**（アドオンにPydanticを入れない。CLI側のみPydantic可）。3.10互換を維持。
@@ -134,7 +143,9 @@ packages/{bli-core, bli-cli, bli-addon}（uv workspace）。
 ```
 
 ## 10. 後続マイルストーンの繰越事項
+- M5: scene-info の output_ref 退避（大きい結果はファイル退避 + sha256 + os.replace）。詳細は NEXT-M5.md。
+- M6: `transform`（`implemented=False` で定義済み）の実装。`exec-python` は M11。
 - M8: print3d Toolbox の実モジュールid特定（Extensions）。3MFは addon 必要 or STLフォールバック。
 - M9: import/export 各フォーマット（RESOLVERS は capability.py に確定値あり）。
+- M10: `job-status`/`job-wait`（非同期job）+ `--dry-run`。settle/RUNNING 機構は M4 で土台済み。
 - M12: Claude Code Skill 同梱（`.claude/skills/bli/`）+ `help --json` 自動生成 + `schema_hash` 同期。
-- いずれ: 初回コミット（feature/m0-bootstrap、日本語コミットメッセージ、main直接禁止）。
