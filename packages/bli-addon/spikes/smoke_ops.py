@@ -188,6 +188,15 @@ def run_calls():
     assert sel["data"]["active"] == "Cube", sel["data"]
     print("select_ok", sel["data"]["selected"], "active=", sel["data"]["active"])
 
+    # 不正な --active: エラーになり、直前の選択状態は変わらない（Codex P2: 検証→変更）
+    try:
+        call_retry("select", {"targets": "Cube", "active": "NoSuchObj"})
+        raise AssertionError("bad --active should error")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "E_PRECONDITION", e.error
+    assert bpy.data.objects["Cube"].select_get(), "選択状態が失敗時に保持されていない"
+    print("select_bad_active_ok state-preserved")
+
 
 def main():
     print("=== BLI_OPS_SMOKE_BEGIN ===")

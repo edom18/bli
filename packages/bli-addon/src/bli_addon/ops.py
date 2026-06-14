@@ -181,15 +181,34 @@ def _transform(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
 def _apply_transform(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     cmd = _command("apply-transform")
     _validate(cmd, params)
+
+    # チャンネルは「キーの有無」で判定する（明示 false と省略を区別。Codex P2）。
+    # 全キー省略 = 全チャンネル適用（利便）。明示指定があればその真偽値を尊重する。
+    # 生成クライアントが既定 false を埋めても、意図せず全適用にならないようにする。
+    keys = ("location", "rotation", "scale")
+    if not any(k in params for k in keys):
+        loc = rot = scl = True
+    else:
+        loc = bool(params.get("location", False))
+        rot = bool(params.get("rotation", False))
+        scl = bool(params.get("scale", False))
+        if not (loc or rot or scl):  # 明示的に全 false = 適用対象なし
+            raise JsonRpcError(
+                RPC_INVALID_PARAMS,
+                ErrorCode.INVALID_PARAMS,
+                make_error(
+                    ErrorCode.INVALID_PARAMS,
+                    category=ErrorCategory.USER_INPUT,
+                    retryable=False,
+                    symptom="apply-transform に適用するチャンネルがありません（全 false）",
+                    remediation="--location/--rotation/--scale のいずれかを指定（全省略で全適用）",
+                ),
+            )
+
     from . import gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
     obj = gateway.require_single(str(params["targets"]))
-    loc = bool(params.get("location", False))
-    rot = bool(params.get("rotation", False))
-    scl = bool(params.get("scale", False))
-    if not (loc or rot or scl):  # 全省略時は全チャンネル適用
-        loc = rot = scl = True
     data = gateway.apply_transform(
         obj, location=loc, rotation=rot, scale=scl, message="apply-transform"
     )

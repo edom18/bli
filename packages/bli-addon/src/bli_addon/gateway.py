@@ -357,12 +357,7 @@ def select_objects(
             category=ErrorCategory.USER_INPUT,
         )
 
-    view_layer = bpy.context.view_layer
-    for o in view_layer.objects:
-        o.select_set(False)
-    for o in matched:
-        o.select_set(True)
-
+    # active は選択状態を変更する前に解決・検証する（失敗時に状態を汚さない。Codex P2）。
     if active is not None:
         active_obj = next((o for o in matched if o.name == active), None)
         if active_obj is None:
@@ -373,6 +368,12 @@ def select_objects(
             )
     else:
         active_obj = matched[0]
+
+    view_layer = bpy.context.view_layer
+    for o in view_layer.objects:
+        o.select_set(False)
+    for o in matched:
+        o.select_set(True)
     view_layer.objects.active = active_obj
 
     if message:

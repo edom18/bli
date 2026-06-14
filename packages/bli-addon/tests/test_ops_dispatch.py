@@ -107,3 +107,17 @@ def test_apply_transform_unknown_param_invalid_params():
     with pytest.raises(JsonRpcError) as ei:
         ops.dispatch("apply-transform", {"targets": "Cube", "bogus": 1}, INFO)
     assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_apply_transform_all_false_invalid_params():
+    # 明示的に全 false（生成クライアントの既定埋め）は「適用なし」として弾く（Codex P2）。
+    # キー有無で判定するため bpy 到達前に INVALID_PARAMS。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "apply-transform",
+            {"targets": "Cube", "location": False, "rotation": False, "scale": False},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
