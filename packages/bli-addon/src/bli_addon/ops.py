@@ -342,21 +342,10 @@ def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
 
     # assign は既存マテリアルを **状態変更（単一ユーザ化）の前に** 解決する。見つからない名で
     # 先に mesh を単一ユーザ化してから失敗すると、エラー後にシーン状態が変わる（Codex P2）。
+    # 未発見エラーは gateway.require_material に集約（require_single と同じ流儀。設計レビュー P2）。
     mat = None
     if action == "assign":  # 既存マテリアルのみ。無ければ E_TARGET_NOT_FOUND＝create と責務分離
-        mat = gateway.find_material(str(name))
-        if mat is None:
-            raise JsonRpcError(
-                RPC_BUSINESS_ERROR,
-                ErrorCode.E_TARGET_NOT_FOUND,
-                make_error(
-                    ErrorCode.E_TARGET_NOT_FOUND,
-                    category=ErrorCategory.USER_INPUT,
-                    retryable=False,
-                    symptom=f"マテリアルが見つかりません: {name}",
-                    remediation="既存のマテリアル名を指定するか create で作成してください",
-                ),
-            )
+        mat = gateway.require_material(str(name))
 
     # 共有 mesh ガード（Codex P2-A）。ただし書き込み先が OBJECT リンク slot のときは object
     # 限定の書き込みで共有 mesh を触らないため掛けない（false-positive な E_PRECONDITION や

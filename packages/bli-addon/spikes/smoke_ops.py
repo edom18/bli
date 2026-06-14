@@ -429,8 +429,8 @@ def run_calls():
         assert e.error.get("data", {}).get("category") == "USER_INPUT", e.error
     print("delete_missing_guard_ok")
 
-    # 16) material（M6 T6.3 / Codex P2 対応）: 共有 mesh ガード + slot.link 尊重 + Base Color 往復。
-    # Cube は step 13 の linked 複製（Cube.003）と mesh を共有 → assign/create は
+    # 16) material（M6 T6.3 / Codex + 設計レビュー対応）: 共有 mesh ガード + slot.link 尊重 + Base Color。
+    # Cube は step 13 の linked 複製（lname）と mesh を共有 → DATA slot への assign/create は
     # --make-single-user 無しで E_PRECONDITION（兄弟への波及を防ぐ。Codex P2-A）。
     red = [0.8, 0.1, 0.2, 1.0]
     try:
@@ -441,12 +441,24 @@ def run_calls():
     except client.RpcRemoteError as e:
         assert e.error.get("message") == "E_PRECONDITION", e.error
         assert e.error.get("data", {}).get("category") == "PRECONDITION", e.error
+    # ガードは create_material より前に走るため、失敗時にマテリアルを生成しない（orphan なし）。
+    assert bpy.data.materials.get("SmRed") is None, "failed create should not leak a material"
     print("material_shared_guard_ok")
+
+    # 既存マテリアルの assign も共有 mesh の DATA slot 書き込みは --make-single-user 必須。
+    cl, _ = call_retry("material", {"action": "list", "targets": "Cube"})
+    existing_mat = cl["data"]["materials"][0]["name"]  # 既定 Cube の "Material"（DATA slot）
+    try:
+        call_retry("material", {"action": "assign", "targets": "Cube", "name": existing_mat})
+        raise AssertionError("assign on shared DATA slot should require make_single_user")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "E_PRECONDITION", e.error
+    print("material_assign_shared_guard_ok", existing_mat)
 
     # 存在しないマテリアルの assign + --make-single-user: 解決失敗時に mesh を分離しない
     # （Codex P2: side-effect before failure 回避。失敗後も mesh_users は不変）。
     cu, _ = call_retry("object-info", {"targets": "Cube"})
-    assert cu["data"]["mesh_users"] == 2, cu["data"]  # Cube.003 と共有
+    assert cu["data"]["mesh_users"] == 2, cu["data"]  # linked 兄弟と共有
     try:
         call_retry(
             "material",
@@ -464,7 +476,7 @@ def run_calls():
     assert cu2["data"]["mesh_users"] == 2, cu2["data"]  # 失敗時に単一ユーザ化していない
     print("material_assign_missing_no_sideeffect_ok")
 
-    sib, _ = call_retry("material", {"action": "list", "targets": "Cube.003"})
+    sib, _ = call_retry("material", {"action": "list", "targets": lname})
     sib_before = [m["name"] for m in sib["data"]["materials"]]  # 波及していないこと確認用
 
     # --make-single-user 付きで create-and-assign → Cube を単一ユーザ化して付与。
@@ -493,8 +505,14 @@ def run_calls():
     assert approx(slot_entry["base_color"], red), slot_entry
     print("material_create_ok", created_mat, "slot", mc["data"]["slot"], slot_entry["base_color"])
 
-    # 単一ユーザ化したので linked 兄弟 Cube.003 は波及していない（P2-A の核心）。
-    sib2, _ = call_retry("material", {"action": "list", "targets": "Cube.003"})
+    # fingerprint は同一状態で決定的（drift 検証の前提）。同じ list を2回引いて一致を確認。
+    fa, _ = call_retry("material", {"action": "list", "targets": "Cube"})
+    fb, _ = call_retry("material", {"action": "list", "targets": "Cube"})
+    assert fa["fingerprint"] == fb["fingerprint"], (fa["fingerprint"], fb["fingerprint"])
+    print("material_fingerprint_deterministic_ok", fa["fingerprint"])
+
+    # 単一ユーザ化したので linked 兄弟（lname）は波及していない（P2-A の核心）。
+    sib2, _ = call_retry("material", {"action": "list", "targets": lname})
     sib_after = [m["name"] for m in sib2["data"]["materials"]]
     assert sib_after == sib_before, (sib_before, sib_after)
     assert created_mat not in sib_after, sib_after
