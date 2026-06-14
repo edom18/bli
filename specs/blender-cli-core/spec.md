@@ -127,7 +127,7 @@ bli <command> [--targets <name|regex>] [options] [--json] [--id <uuid>] [--dry-r
 | `bli apply-transform --targets <name> [--location] [--rotation] [--scale]` | トランスフォーム適用 |
 | `bli duplicate --targets <name> [--linked] [--count N] [--offset x,y,z]` | 複製（`bpy.data`直接） |
 | `bli modifier add\|remove\|list\|apply --targets <name> --type <T> [params]` | モディファイア操作 |
-| `bli material assign\|create\|list --targets <name> [--name] [--color r,g,b,a]` | マテリアル操作 |
+| `bli material --action assign\|create\|list [--targets <name>] [--name] [--color r,g,b,a] [--make-single-user]` | マテリアル操作（create=作成+割当 / list は slot/name/link/base_color / 共有mesh DATA slotは--make-single-user） |
 | `bli delete --targets <name>` | 削除（既定でバックアップ／確認セマンティクス） |
 
 #### 主要モディファイア（`modifier --type`）

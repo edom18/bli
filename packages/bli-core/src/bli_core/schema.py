@@ -22,6 +22,7 @@ _JSON_TYPE = {
     ParamType.FLOAT: {"type": "number"},
     ParamType.BOOL: {"type": "boolean"},
     ParamType.VEC3: {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3},
+    ParamType.VEC4: {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
 }
 
 
@@ -71,10 +72,11 @@ def _check_type(param: Param, value: Any) -> bool:
         )
     if t is ParamType.BOOL:
         return isinstance(value, bool)
-    if t is ParamType.VEC3:
+    if t in (ParamType.VEC3, ParamType.VEC4):
+        n = 3 if t is ParamType.VEC3 else 4
         return (
             isinstance(value, (list, tuple))
-            and len(value) == 3
+            and len(value) == n
             and all(
                 isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
                 for v in value

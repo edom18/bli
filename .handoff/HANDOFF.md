@@ -1,6 +1,6 @@
 # bli (Blender CLI) — 引き継ぎ資料 (HANDOFF)
 
-最終更新: 2026-06-14 / 状態: **PR #1（M0–M4）・PR #2（M5）・PR #3（M6 T6.1）マージ済み。次は M6 T6.2（duplicate/delete）を `feature/m6-dup-delete` で実装**。
+最終更新: 2026-06-14 / 状態: **PR #1（M0–M4）・PR #2（M5）・PR #3（M6 T6.1）・PR #4（M6 T6.2 duplicate/delete）マージ済み。次は M6 T6.3（material）を `feature/m6-material` で実装**。
 
 > 新規セッションはこの1枚を読めば再開できる。詳細は `specs/blender-cli-core/` を参照。
 > **次の作業（M6）の着手手順とタスクは `.handoff/NEXT-M6.md` を参照**（このファイルは全体史 + 規約）。
@@ -61,10 +61,10 @@
 | **M3 アドオン実行基盤**（ops/gateway/dispatcher結線・CLI 3コマンド） | ✅ | pytest 45件 + Blender5.0/4.4実機 smoke_ops OK |
 | **M4 CLI骨格 & 診断コマンド**（Pydanticラッパ/help/list-commands/request-status/--id） | ✅ | pytest 79件 + parity緑 + 実機 request-status OK |
 | **M5 情報取得**（list-objects / object-info bbox / scene-info の output_ref 退避） | ✅ main（PR #2） | pytest 95 + 5.0/4.4 実機 smoke OK |
-| **M6 汎用編集**（T6.1 select/transform/apply-transform ✅ main。T6.2–6.4 未） | 🔨 進行中（次=T6.2 / feature/m6-dup-delete） | pytest 107 + 5.0/4.4 実機 smoke OK |
+| **M6 汎用編集**（T6.1 select/transform/apply-transform ✅・T6.2 duplicate/delete ✅ main。T6.3–6.4 未） | 🔨 進行中（次=T6.3 material / feature/m6-material） | pytest 121 + 5.0/4.4 実機 smoke OK |
 | M7–M14 | 未着手 | — |
 
-**main の全テスト/lint状態（M6 T6.1 まで・PR #3 マージ済み）: `uv run pytest` = 107 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright は既存1件のみ（`bli/main.py` の narrowing・実行時安全）。**
+**main の全テスト/lint状態（M6 T6.2 まで・PR #4 マージ済み）: `uv run pytest` = 121 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright は既存1件のみ（`bli/main.py` の narrowing・実行時安全）。**
 
 > PR #1 の Codex レビュー対応で M4 を追補（§6b 参照）: ①request-status のロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（settle）③発見系を implemented 済みに限定 ④サーバ/クライアントのタイムアウト整合（DISPATCH_TIMEOUT < CLIENT_READ_TIMEOUT）⑤TIMEOUT 時に request id を提示。
 
@@ -126,14 +126,29 @@ M6 は7コマンドと大きいため **サブPRに分割**して進める（ユ
 ### T6.1 レビュー対応（Codex 10件 + セルフレビュー 6件）
 PR #3 で **Codex P2×9 + P1×1** を解消（bbox 非ジオメトリ None / apply false-vs-omit / select 検証順 / select fingerprint / apply schema default / select view-layer / 不正regex→USER_INPUT / 非Euler回転 / `--targets` / location world 化 / **P1 apply の selected_editable_objects 限定**）。その後 Codex が利用上限に達したため、**サブエージェント2体（設計レビュー + 敵対的 correctness 監査）でセルフレビュー**し追加6件を解消（**P1 apply の共有mesh 黙示単一化を廃止し set-origin と同じ `--make-single-user` ガードへ統一** / 複合 transform の並進ずれ / 非mesh apply のエラー品質 / nan-inf 弾き / transform 全省略弾き / select 並び決定化）。**この過程で確立した再利用パターンは T6.2–6.4 でも踏襲すること**（下記 §6e）。
 
-### T6.2–6.4 未着手 → **次の作業（`.handoff/NEXT-M6.md` を参照）**
-- T6.2 `duplicate`（copy()+data.copy()+link）/ `delete`（backup/確認）→ **次・ブランチ `feature/m6-dup-delete` 作成済み**
-- T6.3 `material`（assign/create/list）
+### T6.2 完了 ✅ main マージ済み（PR #4）— duplicate / delete
+- **判断（キックオフ確定）**: ①delete は **即実行 + backup 常時返却**（`--confirm` なし＝他コマンドと対称・ユーザー選択）②backup 実体は削除前 `object_summary` のみ（`.blend` 退避は M9 繰越）③対象は単一（`require_single`）④duplicate offset は world 空間・`(i+1)*offset` 累積。
+- `definitions.py`: `duplicate`（targets/linked[BOOL default]/count[INT default=1・1〜1000]/offset[VEC3]）・`delete`（targets のみ）を追加。`methods.md` の `delete --backup?` を実装に合わせ更新（summary 常時返却・.blend は M9）。
+- `gateway.py`: `duplicate_object`（`obj.copy()`＋非linkedは`data.copy()`／全 collection に link・0件は `scene.collection` フォールバック／offset 基準は **元 obj の評価済み matrix_world**＝親付き複製でも world 正確）・`delete_object`（`bpy.data.objects.remove(do_unlink=True)`）・`names_fingerprint`。**生 bpy.ops 不要・bpy.data 直接**。
+- `ops.py`: `_duplicate`（count を `runtime.MAX_DUPLICATE_COUNT` で範囲検証）・`_delete`（**削除前に** name/summary/fingerprint を取得→remove）。共有 mesh は delete では object のみ除去のためガード不要。
+- `runtime.py`: `MAX_DUPLICATE_COUNT=1000`（CLI/ops 共有）。`bli/main.py`: `duplicate`（`--offset`=`_parse_vec3`・上限を送信前に弾く）・`delete` サブコマンド。
+- **テスト/検証**: pytest=121。smoke に duplicate（count=2 offset 累積・linked `mesh_users 1→2`・親付き Child world offset）・delete（backup・名前集合厳密確認・存在しない名）の golden。5.0.1/4.4.3 実機 OPS SMOKE OK（Cube fp 不変）。
+
+### T6.2 レビュー対応（サブエージェント・セルフレビュー 2体）
+Codex 上限の代替として **設計レビュー（software-design-reviewer）+ 敵対的 correctness 監査（general-purpose）** を並列実行し、収束指摘を `ccdfa75` で解消。
+- **P1（両者一致）**: VEC3/FLOAT の `nan/inf` をサーバ側で検証していなかった（`json.loads` が `Infinity/NaN` を通し `_check_type` も有限性を見ない＝CLI 非経由 RPC で `matrix_world` 破壊可能）→ **`schema._check_type` に `math.isfinite` を追加**（SSOT を単一防御線化・transform/set-origin も一括保護）。
+- **P2**: 親付き複製の offset 基準を評価済み matrix_world へ / 0-collection フォールバック / count 上限を runtime 集約し CLI も送信前に弾く / methods.md ドリフト解消 / smoke に linked・親付きカバレッジ追加。
+
+### T6.3–6.4 未着手 → **次の作業（`.handoff/NEXT-M6.md` を参照）**
+- T6.3 `material`（assign/create/list・color は **VEC4=RGBA** で `ParamType.VEC4` 拡張が必要・material ノード API は M0.5 的な実機検証要）→ **次・ブランチ `feature/m6-material` 作成済み**
 - T6.4 `modifier`（add/remove/list/apply: MIRROR/SUBSURF/SOLIDIFY/DECIMATE/BOOLEAN）
 
 ## 6e. M6 で確立した再利用パターン（T6.2 以降で踏襲）
 - **破壊的 mesh 操作は共有ガード**: `ops._guard_shared_mesh(gateway, obj, params)` を呼ぶ（delete も対象になり得る）。`--make-single-user` 無しで users>=2 は `E_PRECONDITION`。
 - **bpy 到達前の入力検証**: `ops._require_input(cond, symptom, remediation)` で USER_INPUT を投げる（pytest が bpy 無しで到達できる＝テスト容易）。param/前提チェックは `from . import gateway` より前に。
+- **数値の有限性はサーバ側（SSOT）で弾く**: VEC3/VEC4/FLOAT の `nan/inf` は `schema._check_type`（`math.isfinite`）で拒否済み。CLI の `_parse_vec3` だけに頼らない（`json.loads` が `Infinity/NaN` を通すため CLI 非経由 RPC を防御）。新しい数値 ParamType を足す時も `_check_type` に有限性を入れる。
+- **暴走防止の上限は bli-core 定数に集約**: `runtime.MAX_DUPLICATE_COUNT` のように CLI/ops 双方が同じ定数を参照（マジックナンバー散在・片側欠落を防ぐ）。CLI でも「送信前に弾く」を貫く。
+- **複製/破壊系の matrix 基準は評価済み元 obj**: 新規 `copy()` 直後の `matrix_world` は depsgraph 未評価で誤値になり得る。world 計算は **元 obj の評価済み matrix_world** を基準にする（親付きでも正確）。collection 解決は 0 件時に `scene.collection` フォールバック。
 - **targets は `--targets` オプション**（positional 不可）。複数解決は `gateway.resolve_targets`（完全名>regex・**不正regex は USER_INPUT** 済み・view layer 限定が要るなら名前で絞る）。単一は `require_single`。
 - **presence-sensitive な BOOL フラグは schema default を持たせない**（`help --json` の default:false で生成クライアントが誤送信するため）。通常の許可フラグ（make_single_user 等）は default=False で可。
 - **world 座標は matrix_world 経由**・回転は `rotation_mode` を尊重・出力（selected/一覧等）は決定的順序（sorted）に。
@@ -159,7 +174,8 @@ PYTHONUTF8=1 uv run python scripts/check_no_raw_bpy_ops.py packages/bli-addon/sr
 PYTHONUTF8=1 uv run bli list-commands --json
 PYTHONUTF8=1 uv run bli help --command set-origin --json
 ```
-次は **M5（情報取得）**。具体的なスコープ・タスク・設計は **`.handoff/NEXT-M5.md`** を参照。
+次は **M6 T6.3（material）**。具体的なスコープ・タスク・設計は **`.handoff/NEXT-M6.md`** を参照。
+（ベースライン緑は `uv run pytest` = 121 passed。ブランチ `feature/m6-material` 作成済み。）
 M5/M6/M7 は概ね並行可（plan.md §4）。GUI 常駐での `bpy.app.timers` 実発火は L4 手動検証で別途。
 
 ## 8. 重要な落とし穴
@@ -181,7 +197,8 @@ packages/{bli-core, bli-cli, bli-addon}（uv workspace）。
 
 ## 10. 後続マイルストーンの繰越事項
 - M5: scene-info の output_ref 退避（大きい結果はファイル退避 + sha256 + os.replace）。詳細は NEXT-M5.md。
-- M6: `transform`（`implemented=False` で定義済み）の実装。`exec-python` は M11。
+- M6: T6.1（select/transform/apply-transform）✅ / T6.2（duplicate/delete）✅ / T6.3（material）✅。残り T6.4 modifier。`exec-python` は M11。
+- M6 編集系の**孤児データブロック**（delete の sole-user mesh / material create-and-assign の置換で外れた material）の purge は後続（save/cleanup 系）で対応。即時 GC しない bpy 仕様どおりで設計上は意図的（レビューで P2 記録）。
 - M8: print3d Toolbox の実モジュールid特定（Extensions）。3MFは addon 必要 or STLフォールバック。
 - M9: import/export 各フォーマット（RESOLVERS は capability.py に確定値あり）。
 - M10: `job-status`/`job-wait`（非同期job）+ `--dry-run`。settle/RUNNING 機構は M4 で土台済み。

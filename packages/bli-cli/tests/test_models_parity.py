@@ -23,6 +23,17 @@ def _node_facts(node: dict[str, Any]) -> tuple[str | None, tuple | None]:
         node = subs[0] if subs else {}
     if "enum" in node:  # enum は型表現差を無視して列挙値で比較
         return ("enum", tuple(node["enum"]))
+    if node.get("type") == "array":
+        # VECn は core が items+min/maxItems、Pydantic(tuple) が prefixItems で構造が違う。
+        # 要素型と長さ（固定）まで正規化して比較し、SSOT ドリフトの取りこぼしを防ぐ。
+        if "prefixItems" in node:
+            elems = node["prefixItems"]
+            n = len(elems)
+            elem_type = elems[0].get("type") if elems else None
+            return ("array", (elem_type, n, n))
+        items = node.get("items")
+        elem_type = items.get("type") if isinstance(items, dict) else None
+        return ("array", (elem_type, node.get("minItems"), node.get("maxItems")))
     return (node.get("type"), None)
 
 

@@ -303,6 +303,72 @@ def _delete(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     return _ok("delete", {"deleted": name, "backup": backup}, fingerprint=fp)
 
 
+def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("material")
+    _validate(cmd, params)
+    action = str(params["action"])
+    targets = params.get("targets")
+    name = params.get("name")
+    color = params.get("color")
+
+    # 条件付き必須を bpy 到達前に検証する（schema は action 非依存で targets/name 任意）。
+    _require_input(
+        targets is not None,
+        symptom="対象(--targets)が必要です",
+        remediation="--targets を指定してください",
+    )
+    if action in ("assign", "create"):
+        _require_input(
+            name is not None,
+            symptom=f"{action} には --name が必要です",
+            remediation="--name を指定してください",
+        )
+    # color は create 専用（assign/list で渡されたら silent ignore せず弾く）。
+    _require_input(
+        action == "create" or color is None,
+        symptom="--color は create のときのみ有効です",
+        remediation="create で使うか --color を外してください",
+    )
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(targets))
+    gateway.require_material_support(obj)
+
+    if action == "list":
+        data = {"name": obj.name, "action": "list", "materials": gateway.list_object_materials(obj)}
+        return _ok("material", data, fingerprint=gateway.material_fingerprint(obj))
+
+    # assign は既存マテリアルを **状態変更（単一ユーザ化）の前に** 解決する。見つからない名で
+    # 先に mesh を単一ユーザ化してから失敗すると、エラー後にシーン状態が変わる（Codex P2）。
+    # 未発見エラーは gateway.require_material に集約（require_single と同じ流儀。設計レビュー P2）。
+    mat = None
+    if action == "assign":  # 既存マテリアルのみ。無ければ E_TARGET_NOT_FOUND＝create と責務分離
+        mat = gateway.require_material(str(name))
+
+    # 共有 mesh ガード（Codex P2-A）。ただし書き込み先が OBJECT リンク slot のときは object
+    # 限定の書き込みで共有 mesh を触らないため掛けない（false-positive な E_PRECONDITION や
+    # --make-single-user による不要な分離を避ける。Codex P2）。DATA slot 書き込み・空スロット
+    # append のみガード対象。マテリアル解決（上）を通過した後に実行＝失敗時に mesh を分離しない。
+    if gateway.material_write_touches_mesh_data(obj):
+        _guard_shared_mesh(gateway, obj, params)
+
+    if action == "create":
+        mat = gateway.create_material(str(name), list(color) if color is not None else None)
+
+    slot = gateway.assign_material(obj, mat)
+    gateway.push_undo(f"material {action}")
+    data = {
+        "name": obj.name,
+        "action": action,
+        "material": mat.name,
+        "slot": slot,
+        "materials": gateway.list_object_materials(obj),
+    }
+    return _ok("material", data, fingerprint=gateway.material_fingerprint(obj))
+
+
 def _set_origin(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     cmd = _command("set-origin")
     _validate(cmd, params)
@@ -346,6 +412,7 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "apply-transform": _apply_transform,
     "duplicate": _duplicate,
     "delete": _delete,
+    "material": _material,
     "set-origin": _set_origin,
 }
 

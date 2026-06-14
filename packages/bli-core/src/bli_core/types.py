@@ -12,6 +12,7 @@ class ParamType(str, Enum):
     BOOL = "bool"
     ENUM = "enum"
     VEC3 = "vec3"
+    VEC4 = "vec4"
     PATH = "path"
 
 
