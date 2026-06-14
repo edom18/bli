@@ -340,13 +340,10 @@ def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         data = {"name": obj.name, "action": "list", "materials": gateway.list_object_materials(obj)}
         return _ok("material", data, fingerprint=gateway.material_fingerprint(obj))
 
-    # assign/create は DATA slot を書き換えるため、共有 mesh は set-origin/apply-transform と
-    # 同様に単一ユーザ化を要求する（--make-single-user 無しは E_PRECONDITION。Codex P2-A）。
-    _guard_shared_mesh(gateway, obj, params)
-
-    if action == "create":
-        mat = gateway.create_material(str(name), list(color) if color is not None else None)
-    else:  # assign（既存マテリアルのみ。無ければ E_TARGET_NOT_FOUND＝create と責務分離）
+    # assign は既存マテリアルを **状態変更（単一ユーザ化）の前に** 解決する。見つからない名で
+    # 先に mesh を単一ユーザ化してから失敗すると、エラー後にシーン状態が変わる（Codex P2）。
+    mat = None
+    if action == "assign":  # 既存マテリアルのみ。無ければ E_TARGET_NOT_FOUND＝create と責務分離
         mat = gateway.find_material(str(name))
         if mat is None:
             raise JsonRpcError(
@@ -360,6 +357,14 @@ def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
                     remediation="既存のマテリアル名を指定するか create で作成してください",
                 ),
             )
+
+    # assign/create は DATA slot を書き換えるため、共有 mesh は set-origin/apply-transform と
+    # 同様に単一ユーザ化を要求する（--make-single-user 無しは E_PRECONDITION。Codex P2-A）。
+    # マテリアル解決（上）を通過した後に実行する＝失敗時に mesh を分離しない。
+    _guard_shared_mesh(gateway, obj, params)
+
+    if action == "create":
+        mat = gateway.create_material(str(name), list(color) if color is not None else None)
 
     slot = gateway.assign_material(obj, mat)
     gateway.push_undo(f"material {action}")

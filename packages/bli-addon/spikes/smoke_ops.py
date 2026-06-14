@@ -416,6 +416,27 @@ def run_calls():
         assert e.error.get("data", {}).get("category") == "PRECONDITION", e.error
     print("material_shared_guard_ok")
 
+    # 存在しないマテリアルの assign + --make-single-user: 解決失敗時に mesh を分離しない
+    # （Codex P2: side-effect before failure 回避。失敗後も mesh_users は不変）。
+    cu, _ = call_retry("object-info", {"targets": "Cube"})
+    assert cu["data"]["mesh_users"] == 2, cu["data"]  # Cube.003 と共有
+    try:
+        call_retry(
+            "material",
+            {
+                "action": "assign",
+                "targets": "Cube",
+                "name": "NoSuchMatXYZ",
+                "make_single_user": True,
+            },
+        )
+        raise AssertionError("assign of missing material should error")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "E_TARGET_NOT_FOUND", e.error
+    cu2, _ = call_retry("object-info", {"targets": "Cube"})
+    assert cu2["data"]["mesh_users"] == 2, cu2["data"]  # 失敗時に単一ユーザ化していない
+    print("material_assign_missing_no_sideeffect_ok")
+
     sib, _ = call_retry("material", {"action": "list", "targets": "Cube.003"})
     sib_before = [m["name"] for m in sib["data"]["materials"]]  # 波及していないこと確認用
 
