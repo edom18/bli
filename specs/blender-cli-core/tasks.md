@@ -56,3 +56,4 @@
 - M3 完了（2026-06-13）。pytest **45件** pass + ruff/format/AST guard 緑。Blender **5.0.1 / 4.4.3** 両実機で smoke_ops OK（fingerprint 一致 = 決定性確認）。
 - M4 完了（2026-06-13）。pytest **60件** pass + ruff/format/AST guard 緑。Pydantic↔bli-core schema parity 緑。Blender 5.0.1 実機で request-status 後追い回収 OK（DONE / unknown=False）。
 - M4 追補（PR #1 Codex レビュー対応, 2026-06-13）。pytest **70件** pass。①request-status のセッションロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（Dispatcher.submit settle + サーバ TIMEOUT/exit2、registry は RUNNING 維持）③発見系を Command.implemented でフィルタ（transform/exec-python は未実装扱い）。
+- M4 追補2（PR #1 Codex レビュー対応, 2026-06-14）。pytest **73件** pass。④サーバ/クライアントのタイムアウト整合（runtime に DISPATCH_TIMEOUT<CLIENT_READ_TIMEOUT を追加し、サーバが先に TIMEOUT を返す）⑤TIMEOUT 時に CLI が request id を生成・提示（--id 省略でも request-status で後追い可能）。
