@@ -269,6 +269,15 @@ def run_calls():
     assert approx(tcd["data"]["location"], [2.0, 0.0, 0.0]), tcd["data"]
     print("transform_world_location_ok set/delta=", tc["data"]["location"], tcd["data"]["location"])
 
+    # apply-transform は現在の選択でなく --targets だけに作用する（Codex P1）。
+    # 別オブジェクト(Parent)を選択状態にしてから Cube に apply-transform する。
+    call_retry("select", {"targets": "Parent"})
+    call_retry("transform", {"targets": "Cube", "scale": [3.0, 3.0, 3.0], "mode": "set"})
+    apc, _ = call_retry("apply-transform", {"targets": "Cube", "scale": True})
+    assert approx(apc["data"]["scale"], [1.0, 1.0, 1.0]), apc["data"]
+    assert apc["data"]["name"] == "Cube", apc["data"]
+    print("apply_transform_targets_only_ok scale=", apc["data"]["scale"])
+
 
 def main():
     print("=== BLI_OPS_SMOKE_BEGIN ===")

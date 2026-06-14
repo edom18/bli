@@ -37,6 +37,10 @@ def _override_for(obj: Any, extra: dict[str, Any] | None) -> dict[str, Any]:
         ov["active_object"] = obj
         ov["object"] = obj
         ov["selected_objects"] = [obj]
+        # transform_apply 等は selected_editable_objects を反復する。現在の選択が
+        # --targets と異なる場合に無関係なオブジェクトを巻き込まないよう、対象だけに絞る
+        # （Codex P1）。読み取り専用の派生コンテキストだが temp_override で上書き可能。
+        ov["selected_editable_objects"] = [obj]
     if extra:
         ov.update(extra)
     return ov
