@@ -56,9 +56,12 @@
 | M1 コア bli-core（commands/schema/errors/protocol/runtime/types） | ✅ | L1テスト |
 | M2 通信層（server/auth/session/registry/shutdown/client/CLI ping） | ✅ | L3 E2E 38件 + Blender5.0実機スモークOK |
 | **M3 アドオン実行基盤**（ops/gateway/dispatcher結線・CLI 3コマンド） | ✅ | pytest 45件 + Blender5.0/4.4実機 smoke_ops OK |
-| M4–M14 | 未着手 | — |
+| **M4 CLI骨格 & 診断コマンド**（Pydanticラッパ/help/list-commands/request-status/--id） | ✅ | pytest 79件 + parity緑 + 実機 request-status OK |
+| M5–M14 | 未着手 | — |
 
-**現在の全テスト/lint状態: `uv run pytest` = 45 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK。**
+**現在の全テスト/lint状態: `uv run pytest` = 79 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK。**
+
+> PR #1 の Codex レビュー対応で M4 を追補（§6b 参照）: ①request-status のロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（settle）③発見系を implemented 済みに限定 ④サーバ/クライアントのタイムアウト整合（DISPATCH_TIMEOUT < CLIENT_READ_TIMEOUT）⑤TIMEOUT 時に request id を提示。
 
 ## 6. M3 完了（アドオン実行基盤）✅
 ### 実装済みファイル
@@ -79,19 +82,39 @@
 - サーバ側でも `bli_core.schema.validate_from_dict` で params 検証（INVALID_PARAMS）。**検証は bpy import より前**＝不正入力は bpy 無しでも弾ける（テスト容易）。
 - **golden 確認**: world(1,0,0)→geometry median の往復で原点が (1,0,0)→(0,0,0)、寸法は不変（見た目固定）。5.0/4.4 で fingerprint 一致。
 
+## 6b. M4 完了（CLI骨格 & 診断コマンド）✅
+- `bli/models.py`（新規）— bli-core Command 定義から **Pydanticモデルを動的生成**（`validate_params`/`model_for`）。CLI 送信前のローカル検証に使用。bli-core は純Python のまま（Pydantic は CLI 側のみ）。
+- **parity テスト**（`tests/test_models_parity.py`）— Pydantic `model_json_schema` と bli-core `to_json_schema` の一致を全コマンドで検証 = SSOT ドリフト検出。
+- `bli/main.py` 追加コマンド: `help [--command] [--json]` / `list-commands [--json]`（**SSOTから生成・schema_hash 同梱・ローカル完結**=addon不要）/ `request-status --id`。set-origin に `--id`（冪等リトライ）。`_rpc` は送信前に `models.validate_params` を呼ぶ（不正入力は接続前に exit 4）。
+- `request-status` サーバ側: `server._handle_rpc` で **begin/メイン直列を経由せず** `registry.lookup(id)` を直接返す（メタ問い合わせ）。`request_registry.lookup()` 追加。`{known, state, result}` を返す。
+- テスト: parity 6件 + `test_cli_help.py` 10件 + request-status E2E + dispatcher 4件。実機 5.0.1 で smoke_ops に request-status 検証を追加（DONE / unknown=False）。
+- **繰越**: `job-status`/`job-wait`→M10（非同期job依存）、`--dry-run`→後続。
+
+### M4 追補（PR #1 Codex レビュー対応）
+- **request-status のロック迂回**: 認証後は常に hello-ok を返し、ロック未取得は「限定セッション」（lock-free=request-status のみ許可、他は SESSION_BUSY を RPC エラーで返す）。`LOCK_FREE_METHODS` で管理。→ 実行中でも別接続から決着確認が可能。
+- **タイムアウト後の後追い更新（settle）**: `Dispatcher.submit(fn, settle=...)` を追加。ジョブ完了時にメインスレッドで settle が registry を確定（resp構築+complete）。受信スレッドが TimeoutPending しても、ジョブ完走時に settle が DONE/FAILED へ更新する。サーバは TimeoutPending を `TIMEOUT`（retryable, exit 2）として返し、registry は RUNNING のまま残す（FAILED にしない）。ハンドラ契約は `(method, params, info, settle)` に変更。同期既定は `_sync_handler`。
+- **発見系の implemented フィルタ**: `Command.implemented`(bool) を追加。`transform`(M6)/`exec-python`(M11) は `implemented=False`。`list-commands`/`help` は既定で実装済みのみ表示（`--all` で全件、`help --command` は未実装でも introspection 可）。schema_hash に implemented を含める。
+- **タイムアウト整合**: `bli_core.runtime` に `DISPATCH_TIMEOUT=30`（サーバ watchdog）/ `CLIENT_READ_TIMEOUT=40`（クライアント読取猶予）を追加。不変条件 `CLIENT_READ_TIMEOUT > DISPATCH_TIMEOUT`。サーバが先に TIMEOUT を返すのでクライアントは CONNECTION ではなく retryable TIMEOUT(exit2) を受け取れる。
+- **request id 提示**: `_rpc` が request id を確定（`--id` 省略時も生成）。成功 payload と全エラー出力（特に TIMEOUT）に `request_id` を含め、`request-status --id <id>` で後追い可能に。
+- **TTL purge は終端のみ**: `RequestRegistry._purge` は DONE/FAILED のみ掃除し、実行中（PENDING/RUNNING）は settle まで保持する。`lookup`/`begin` 双方で適用。長時間ジョブの id が消えて再送が二重実行される（IN_PROGRESS 冪等性が壊れる）のを防ぐ。
+- **ping もタイムアウト写像を共通化**: `_call_or_exit` を抽出し `_rpc`/`ping` 双方で使用。ping も実機では Dispatcher 経由のため TIMEOUT→exit2 + id 提示に統一（doctor は診断目的でエラーを握るため対象外）。
+
 ## 7. 再開手順（コピペ可）
 ```bash
 cd "D:/MyDesktop/PythonProjects/blender-auto-cli"
 uv sync
-PYTHONUTF8=1 uv run pytest -q                 # 45 passed を確認
+PYTHONUTF8=1 uv run pytest -q                 # 60 passed を確認
 uv run ruff check . && uv run ruff format --check .
 PYTHONUTF8=1 uv run python scripts/check_no_raw_bpy_ops.py packages/bli-addon/src
-# M3 実機スモーク（ops 一式の疎通 + set-origin golden）:
+# 実機スモーク（ops 一式 + set-origin golden + request-status）:
 "/c/Program Files/Blender Foundation/Blender 5.0/blender.exe" --background \
   --python packages/bli-addon/spikes/smoke_ops.py 2>&1 \
   | sed -n '/BLI_OPS_SMOKE_BEGIN/,/BLI_OPS_SMOKE_END/p'   # → OPS SMOKE OK
+# CLI ローカルコマンド（addon不要）:
+PYTHONUTF8=1 uv run bli list-commands --json
+PYTHONUTF8=1 uv run bli help --command set-origin --json
 ```
-次は **M4 以降**（plan.md §4 のロードマップ参照）。GUI 常駐での `bpy.app.timers` 実発火は L4 手動検証で別途。
+次は **M5 以降**（plan.md §4：M5 情報取得 / M6 汎用編集 / M7 メッシュ編集は概ね並行可）。GUI 常駐での `bpy.app.timers` 実発火は L4 手動検証で別途。
 
 ## 8. 重要な落とし穴
 - **bli-core は純Python・依存ゼロを厳守**（アドオンにPydanticを入れない。CLI側のみPydantic可）。3.10互換を維持。

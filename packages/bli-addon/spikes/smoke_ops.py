@@ -35,6 +35,7 @@ from bli_addon import ops  # noqa: E402
 from bli_addon import server as srv_mod  # noqa: E402
 from bli_addon.capability import CapabilityRegistry  # noqa: E402
 from bli_addon.dispatcher import Dispatcher  # noqa: E402
+from bli_core import runtime  # noqa: E402
 from bli_core.commands import load_definitions  # noqa: E402
 from bli_core.schema import schema_hash  # noqa: E402
 
@@ -52,12 +53,12 @@ def ensure_cube():
     return cube
 
 
-def call_retry(method, params=None, attempts=40):
+def call_retry(method, params=None, request_id=None, attempts=40):
     """SESSION_BUSY（接続クローズ直後のロック解放待ち）を少し待って再試行する。"""
     last = None
     for _ in range(attempts):
         try:
-            return client.call(method, params)
+            return client.call(method, params, request_id=request_id)
         except client.RpcRemoteError as e:
             if e.error.get("message") == "SESSION_BUSY":
                 last = e
@@ -108,6 +109,21 @@ def run_calls():
     assert approx(oi3["data"]["location"], [0.0, 0.0, 0.0]), oi3["data"]["location"]
     print("after_geometry location=", oi3["data"]["location"])
 
+    # 8) request-status（M4）: 固定IDで set-origin を確定させ、後追いで決着を回収
+    rid = "smoke-fixed-id"
+    call_retry("set-origin", {"targets": "Cube", "to": "geometry"}, request_id=rid)
+    rs, _ = call_retry("request-status", {"id": rid})
+    assert rs["data"]["known"] is True, rs["data"]
+    assert rs["data"]["state"] == "DONE", rs["data"]
+    rs2, _ = call_retry("request-status", {"id": "never-seen-id"})
+    assert rs2["data"]["known"] is False, rs2["data"]
+    print(
+        "request_status_ok known/state=",
+        rs["data"]["state"],
+        "unknown_known=",
+        rs2["data"]["known"],
+    )
+
 
 def main():
     print("=== BLI_OPS_SMOKE_BEGIN ===")
@@ -116,8 +132,12 @@ def main():
 
     dispatcher = Dispatcher()  # background では timer を使わず手動 pump
 
-    def executor(method, params, info):
-        return dispatcher.submit(lambda: ops.dispatch(method, params, info))
+    def executor(method, params, info, settle):
+        return dispatcher.submit(
+            lambda: ops.dispatch(method, params, info),
+            timeout=runtime.DISPATCH_TIMEOUT,
+            settle=settle,
+        )
 
     srv_mod.start(
         blender_version=bpy.app.version_string,

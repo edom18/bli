@@ -17,11 +17,18 @@ class TimeoutPending(Exception):
     """タイムアウト（実体は実行継続中の可能性）。spec §7 後追い回収。"""
 
 
-class _Job:
-    __slots__ = ("error", "event", "fn", "result")
+# settle(result, error) -> resp: ジョブ完了時にメインスレッドで呼ばれる確定処理。
+# 受信スレッドのタイムアウト有無に関わらず必ず実行されるため、タイムアウト後に
+# 完走したジョブの結果も registry 等へ反映できる（spec §7 後追い回収）。
+SettleFn = Callable[[Any, BaseException | None], Any]
 
-    def __init__(self, fn: Callable[[], Any]) -> None:
+
+class _Job:
+    __slots__ = ("error", "event", "fn", "result", "settle")
+
+    def __init__(self, fn: Callable[[], Any], settle: SettleFn | None = None) -> None:
         self.fn = fn
+        self.settle = settle
         self.event = threading.Event()
         self.result: Any = None
         self.error: Exception | None = None
@@ -32,9 +39,15 @@ class Dispatcher:
         self._q: queue.Queue[_Job] = queue.Queue()
         self._tick: Callable[[], float] | None = None
 
-    def submit(self, fn: Callable[[], Any], timeout: float = 30.0) -> Any:
-        """メインスレッドで fn を実行し結果を返す（受信スレッドから呼ぶ）。"""
-        job = _Job(fn)
+    def submit(
+        self, fn: Callable[[], Any], timeout: float = 30.0, settle: SettleFn | None = None
+    ) -> Any:
+        """メインスレッドで fn を実行し結果を返す（受信スレッドから呼ぶ）。
+
+        settle を渡すと、ジョブ完了時にメインスレッドで settle(result, error) を呼び、
+        その戻り値を結果とする。タイムアウトしても settle はジョブ完走時に必ず呼ばれる。
+        """
+        job = _Job(fn, settle)
         self._q.put(job)
         if not job.event.wait(timeout):
             raise TimeoutPending()
@@ -51,12 +64,22 @@ class Dispatcher:
             except queue.Empty:
                 return count
             try:
-                job.result = job.fn()
+                result = job.fn()
+                error: BaseException | None = None
             except Exception as e:
-                job.error = e
-            finally:
-                job.event.set()
-                count += 1
+                result, error = None, e
+            if job.settle is not None:
+                # 確定処理（registry 更新等）もメインスレッドで実行する。
+                try:
+                    job.result = job.settle(result, error)
+                except Exception as se:
+                    job.error = se
+            elif error is not None:
+                job.error = error
+            else:
+                job.result = result
+            job.event.set()
+            count += 1
 
     # ---- bpy.app.timers 連携（GUI 常駐）----
 

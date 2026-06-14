@@ -16,6 +16,14 @@ DEFAULT_PORT = 9876
 CONNECTION_FILENAME = "connection.json"
 TOKEN_FILENAME = "session.token"
 
+# タイムアウト調整（spec §7）。サーバの主スレッド実行ウォッチドッグ（DISPATCH_TIMEOUT）が
+# クライアントのソケット読み取り猶予（CLIENT_READ_TIMEOUT）より「先に」発火しなければならない。
+# そうでないとクライアントが先に切れ、retryable な TIMEOUT(exit2) ではなく
+# CONNECTION(exit3) になり、request-status による後追い回収が成立しない。
+# 不変条件: CLIENT_READ_TIMEOUT > DISPATCH_TIMEOUT（往復ぶんのマージンを確保）。
+DISPATCH_TIMEOUT = 30.0
+CLIENT_READ_TIMEOUT = 40.0
+
 
 def user_state_dir() -> Path:
     """OS 別のユーザローカル状態ディレクトリ（token/connection.json 用）。"""

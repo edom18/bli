@@ -54,6 +54,7 @@ def register() -> None:
     """ディスパッチャ + TCP サーバを起動する（GUI 常駐）。"""
     import bpy  # type: ignore  # lazy: アドオンロード時のみ
 
+    from bli_core import runtime
     from bli_core.commands import load_definitions
     from bli_core.schema import schema_hash
 
@@ -67,9 +68,16 @@ def register() -> None:
 
     dispatcher = _dispatcher
 
-    def _executor(method, params, info):
-        # 受信スレッドから submit → メインスレッドで ops.dispatch を直列実行
-        return dispatcher.submit(lambda: ops.dispatch(method, params, info))
+    def _executor(method, params, info, settle):
+        # 受信スレッドから submit → メインスレッドで ops.dispatch を直列実行。
+        # settle はジョブ完了時にメインスレッドで呼ばれ、registry を確定させる
+        # （タイムアウト後に完走したジョブも request-status で回収可能になる）。
+        # ウォッチドッグはクライアント読み取り猶予より短くし、TIMEOUT 応答を先に返す。
+        return dispatcher.submit(
+            lambda: ops.dispatch(method, params, info),
+            timeout=runtime.DISPATCH_TIMEOUT,
+            settle=settle,
+        )
 
     server.start(
         blender_version=bpy.app.version_string,

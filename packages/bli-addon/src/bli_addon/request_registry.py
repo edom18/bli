@@ -31,7 +31,14 @@ class RequestRegistry:
         self._entries: dict[str, _Entry] = {}
 
     def _purge(self, now: float) -> None:
-        expired = [k for k, e in self._entries.items() if now - e.ts > self._ttl]
+        # 終端状態（DONE/FAILED）のみ TTL で掃除する。実行中（PENDING/RUNNING）は
+        # settle まで保持する。さもないと長時間ジョブの id が消え、再送が begin() で
+        # 新規扱いされ変更操作を二重実行してしまう（冪等性 IN_PROGRESS が壊れる）。
+        expired = [
+            k
+            for k, e in self._entries.items()
+            if e.state in (DONE, FAILED) and now - e.ts > self._ttl
+        ]
         for k in expired:
             del self._entries[k]
 
@@ -68,3 +75,17 @@ class RequestRegistry:
         with self._lock:
             entry = self._entries.get(rid)
             return entry.state if entry else None
+
+    def lookup(self, rid: str) -> tuple[str | None, dict[str, Any] | None]:
+        """状態と保存結果を返す（request-status 用）。未知/TTL超過なら (None, None)。
+
+        status のみをポーリングする経路でも TTL 掃除が効くよう、読み取り前に purge する
+        （begin() と同じ扱い。さもないと未確定エントリが恒久的に残る）。
+        """
+        now = time.time()
+        with self._lock:
+            self._purge(now)
+            entry = self._entries.get(rid)
+            if entry is None:
+                return None, None
+            return entry.state, entry.result

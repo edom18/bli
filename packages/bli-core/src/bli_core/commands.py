@@ -34,6 +34,8 @@ class Command:
     is_heavy: bool = False
     stability: Stability = Stability.STABLE
     result_schema: dict[str, Any] | None = None
+    # CLI/サーバで実行可能か。False=SSOT に定義済みだが未実装（発見系の既定一覧から除外）。
+    implemented: bool = True
 
 
 # 全コマンド定義のレジストリ（name -> Command）
@@ -66,6 +68,7 @@ def command(
     is_heavy: bool = False,
     stability: Stability = Stability.STABLE,
     result_schema: dict[str, Any] | None = None,
+    implemented: bool = True,
 ) -> Command:
     """Command を生成し COMMANDS に登録する。"""
     if name in COMMANDS:
@@ -80,6 +83,7 @@ def command(
         is_heavy=is_heavy,
         stability=stability,
         result_schema=result_schema,
+        implemented=implemented,
     )
     COMMANDS[name] = cmd
     return cmd
