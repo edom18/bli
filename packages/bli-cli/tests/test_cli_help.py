@@ -39,6 +39,45 @@ def test_list_objects_discoverable():
     assert "required" not in schema  # type/regex は任意
 
 
+def test_m6_commands_discoverable():
+    # M6 T6.1 の select/transform/apply-transform が実装済み一覧に出る
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    names = {c["name"] for c in data["commands"]}
+    assert {"select", "transform", "apply-transform"} <= names
+
+
+def test_transform_bad_vec3_exit_input():
+    # 不正な --location（3要素でない）は送信前に exit 4
+    res = runner.invoke(app, ["transform", "--targets", "Cube", "--location", "1,2", "--json"])
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
+def test_transform_bad_mode_local_validation():
+    # 不正な --mode は送信前ローカル Pydantic 検証で exit 4
+    res = runner.invoke(app, ["transform", "--targets", "Cube", "--mode", "bogus", "--json"])
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
+def test_transform_nonfinite_vec3_exit_input():
+    # nan/inf は送信前に弾く（matrix を壊さない）
+    for bad in ("nan,0,0", "inf,0,0"):
+        res = runner.invoke(app, ["transform", "--targets", "Cube", "--location", bad, "--json"])
+        assert res.exit_code == 4, bad
+        assert "INVALID_PARAMS" in res.output
+
+
+def test_apply_transform_flags_have_no_schema_default():
+    # presence-sensitive な BOOL フラグは schema に default を出さない（Codex P2）。
+    # default:false を広告すると、既定埋めクライアントが全 false を送ってしまう。
+    res = runner.invoke(app, ["help", "--command", "apply-transform", "--json"])
+    assert res.exit_code == 0
+    props = json.loads(res.output)["schema"]["properties"]
+    for ch in ("location", "rotation", "scale"):
+        assert "default" not in props[ch], (ch, props[ch])
+
+
 def test_help_all_json():
     res = runner.invoke(app, ["help", "--json"])
     assert res.exit_code == 0
@@ -62,7 +101,7 @@ def test_help_unknown_command_exit_input():
 
 def test_local_validation_rejects_bad_enum_before_connect():
     # 不正な --to は送信前に exit 4（接続を試みない）
-    res = runner.invoke(app, ["set-origin", "Cube", "--to", "bogus", "--json"])
+    res = runner.invoke(app, ["set-origin", "--targets", "Cube", "--to", "bogus", "--json"])
     assert res.exit_code == 4
     assert "INVALID_PARAMS" in res.output
 
@@ -77,31 +116,31 @@ def test_schema_hash_matches_core():
 
 
 def test_list_commands_excludes_unimplemented_by_default():
-    # 発見系は未実装コマンド（transform/exec-python）を広告しない
+    # 発見系は未実装コマンド（exec-python）を広告しない（transform は M6 で実装済み）
     data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
     names = {c["name"] for c in data["commands"]}
-    assert "transform" not in names
     assert "exec-python" not in names
     assert "set-origin" in names
+    assert "transform" in names  # M6 T6.1 で実装済みになった
 
 
 def test_list_commands_all_includes_unimplemented():
     data = json.loads(runner.invoke(app, ["list-commands", "--all", "--json"]).output)
     by_name = {c["name"]: c for c in data["commands"]}
-    assert "transform" in by_name
-    assert by_name["transform"]["implemented"] is False
+    assert "exec-python" in by_name
+    assert by_name["exec-python"]["implemented"] is False
 
 
 def test_help_excludes_unimplemented_by_default():
     data = json.loads(runner.invoke(app, ["help", "--json"]).output)
-    assert "transform" not in data["commands"]
+    assert "exec-python" not in data["commands"]
     data_all = json.loads(runner.invoke(app, ["help", "--all", "--json"]).output)
-    assert "transform" in data_all["commands"]
+    assert "exec-python" in data_all["commands"]
 
 
 def test_help_command_introspects_unimplemented():
     # 個別 introspection は未実装でも可（implemented=False を明示）
-    res = runner.invoke(app, ["help", "--command", "transform", "--json"])
+    res = runner.invoke(app, ["help", "--command", "exec-python", "--json"])
     assert res.exit_code == 0
     data = json.loads(res.output)
     assert data["command"]["implemented"] is False
@@ -130,7 +169,9 @@ def test_timeout_exposes_supplied_id(monkeypatch):
         raise _fake_timeout_error()
 
     monkeypatch.setattr(cli_client, "call", fake_call)
-    res = runner.invoke(app, ["set-origin", "Cube", "--to", "geometry", "--id", "my-id", "--json"])
+    res = runner.invoke(
+        app, ["set-origin", "--targets", "Cube", "--to", "geometry", "--id", "my-id", "--json"]
+    )
     assert res.exit_code == 2  # TIMEOUT_PENDING
     payload = json.loads(res.output)
     assert payload["kind"] == "TIMEOUT"
@@ -148,7 +189,7 @@ def test_timeout_exposes_generated_id(monkeypatch):
         raise _fake_timeout_error()
 
     monkeypatch.setattr(cli_client, "call", fake_call)
-    res = runner.invoke(app, ["set-origin", "Cube", "--to", "geometry", "--json"])
+    res = runner.invoke(app, ["set-origin", "--targets", "Cube", "--to", "geometry", "--json"])
     assert res.exit_code == 2
     payload = json.loads(res.output)
     assert payload["request_id"]  # 非空

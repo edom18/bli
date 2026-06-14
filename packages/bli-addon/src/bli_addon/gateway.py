@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from typing import Any
 
@@ -36,6 +37,10 @@ def _override_for(obj: Any, extra: dict[str, Any] | None) -> dict[str, Any]:
         ov["active_object"] = obj
         ov["object"] = obj
         ov["selected_objects"] = [obj]
+        # transform_apply 等は selected_editable_objects を反復する。現在の選択が
+        # --targets と異なる場合に無関係なオブジェクトを巻き込まないよう、対象だけに絞る
+        # （Codex P1）。読み取り専用の派生コンテキストだが temp_override で上書き可能。
+        ov["selected_editable_objects"] = [obj]
     if extra:
         ov.update(extra)
     return ov
@@ -75,13 +80,24 @@ def push_undo(message: str) -> None:
 
 
 def resolve_targets(selector: str, *, regex: bool = False) -> list[Any]:
-    """selector からオブジェクト群を解決する（完全名 > regex）。"""
+    """selector からオブジェクト群を解決する（完全名 > regex）。
+
+    完全名に一致しない場合は regex 照合。不正な正規表現は INTERNAL ではなく
+    USER_INPUT エラーにする（共有リゾルバなので targets を取る全コマンドに効く。Codex P2）。
+    """
     objs = bpy.data.objects
     if not regex:
         obj = objs.get(selector)
         if obj is not None:
             return [obj]
-    pattern = re.compile(selector)
+    try:
+        pattern = re.compile(selector)
+    except re.error as e:
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"正規表現が不正です: {selector!r}: {e}",
+            category=ErrorCategory.USER_INPUT,
+        ) from e
     return [o for o in objs if pattern.search(o.name)]
 
 
@@ -134,6 +150,30 @@ def world_bbox(obj: Any) -> dict[str, list[float]] | None:
     }
 
 
+_RAD2DEG = 57.2957795
+
+_EULER_MODES = frozenset({"XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"})
+
+
+def _rotation_euler_deg(obj: Any) -> list[float]:
+    """rotation_mode に依らず実効回転を Euler(度) で返す（QUATERNION/AXIS_ANGLE 対応）。
+
+    Euler モードは従来式（`a * 57.2957795`）をそのまま使い fingerprint を不変に保つ。
+    非 Euler は native 表現から Euler へ変換して報告する（Codex P2: 報告と実体の整合）。
+    """
+    rmode = obj.rotation_mode
+    if rmode == "QUATERNION":
+        euler = obj.rotation_quaternion.to_euler()
+    elif rmode == "AXIS_ANGLE":
+        from mathutils import Quaternion, Vector  # type: ignore  # lazy: bpy 依存
+
+        aa = obj.rotation_axis_angle  # (angle, x, y, z)
+        euler = Quaternion(Vector((aa[1], aa[2], aa[3])), aa[0]).to_euler()
+    else:
+        euler = obj.rotation_euler
+    return [round(a * _RAD2DEG, 4) for a in euler]
+
+
 def object_summary(obj: Any) -> dict[str, Any]:
     """オブジェクトの要約（info 系の共通項）。"""
     loc = obj.matrix_world.translation
@@ -143,7 +183,7 @@ def object_summary(obj: Any) -> dict[str, Any]:
         "type": obj.type,
         "location": [round(loc.x, 6), round(loc.y, 6), round(loc.z, 6)],
         "dimensions": [round(dims.x, 6), round(dims.y, 6), round(dims.z, 6)],
-        "rotation_euler_deg": [round(a * 57.2957795, 4) for a in obj.rotation_euler],
+        "rotation_euler_deg": _rotation_euler_deg(obj),
         "scale": [round(s, 6) for s in obj.scale],
         "bbox": world_bbox(obj),
     }
@@ -209,10 +249,23 @@ def list_objects(type_filter: str | None = None, regex: str | None = None) -> li
     return out
 
 
+def _digest16(payload: dict[str, Any]) -> str:
+    """JSON 化可能な状態の決定的 16 桁ハッシュ（verified 用の短ハッシュ）。"""
+    blob = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
 def object_fingerprint(obj: Any) -> str:
     """オブジェクト状態の決定的フィンガープリント（verified 用の短ハッシュ）。"""
-    blob = json.dumps(object_summary(obj), sort_keys=True, ensure_ascii=False)
-    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+    return _digest16(object_summary(obj))
+
+
+def selection_fingerprint(selected: list[str], active: str) -> str:
+    """選択集合 + active の決定的フィンガープリント（select の drift 検証用）。
+
+    順序非依存にするため selected は sort してからハッシュする。
+    """
+    return _digest16({"selected": sorted(selected), "active": active})
 
 
 # ---- モード / 単一ユーザ化 ----
@@ -268,3 +321,172 @@ def set_origin_world(obj: Any, x: float, y: float, z: float) -> list[float]:
     mat.translation = new_origin
     loc = obj.matrix_world.translation
     return [round(loc.x, 6), round(loc.y, 6), round(loc.z, 6)]
+
+
+# ---- 汎用編集（transform / apply-transform / select / M6 T6.1）----
+
+
+def _write_rotation(obj: Any, rotation_deg: list[float], mode: str) -> None:
+    """要求 Euler(度) を obj.rotation_mode に合わせて反映する（QUATERNION/AXIS_ANGLE 対応）。
+
+    Euler モードは従来どおり rotation_euler を set/加算する。非 Euler モードでは native
+    フィールド（quaternion / axis_angle）へ書き込み、見た目の向きを実際に変える
+    （Codex P2: euler のみ書いて silent fail する問題を解消）。delta は quaternion 合成。
+    """
+    rmode = obj.rotation_mode
+    if rmode in _EULER_MODES:
+        if mode == "delta":
+            r = obj.rotation_euler
+            obj.rotation_euler = (
+                r[0] + math.radians(rotation_deg[0]),
+                r[1] + math.radians(rotation_deg[1]),
+                r[2] + math.radians(rotation_deg[2]),
+            )
+        else:
+            obj.rotation_euler = tuple(math.radians(a) for a in rotation_deg)
+        return
+
+    from mathutils import Euler, Quaternion, Vector  # type: ignore  # lazy: bpy 依存
+
+    req_q = Euler([math.radians(a) for a in rotation_deg], "XYZ").to_quaternion()
+    if rmode == "QUATERNION":
+        cur = obj.rotation_quaternion
+        obj.rotation_quaternion = (cur @ req_q) if mode == "delta" else req_q
+    else:  # AXIS_ANGLE
+        if mode == "delta":
+            aa = obj.rotation_axis_angle  # (angle, x, y, z)
+            new_q = Quaternion(Vector((aa[1], aa[2], aa[3])), aa[0]) @ req_q
+        else:
+            new_q = req_q
+        axis, angle = new_q.to_axis_angle()
+        obj.rotation_axis_angle = (angle, axis.x, axis.y, axis.z)
+
+
+def _write_location(obj: Any, location: list[float], mode: str) -> None:
+    """location を **world 空間** で設定/相対移動する（Codex P2）。
+
+    obj.location は親ローカルだが object_summary は matrix_world.translation（world）を
+    報告する。親付きでも要求/報告/見た目が一致するよう、matrix_world 経由で世界座標を
+    書き込む（Blender が親逆行列を考慮してローカルへ反映する）。
+    """
+    from mathutils import Vector  # type: ignore  # lazy: bpy 依存
+
+    mw = obj.matrix_world.copy()
+    if mode == "delta":
+        t = mw.translation
+        mw.translation = Vector((t.x + location[0], t.y + location[1], t.z + location[2]))
+    else:
+        mw.translation = Vector((float(location[0]), float(location[1]), float(location[2])))
+    obj.matrix_world = mw
+
+
+def transform_object(
+    obj: Any,
+    *,
+    location: list[float] | None = None,
+    rotation: list[float] | None = None,
+    scale: list[float] | None = None,
+    mode: str = "set",
+    message: str | None = None,
+) -> dict[str, Any]:
+    """オブジェクトの loc/rot/scale を set または delta で変更する（直接プロパティ・op不要）。
+
+    location は world 空間（親付きでも report と一致）。rotation は度入力 → ラジアンで
+    rotation_mode の native 表現へ反映（QUATERNION/AXIS_ANGLE でも有効）。delta は
+    location/rotation 加算（rotation は mode に応じ加算/quaternion 合成）、scale は乗算。
+    location を先に適用し、その後 rotation/scale を local で上書きする（原点位置は不変）。
+    """
+    if location is not None:
+        _write_location(obj, location, mode)
+    if rotation is not None:
+        _write_rotation(obj, rotation, mode)
+    if scale is not None:
+        if mode == "delta":
+            s = obj.scale
+            obj.scale = (s[0] * scale[0], s[1] * scale[1], s[2] * scale[2])
+        else:
+            obj.scale = tuple(scale)
+    if message:
+        push_undo(message)
+    return object_summary(obj)
+
+
+def apply_transform(
+    obj: Any,
+    *,
+    location: bool,
+    rotation: bool,
+    scale: bool,
+    message: str | None = None,
+) -> dict[str, Any]:
+    """transform を mesh データへ適用する（operator 経由）。
+
+    共有 mesh の単一ユーザ化は呼び出し側（ops._guard_shared_mesh）が --make-single-user
+    明示時のみ行う。ここでは黙って分離しない（spec §破壊防止）。焼き込み先データを持たない
+    型（EMPTY/LIGHT/CAMERA）は事前に弾き、分かりやすい precondition エラーを返す。
+    """
+    if obj.data is None or not hasattr(obj.data, "transform"):
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"transform 適用は mesh/curve 等のデータを持つ型のみ対応（type={obj.type}）",
+        )
+    run_operator(
+        bpy.ops.object.transform_apply,
+        obj,
+        message=message,
+        location=location,
+        rotation=rotation,
+        scale=scale,
+    )
+    return object_summary(obj)
+
+
+def select_objects(
+    targets: str,
+    *,
+    type_filter: str | None = None,
+    active: str | None = None,
+    message: str | None = None,
+) -> dict[str, Any]:
+    """targets(name|regex) を選択し active を設定する（select_set / active 直接設定・op不要）。"""
+    # 選択は view layer 操作。グローバル解決後に **アクティブ view layer 内**へ絞る。
+    # 別シーン/除外コレクションの object を弾いてから状態を変更する（Codex P2: 状態を汚さない）。
+    view_layer = bpy.context.view_layer
+    vl_names = {o.name for o in view_layer.objects}
+    matched = [o for o in resolve_targets(targets) if o.name in vl_names]  # 完全名 > regex
+    if type_filter is not None:
+        want = type_filter.upper()
+        matched = [o for o in matched if o.type == want]
+    if not matched:
+        raise _op_error(
+            ErrorCode.E_TARGET_NOT_FOUND,
+            f"対象が見つかりません（アクティブ view layer 内）: {targets}",
+            category=ErrorCategory.USER_INPUT,
+        )
+
+    # active は選択状態を変更する前に解決・検証する（失敗時に状態を汚さない。Codex P2）。
+    if active is not None:
+        active_obj = next((o for o in matched if o.name == active), None)
+        if active_obj is None:
+            raise _op_error(
+                ErrorCode.E_PRECONDITION,
+                f"--active の対象が選択集合にありません: {active}",
+                category=ErrorCategory.USER_INPUT,
+            )
+    else:
+        active_obj = matched[0]
+
+    for o in view_layer.objects:
+        o.select_set(False)
+    for o in matched:
+        o.select_set(True)
+    view_layer.objects.active = active_obj
+
+    if message:
+        push_undo(message)
+    # selected は fingerprint（sorted）と並びを揃え、解決順（版/履歴依存）に依らず決定的にする。
+    return {
+        "selected": sorted(o.name for o in matched),
+        "count": len(matched),
+        "active": active_obj.name,
+    }

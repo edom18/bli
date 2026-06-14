@@ -142,16 +142,47 @@ def _object_info(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     )
 
 
-def _set_origin(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
-    cmd = _command("set-origin")
+def _select(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("select")
     _validate(cmd, params)
     from . import gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
-    obj = gateway.require_single(str(params["targets"]))
-    to = str(params["to"])
+    type_filter = params.get("type")
+    active = params.get("active")
+    data = gateway.select_objects(
+        str(params["targets"]),
+        type_filter=str(type_filter) if type_filter is not None else None,
+        active=str(active) if active is not None else None,
+        message="select",
+    )
+    # select は mutating（選択/active を変更）。methods.md の契約どおり fingerprint を返し、
+    # request-status / 応答で選択ドリフトを検証できるようにする（Codex P2）。
+    fp = gateway.selection_fingerprint(data["selected"], data["active"])
+    return _ok("select", data, fingerprint=fp)
 
-    # 共有 mesh は明示許可（make_single_user）が無い限り拒否する。
+
+def _require_input(condition: bool, symptom: str, remediation: str) -> None:
+    """USER_INPUT 前提を満たさなければ INVALID_PARAMS を投げる（bpy 到達前に弾ける）。"""
+    if not condition:
+        raise JsonRpcError(
+            RPC_INVALID_PARAMS,
+            ErrorCode.INVALID_PARAMS,
+            make_error(
+                ErrorCode.INVALID_PARAMS,
+                category=ErrorCategory.USER_INPUT,
+                retryable=False,
+                symptom=symptom,
+                remediation=remediation,
+            ),
+        )
+
+
+def _guard_shared_mesh(gateway: Any, obj: Any, params: dict[str, Any]) -> None:
+    """共有 mesh（users>=2）は --make-single-user 明示が無い限り拒否する（spec §破壊防止）。
+
+    set-origin / apply-transform など mesh データを書き換える破壊的操作で共通利用する。
+    """
     if gateway.mesh_user_count(obj) >= 2:
         if not bool(params.get("make_single_user", False)):
             raise JsonRpcError(
@@ -166,6 +197,77 @@ def _set_origin(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
                 ),
             )
         gateway.make_single_user_mesh(obj)
+
+
+def _transform(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("transform")
+    _validate(cmd, params)
+    # 変更チャンネル皆無は無音 no-op + 空 undo になるため弾く（apply-transform と整合）。
+    _require_input(
+        any(k in params for k in ("location", "rotation", "scale")),
+        symptom="transform に変更するチャンネルがありません",
+        remediation="--location/--rotation/--scale のいずれかを指定してください",
+    )
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(params["targets"]))
+    mode = str(params.get("mode", "set"))
+    data = gateway.transform_object(
+        obj,
+        location=params.get("location"),
+        rotation=params.get("rotation"),
+        scale=params.get("scale"),
+        mode=mode,
+        message=f"transform {mode}",
+    )
+    return _ok("transform", data, fingerprint=gateway.object_fingerprint(obj))
+
+
+def _apply_transform(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("apply-transform")
+    _validate(cmd, params)
+
+    # チャンネルは「キーの有無」で判定する（明示 false と省略を区別。Codex P2）。
+    # 全キー省略 = 全チャンネル適用（利便）。明示指定があればその真偽値を尊重する。
+    # 生成クライアントが既定 false を埋めても、意図せず全適用にならないようにする。
+    keys = ("location", "rotation", "scale")
+    if not any(k in params for k in keys):
+        loc = rot = scl = True
+    else:
+        loc = bool(params.get("location", False))
+        rot = bool(params.get("rotation", False))
+        scl = bool(params.get("scale", False))
+        # 明示的に全 false = 適用対象なし
+        _require_input(
+            loc or rot or scl,
+            symptom="apply-transform に適用するチャンネルがありません（全 false）",
+            remediation="--location/--rotation/--scale のいずれかを指定（全省略で全適用）",
+        )
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(params["targets"]))
+    # 破壊的（mesh データへ焼き込む）。共有 mesh は set-origin と同様にガードする。
+    _guard_shared_mesh(gateway, obj, params)
+    data = gateway.apply_transform(
+        obj, location=loc, rotation=rot, scale=scl, message="apply-transform"
+    )
+    return _ok("apply-transform", data, fingerprint=gateway.object_fingerprint(obj))
+
+
+def _set_origin(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("set-origin")
+    _validate(cmd, params)
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(params["targets"]))
+    to = str(params["to"])
+
+    # 共有 mesh は明示許可（make_single_user）が無い限り拒否する。
+    _guard_shared_mesh(gateway, obj, params)
 
     if to == "geometry":
         center = "BOUNDS" if params.get("center") == "bounds" else "MEDIAN"
@@ -193,6 +295,9 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "scene-info": _scene_info,
     "object-info": _object_info,
     "list-objects": _list_objects,
+    "select": _select,
+    "transform": _transform,
+    "apply-transform": _apply_transform,
     "set-origin": _set_origin,
 }
 

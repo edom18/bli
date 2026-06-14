@@ -72,10 +72,21 @@ command(
     required_mode=Mode.OBJECT,
 )
 
-# ---- 汎用編集（代表・vec3 型確認用 / 実装は M6）----
+# ---- 汎用編集（オブジェクト操作 / M6 T6.1）----
+command(
+    "select",
+    "オブジェクトを選択し active を設定する（name|regex / type フィルタ）",
+    params=(
+        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("type", ParamType.STR, help="型フィルタ（MESH/CURVE/... 大小無視）"),
+        p("active", ParamType.STR, help="active にする対象名（省略時は先頭）"),
+    ),
+    mutates=True,
+    required_mode=Mode.OBJECT,
+)
 command(
     "transform",
-    "位置/回転/拡縮を設定または相対適用する",
+    "位置/回転/拡縮を設定または相対適用する（delta: loc/rot は加算・scale は乗算）",
     params=(
         p("targets", ParamType.STR, required=True, help="対象"),
         p("location", ParamType.VEC3, help="位置 x,y,z"),
@@ -85,7 +96,22 @@ command(
     ),
     mutates=True,
     required_mode=Mode.OBJECT,
-    implemented=False,  # M6 で実装予定（現状は型確認用の定義のみ）
+)
+command(
+    "apply-transform",
+    "オブジェクトの位置/回転/拡縮をメッシュデータに適用する（全省略時は全適用）",
+    # location/rotation/scale は「キーの有無」で意味が決まる presence-sensitive フラグ。
+    # schema に default を出すと、既定値を埋める生成クライアントが全 false を送って
+    # しまうため、default は持たせない（Codex P2）。
+    params=(
+        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("location", ParamType.BOOL, help="位置を適用"),
+        p("rotation", ParamType.BOOL, help="回転を適用"),
+        p("scale", ParamType.BOOL, help="拡縮を適用"),
+        p("make_single_user", ParamType.BOOL, default=False, help="共有mesh時に明示許可"),
+    ),
+    mutates=True,
+    required_mode=Mode.OBJECT,
 )
 
 # ---- 逃げ道（既定 off / path 型確認用 / 実装は M11）----

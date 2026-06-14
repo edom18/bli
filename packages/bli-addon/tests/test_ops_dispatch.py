@@ -76,3 +76,57 @@ def test_list_objects_bad_type_invalid_params():
     with pytest.raises(JsonRpcError) as ei:
         ops.dispatch("list-objects", {"type": 123}, INFO)
     assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_transform_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("transform", {}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_transform_bad_mode_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("transform", {"targets": "Cube", "mode": "bogus"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_transform_bad_vec3_invalid_params():
+    # location は3要素必須（VEC3）
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("transform", {"targets": "Cube", "location": [1, 2]}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_select_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("select", {}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_transform_no_channels_invalid_params():
+    # location/rotation/scale すべて省略は無音 no-op になるため USER_INPUT で弾く（bpy 到達前）
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("transform", {"targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_apply_transform_unknown_param_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("apply-transform", {"targets": "Cube", "bogus": 1}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_apply_transform_all_false_invalid_params():
+    # 明示的に全 false（生成クライアントの既定埋め）は「適用なし」として弾く（Codex P2）。
+    # キー有無で判定するため bpy 到達前に INVALID_PARAMS。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "apply-transform",
+            {"targets": "Cube", "location": False, "rotation": False, "scale": False},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
