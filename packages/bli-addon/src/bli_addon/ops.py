@@ -156,7 +156,10 @@ def _select(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         active=str(active) if active is not None else None,
         message="select",
     )
-    return _ok("select", data)
+    # select は mutating（選択/active を変更）。methods.md の契約どおり fingerprint を返し、
+    # request-status / 応答で選択ドリフトを検証できるようにする（Codex P2）。
+    fp = gateway.selection_fingerprint(data["selected"], data["active"])
+    return _ok("select", data, fingerprint=fp)
 
 
 def _transform(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:

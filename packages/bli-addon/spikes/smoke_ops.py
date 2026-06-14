@@ -186,7 +186,16 @@ def run_calls():
     sel, _ = call_retry("select", {"targets": "Cube"})
     assert sel["data"]["selected"] == ["Cube"], sel["data"]
     assert sel["data"]["active"] == "Cube", sel["data"]
-    print("select_ok", sel["data"]["selected"], "active=", sel["data"]["active"])
+    # select は fingerprint を返す（Codex P2: 契約どおり drift 検証可能に）
+    assert sel.get("fingerprint") and len(sel["fingerprint"]) == 16, sel
+    print(
+        "select_ok",
+        sel["data"]["selected"],
+        "active=",
+        sel["data"]["active"],
+        "fp=",
+        sel["fingerprint"],
+    )
 
     # 不正な --active: エラーになり、直前の選択状態は変わらない（Codex P2: 検証→変更）
     try:

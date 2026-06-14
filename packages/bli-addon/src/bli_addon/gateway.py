@@ -210,10 +210,23 @@ def list_objects(type_filter: str | None = None, regex: str | None = None) -> li
     return out
 
 
+def _digest16(payload: dict[str, Any]) -> str:
+    """JSON 化可能な状態の決定的 16 桁ハッシュ（verified 用の短ハッシュ）。"""
+    blob = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
 def object_fingerprint(obj: Any) -> str:
     """オブジェクト状態の決定的フィンガープリント（verified 用の短ハッシュ）。"""
-    blob = json.dumps(object_summary(obj), sort_keys=True, ensure_ascii=False)
-    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+    return _digest16(object_summary(obj))
+
+
+def selection_fingerprint(selected: list[str], active: str) -> str:
+    """選択集合 + active の決定的フィンガープリント（select の drift 検証用）。
+
+    順序非依存にするため selected は sort してからハッシュする。
+    """
+    return _digest16({"selected": sorted(selected), "active": active})
 
 
 # ---- モード / 単一ユーザ化 ----
