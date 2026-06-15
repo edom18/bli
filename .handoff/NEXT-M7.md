@@ -1,14 +1,15 @@
 # 次の作業 — M7「メッシュ編集」（bmesh 一次）
 
-最終更新: 2026-06-15 / 前提: **M0–M6 完了 + M7 T7.1 完了（実装・セルフレビュー済み・PR 待ち）**。**次は T7.2（extrude/bevel/inset）**。
-> まず `.handoff/HANDOFF.md`（全体史 + 規約 + §6e 再利用パターン + **§6f M7 T7.1 確定事項**）を読む。出典: `plan.md §4 M7` / `spec.md §メッシュ編集` / `contracts/methods.md §メッシュ編集`。
+最終更新: 2026-06-15 / 前提: **M0–M6 完了 + M7 T7.1 完了（main）+ M7 T7.2 完了（実装・セルフレビュー済み・PR 待ち）**。**次は T7.3（boolean/decimate＝M7 完了）**。
+> まず `.handoff/HANDOFF.md`（全体史 + 規約 + §6e 再利用パターン + **§6f M7 T7.1/T7.2 確定事項**）を読む。出典: `plan.md §4 M7` / `spec.md §メッシュ編集` / `contracts/methods.md §メッシュ編集`。
 
-## ✅ T7.1 完了（確定事項・T7.2 以降も踏襲）
+## ✅ T7.1–7.2 完了（確定事項・T7.3 も踏襲）
 - **単一 `mesh` コマンド + `--op` ENUM**（material/modifier と一貫・SSOT 1コマンド）。**stability=experimental（コマンド単位）**。op 専用 param は **schema default なし**。
 - **bmesh-on-data**（`bmesh.new()`→`from_mesh`→`bmesh.ops`→`to_mesh`→`free`→`data.update()`・OBJECT モードのまま・context 非依存）。bmesh ヘルパは **`bli_addon/bmesh_ops.py`**（gateway 同様の bpy 接点層・`bmesh.ops` のみで AST guard 対象外・`try/finally` で `bm.free()` 保証）。
 - 当面 **Mode=OBJECT**。破壊的 mesh 編集は **全 op で `_guard_shared_mesh`**。非 mesh は `gateway.require_mesh` で **E_PRECONDITION**。fingerprint は **`mesh_fingerprint`（法線込み・符号付きゼロ正規化）**。
-- スパイク手順は `spikes/bmesh_spike.py`、確定値は `research.md §E`。T7.2/T7.3 着手時も同様に小スパイクで該当 bmesh.ops を 5.0.1/4.4.3 確認してから gateway/bmesh_ops を確定すること。
-- T7.2 着手: `git checkout main && git pull`（T7.1 PR マージ後）→ `git checkout -b feature/m7-mesh-exp`。`mesh` の `--op` ENUM に extrude/bevel/inset を追加し、`bmesh_ops.py` にヘルパ追加。**繰越（設計 P2）**: 結果スキーマの冗長（`faces`==`stats.polygons` 等）を verts/edges/faces 同時変化の op に合わせ `stats` 中心へ統一するか T7.2 で判断。
+- **結果は `{<param>, delta, stats}`**（`delta`=符号付き増減＝decimate/boolean の削減も表せる・`added` ではない）。**ベクトル param（offset）は world 空間**（matrix_world で変換・duplicate と一貫）/ **スカラ量（width/thickness/ratio 等）は mesh ローカル単位**。
+- スパイク手順は `spikes/bmesh_spike.py`（T7.1）/ `bmesh_spike_t72.py`（T7.2）、確定値は `research.md §E/§E2`。T7.3 着手時も小スパイクで該当手段を 5.0.1/4.4.3 確認してから確定すること。
+- T7.3 着手: `git checkout main && git pull`（T7.2 PR マージ後）→ `git checkout -b feature/m7-mesh-heavy`。`--op` に boolean/decimate を追加。**要スパイク（§2）**: bmesh に直接 boolean は無い → BOOLEAN modifier + apply フォールバックか `bpy.ops.mesh.intersect_boolean`（edit）。decimate は DECIMATE modifier 適用が確実（gateway.apply_modifier 再利用可）。両者 heavy 候補（同期実行・非同期 job は M10）。**繰越（設計 P3）**: `_mesh` の op 別検証 `elif` 連鎖を per-op validator テーブルへ整理。
 
 ---
 
@@ -29,9 +30,9 @@ PYTHONUTF8=1 uv run python scripts/check_no_raw_bpy_ops.py packages/bli-addon/sr
 |---|---|---|:--:|:--:|
 | `mesh --op recalc-normals` | `--targets` `--inside?` | 法線統計 | ✅ | T7.1 完了 |
 | `mesh --op merge-by-distance` | `--targets` `--distance?` | マージ頂点数 | ✅ | T7.1 完了 |
-| `mesh --op extrude` | `--targets` `--offset?` `--faces?` | mesh統計 | e | T7.2 |
-| `mesh bevel` | `--targets` `--width` `--segments?` | mesh統計 | e | T7.2 |
-| `mesh inset` | `--targets` `--thickness` | mesh統計 | e | T7.2 |
+| `mesh --op extrude` | `--targets` `--offset`(world) | mesh統計(delta) | ✅ | T7.2 完了 |
+| `mesh --op bevel` | `--targets` `--width` `--segments?` | mesh統計(delta) | ✅ | T7.2 完了 |
+| `mesh --op inset` | `--targets` `--thickness` | mesh統計(delta) | ✅ | T7.2 完了 |
 | `mesh boolean` | `--targets` `--with` `--op union\|difference\|intersect` | mesh統計 | e | T7.3 |
 | `mesh decimate` | `--targets` `--ratio` | 削減後ポリ数 | e | T7.3 |
 
