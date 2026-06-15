@@ -202,6 +202,32 @@ command(
     required_mode=Mode.OBJECT,
 )
 
+# ---- メッシュ編集（bmesh 一次 / M7 T7.1）----
+command(
+    "mesh",
+    "メッシュを編集する（bmesh 一次・op 別: 法線再計算 / 距離マージ）",
+    # op により有効/必須 param が変わる（条件付き）。schema は op 非依存で任意にし、
+    # ops 側で op 別に検証する（material/modifier と同じ流儀）。op 専用 param（inside/
+    # distance）は schema default を持たせない（持たせると生成クライアントが既定値を埋めて
+    # 別 op へ誤送信し op 別検証で弾かれるため。§6e の presence-sensitive 方針の一般化）。
+    params=(
+        p(
+            "op",
+            ParamType.ENUM,
+            required=True,
+            choices=["recalc-normals", "merge-by-distance"],
+            help="操作: recalc-normals|merge-by-distance",
+        ),
+        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("inside", ParamType.BOOL, help="recalc-normals: 法線を内向きにする"),
+        p("distance", ParamType.FLOAT, help="merge-by-distance: マージ距離（既定 0.0001）"),
+        p("make_single_user", ParamType.BOOL, default=False, help="共有mesh時に単一ユーザ化を許可"),
+    ),
+    mutates=True,
+    stability=Stability.EXPERIMENTAL,
+    required_mode=Mode.OBJECT,
+)
+
 # ---- 逃げ道（既定 off / path 型確認用 / 実装は M11）----
 command(
     "exec-python",

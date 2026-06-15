@@ -43,16 +43,18 @@
 
 > `delete` は削除前の object summary を `backup` として結果に常時含める（即実行・確認フラグなし）。`.blend` への退避バックアップ（`backup.on_overwrite`）は save 依存のため **M9 へ繰越**。`duplicate --count` は 1〜1000（暴走防止の上限・`bli_core.runtime.MAX_DUPLICATE_COUNT`）。
 
-## メッシュ編集（編集モード / bmesh一次）
+## メッシュ編集（bmesh 一次 / 単一 `mesh` コマンド + `--op`）
 | method | params | result | M | H | Mode | St |
 |--------|--------|--------|:-:|:-:|----|:--:|
-| `mesh extrude` | `--targets` `--offset?` `--faces?` | mesh統計 | ✓ | - | ANY | e |
-| `mesh bevel` | `--targets` `--width` `--segments?` | mesh統計 | ✓ | - | ANY | e |
-| `mesh inset` | `--targets` `--thickness` | mesh統計 | ✓ | - | ANY | e |
-| `mesh boolean` | `--targets` `--with` `--op union\|difference\|intersect` | mesh統計 | ✓ | △ | ANY | e |
-| `mesh decimate` | `--targets` `--ratio` | 削減後ポリ数 | ✓ | △ | ANY | e |
-| `mesh recalc-normals` | `--targets` `--inside?` | 法線統計 | ✓ | - | ANY | s |
-| `mesh merge-by-distance` | `--targets` `--distance?` | マージ頂点数 | ✓ | - | ANY | s |
+| `mesh` | `--op <op>` `--targets` `[op別params]` `--make-single-user?` | op 別（法線統計 / マージ頂点数 / mesh統計） | ✓ | △ | OBJECT | e |
+
+`mesh --op`（v1）= `recalc-normals` / `merge-by-distance`（**T7.1 実装済み**）/ `extrude` / `bevel` / `inset` / `boolean` / `decimate`（T7.2–7.3 予定）。
+
+> `mesh`: 操作は `--op`（ENUM）。material/modifier の `--action` と同じ流儀で、op 別 params は schema 上は任意・サーバが op 別に検証する（条件付き必須・無効 param は弾く）。**bmesh 一次**（`from_mesh`→`bmesh.ops`→`to_mesh`・object モードのまま編集＝context 非依存）。mesh データを直接書き換える破壊的操作のため、共有 mesh は `--make-single-user` 必須。非 mesh 型は `E_PRECONDITION`。stability はコマンド単位なので（experimental op を含むため）`mesh` 全体を **experimental** とする（recalc-normals/merge-by-distance 自体は安定だが同一コマンド内）。op 専用 param（`--inside`/`--distance` 等）は schema default を持たない（生成クライアントが既定値を別 op へ誤送信し op 別検証で弾かれるのを防ぐ）。
+>
+> op 別 params（**T7.1 実装済み分**）: `recalc-normals`:`--inside?`（内向き化）→ 結果 `{faces, flipped, inside, stats}`（flipped=この操作で向きが変わった面数）。`merge-by-distance`:`--distance?`（既定 0.0001・0 以上）→ 結果 `{merged, before, after, distance, stats}`。`stats`=`{vertices, edges, polygons}`。fingerprint は mesh 法線込みの専用 `mesh_fingerprint`（頂点数不変の recalc も検出できる）。
+>
+> Mode は当面 OBJECT 固定（bmesh-on-data は OBJECT モードのまま動作・5.0.1/4.4.3 で確認済み）。EDIT モード実機（`ANY`）は L4 で別途。`boolean`/`decimate` は heavy 候補（同期実行・非同期 job は M10）。
 
 ## シナリオ1: 原点変更
 | method | params | result | M | Mode | St |

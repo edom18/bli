@@ -592,6 +592,45 @@ def modifier(
     _rpc("modifier", params, json_out=json_out, port=port, human=human, request_id=request_id)
 
 
+@app.command()
+def mesh(
+    op: str = typer.Option(..., "--op", help="操作: recalc-normals|merge-by-distance"),
+    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    inside: bool = typer.Option(False, "--inside", help="recalc-normals: 法線を内向きに"),
+    distance: float | None = typer.Option(
+        None, "--distance", help="merge-by-distance: マージ距離（既定 0.0001）"
+    ),
+    make_single_user: bool = typer.Option(
+        False, "--make-single-user", help="共有mesh時に単一ユーザ化を許可"
+    ),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """メッシュを編集する（bmesh 一次: 法線再計算 / 距離マージ）。"""
+    params: dict[str, Any] = {"op": op, "targets": targets}
+    # op 専用 param は明示時のみ送る（op 別検証で別 op への誤送信を弾けるよう presence を保つ）。
+    if inside:
+        params["inside"] = True
+    if distance is not None:
+        params["distance"] = distance
+    if make_single_user:
+        params["make_single_user"] = True
+
+    def human(data: dict[str, Any]) -> str:
+        if data.get("op") == "recalc-normals":
+            return (
+                f"{data.get('name')} recalc-normals: faces={data.get('faces')} "
+                f"flipped={data.get('flipped')} inside={data.get('inside')}"
+            )
+        return (
+            f"{data.get('name')} merge-by-distance: merged={data.get('merged')} "
+            f"({data.get('before')}→{data.get('after')})"
+        )
+
+    _rpc("mesh", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
 @app.command("request-status")
 def request_status(
     request_id: str = typer.Option(..., "--id", help="リクエストID(UUIDv4)"),

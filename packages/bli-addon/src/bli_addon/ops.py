@@ -505,6 +505,65 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     return _ok("modifier", data, fingerprint=gateway.modifiers_fingerprint(obj))
 
 
+# op 別に有効な追加パラメータ（これ以外が来たら USER_INPUT で弾く・modifier と同じ流儀）。
+_MESH_OP_PARAMS: dict[str, set[str]] = {
+    "recalc-normals": {"inside"},
+    "merge-by-distance": {"distance"},
+}
+# 全 op 別パラメータの和集合（手書きにせず導出＝op 追加時の追従漏れを防ぐ）。
+_ALL_MESH_OP_PARAMS: set[str] = set().union(*_MESH_OP_PARAMS.values())
+# merge-by-distance の既定マージ距離（Blender 既定と同値・methods.md 準拠）。
+_DEFAULT_MERGE_DISTANCE = 0.0001
+
+
+def _mesh(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("mesh")
+    _validate(cmd, params)
+    op = str(params["op"])
+    present_op_params = {k for k in _ALL_MESH_OP_PARAMS if k in params}
+
+    # op 専用パラメータは当該 op のものだけ許可する（silent ignore せず弾く・bpy 到達前）。
+    extra = present_op_params - _MESH_OP_PARAMS[op]
+    _require_input(
+        not extra,
+        symptom=f"{op} に無効なパラメータ: {sorted(extra)}",
+        remediation=f"{op} で有効な追加パラメータ: {sorted(_MESH_OP_PARAMS[op])}",
+    )
+    if op == "merge-by-distance" and "distance" in params:
+        # 負の距離は remove_doubles で未定義。0 以上を要求する（有限性は schema が担保）。
+        _require_input(
+            float(params["distance"]) >= 0.0,
+            symptom=f"distance は 0 以上で指定してください（指定: {params['distance']}）",
+            remediation="--distance を 0 以上にしてください",
+        )
+
+    from . import bmesh_ops, gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(params["targets"]))
+    # 非 mesh 型（EMPTY/CURVE 等）を INTERNAL でなく E_PRECONDITION で弾く（material と同様）。
+    gateway.require_mesh(obj)
+    # 破壊的（mesh データを直接書き換える）→ 共有 mesh は単一ユーザ化を要求（apply 系と同様）。
+    # 現状の op（recalc/merge）は必ず obj.data を書き換える前提でガードを掛ける。将来 no-op に
+    # なり得る op（例: decimate ratio=1.0）を足す際は、material のように「実書き込み時のみ」
+    # ガードする方式（false-positive な単一ユーザ化を避ける）を検討すること。
+    _guard_shared_mesh(gateway, obj, params)
+
+    if op == "recalc-normals":
+        result = bmesh_ops.recalc_normals(
+            obj, inside=bool(params.get("inside", False)), message="mesh recalc-normals"
+        )
+    else:  # merge-by-distance
+        distance = float(params["distance"]) if "distance" in params else _DEFAULT_MERGE_DISTANCE
+        result = bmesh_ops.merge_by_distance(
+            obj, distance=distance, message="mesh merge-by-distance"
+        )
+    # mesh が変わる → mesh 込みの mesh_fingerprint で drift を示す（recalc は頂点数不変のため
+    # object_fingerprint では検出できない。法線込みの専用 fingerprint を使う。§6e）。
+    data = {"name": obj.name, "op": op, **result}
+    return _ok("mesh", data, fingerprint=gateway.mesh_fingerprint(obj))
+
+
 def _set_origin(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     cmd = _command("set-origin")
     _validate(cmd, params)
@@ -550,6 +609,7 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "delete": _delete,
     "material": _material,
     "modifier": _modifier,
+    "mesh": _mesh,
     "set-origin": _set_origin,
 }
 

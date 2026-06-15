@@ -169,6 +169,30 @@ def test_m6_t64_modifier_discoverable():
     assert schema["properties"]["levels"]["type"] == "integer"
 
 
+def test_m7_t71_mesh_discoverable():
+    # M7 T7.1 の mesh が実装済み一覧に出る + スキーマ（op 別 param に default なし）
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    by_name = {c["name"]: c for c in data["commands"]}
+    assert "mesh" in by_name
+    assert by_name["mesh"]["stability"] == "experimental"  # コマンド単位の experimental
+    schema = json.loads(runner.invoke(app, ["help", "--command", "mesh", "--json"]).output)[
+        "schema"
+    ]
+    assert set(schema["properties"]) == {"op", "targets", "inside", "distance", "make_single_user"}
+    assert set(schema["required"]) == {"op", "targets"}
+    assert schema["properties"]["op"]["enum"] == ["recalc-normals", "merge-by-distance"]
+    # op 専用 param（inside/distance）は schema default を持たない（誤送信を防ぐ・§6e）。
+    assert "default" not in schema["properties"]["inside"]
+    assert "default" not in schema["properties"]["distance"]
+
+
+def test_mesh_bad_op_local_validation():
+    # 不正な --op は送信前ローカル Pydantic 検証で exit 4
+    res = runner.invoke(app, ["mesh", "--op", "bogus", "--targets", "Cube", "--json"])
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
 def test_modifier_bad_action_local_validation():
     res = runner.invoke(app, ["modifier", "--action", "bogus", "--targets", "Cube", "--json"])
     assert res.exit_code == 4
