@@ -1,7 +1,9 @@
-# 次の作業 — M7「メッシュ編集」（bmesh 一次）
+# 次の作業 — M7「メッシュ編集」（bmesh 一次）✅ 完了
 
-最終更新: 2026-06-15 / 前提: **M0–M6 完了 + M7 T7.1 完了（main）+ M7 T7.2 完了（実装・セルフレビュー済み・PR 待ち）**。**次は T7.3（boolean/decimate＝M7 完了）**。
-> まず `.handoff/HANDOFF.md`（全体史 + 規約 + §6e 再利用パターン + **§6f M7 T7.1/T7.2 確定事項**）を読む。出典: `plan.md §4 M7` / `spec.md §メッシュ編集` / `contracts/methods.md §メッシュ編集`。
+> **🎉 M7 完了（T7.1–7.3 全て）。次は M8（3シナリオ中核価値）= `.handoff/NEXT-M8.md` を参照。** 本ファイルは M7 の作業履歴として残す。
+
+最終更新: 2026-06-15 / 状態: **M7 T7.1–7.3 完了**（T7.1/T7.2 main マージ済み・T7.3 boolean/decimate は実装・独立3視点セルフレビュー済み＝PR マージ待ち）。確定事項は `.handoff/HANDOFF.md §6f`。
+> まず `.handoff/HANDOFF.md`（全体史 + 規約 + §6e 再利用パターン + **§6f M7 T7.1–7.3 確定事項**）を読む。出典: `plan.md §4 M7` / `spec.md §メッシュ編集` / `contracts/methods.md §メッシュ編集`。
 
 ## ✅ T7.1–7.2 完了（確定事項・T7.3 も踏襲）
 - **単一 `mesh` コマンド + `--op` ENUM**（material/modifier と一貫・SSOT 1コマンド）。**stability=experimental（コマンド単位）**。op 専用 param は **schema default なし**。
