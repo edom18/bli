@@ -476,11 +476,19 @@ def test_mesh_bad_distance_type_invalid_params():
 
 def test_mesh_make_single_user_not_rejected_as_op_param():
     # make_single_user は共有ガードの knob であり op 専用 param ではない（_ALL_MESH_OP_PARAMS に
-    # 含めない）。両 op で USER_INPUT として弾かれず検証を通過し、bpy/bmesh の遅延 import まで
+    # 含めない）。各 op で USER_INPUT として弾かれず検証を通過し、bpy/bmesh の遅延 import まで
     # 到達する（bpy 不在の pytest では ModuleNotFoundError）。_ALL_MESH_OP_PARAMS 退行ガード。
-    for op in ("recalc-normals", "merge-by-distance"):
+    cases = [
+        {"op": "recalc-normals"},
+        {"op": "merge-by-distance"},
+        {"op": "extrude", "offset": [0.0, 0.0, 1.0]},
+        {"op": "bevel", "width": 0.1},
+        {"op": "inset", "thickness": 0.1},
+    ]
+    for extra in cases:
+        params = {"targets": "Cube", "make_single_user": True, **extra}
         with pytest.raises(ModuleNotFoundError):
-            ops.dispatch("mesh", {"op": op, "targets": "Cube", "make_single_user": True}, INFO)
+            ops.dispatch("mesh", params, INFO)
 
 
 # ---- M7 T7.2 mesh（extrude / bevel / inset）の param 検証（bpy 不要）----
@@ -569,3 +577,23 @@ def test_mesh_inset_negative_thickness_invalid_params():
     assert ei.value.code == RPC_INVALID_PARAMS
     assert ei.value.data is not None
     assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_segments_on_non_bevel_op_invalid_params():
+    # segments は bevel 専用。extrude/inset に渡すと silent ignore せず弾く（cross-op leak ガード）。
+    for extra in ({"op": "extrude", "offset": [0, 0, 1]}, {"op": "inset", "thickness": 0.2}):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("mesh", {"targets": "Cube", "segments": 3, **extra}, INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_nonfinite_width_thickness_server_rejected():
+    # FLOAT（width/thickness）の nan/inf もサーバ側（schema）で弾く。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "bevel", "targets": "Cube", "width": float("inf")}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "inset", "targets": "Cube", "thickness": float("nan")}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS

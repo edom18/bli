@@ -603,9 +603,13 @@ def mesh(
         None, "--distance", help="merge-by-distance: マージ距離（既定 0.0001）"
     ),
     offset: str | None = typer.Option(
-        None, "--offset", help="extrude: 押し出しベクトル x,y,z（mesh ローカル）"
+        None,
+        "--offset",
+        help="extrude: 押し出しベクトル x,y,z（world 空間・move/duplicate と同じ）",
     ),
-    width: float | None = typer.Option(None, "--width", help="bevel: ベベル幅（0以上）"),
+    width: float | None = typer.Option(
+        None, "--width", help="bevel: ベベル幅（ローカル単位・0以上）"
+    ),
     segments: int | None = typer.Option(None, "--segments", help="bevel: 分割数（既定1・1〜100）"),
     thickness: float | None = typer.Option(
         None, "--thickness", help="inset: インセット厚み（0以上）"
@@ -651,12 +655,18 @@ def mesh(
                 f"{data.get('name')} merge-by-distance: merged={data.get('merged')} "
                 f"({data.get('before')}→{data.get('after')})"
             )
-        # extrude / bevel / inset: 追加ジオメトリ量 + 結果統計
-        added = data.get("added") or {}
+        # extrude / bevel / inset: ジオメトリ増減（符号付き）+ 結果統計
+        delta = data.get("delta") or {}
         st = data.get("stats") or {}
+
+        def _signed(n: Any) -> str:
+            return f"{n:+d}" if isinstance(n, int) else str(n)
+
         return (
-            f"{data.get('name')} {op_}: +{added.get('vertices')}v/"
-            f"+{added.get('polygons')}f → {st.get('vertices')}v/{st.get('polygons')}f"
+            f"{data.get('name')} {op_}: "
+            f"{_signed(delta.get('vertices'))}v/{_signed(delta.get('edges'))}e/"
+            f"{_signed(delta.get('polygons'))}f → "
+            f"{st.get('vertices')}v/{st.get('edges')}e/{st.get('polygons')}f"
         )
 
     _rpc("mesh", params, json_out=json_out, port=port, human=human, request_id=request_id)

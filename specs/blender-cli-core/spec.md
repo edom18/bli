@@ -148,7 +148,7 @@ bli mesh --op inset    --targets <name> --thickness <f>              # 全 face 
 bli mesh --op boolean  --targets <name> --with <other> --operation union|difference|intersect
 bli mesh --op decimate --targets <name> --ratio <f>          # 破壊的削減（編集確定）
 ```
-- T7.2 の寸法（offset/width/thickness）は **mesh ローカル空間**（bmesh ネイティブ・v1。world 空間変換は後続）。extrude offset / bevel width / inset thickness は op 別に**必須**（bevel segments は任意・既定1・1〜100 で暴走防止）。選択は v1 では全 geometry（`--faces` 等の高度なセレクタは Deferred）。inset は閉じた mesh の全 face で `inset_region` が no-op のため `inset_individual` を使う。
+- T7.2: `extrude --offset` は **world 空間**ベクトル（move/duplicate と一貫・matrix_world で world→local 変換）。`bevel --width` / `inset --thickness` はスカラ量のため **mesh ローカル単位**。extrude offset / bevel width / inset thickness は op 別に**必須**（bevel segments は任意・既定1・1〜100 で暴走防止）。選択は v1 では全 geometry（`--faces` 等の高度なセレクタは Deferred）。inset は閉じた mesh の全 face で `inset_region` が no-op のため `inset_individual` を使う。結果の `delta` は before→after の符号付き増減（decimate/boolean でも一貫）。
 - mesh データを直接書き換える破壊的操作のため、共有 mesh は `--make-single-user` 必須（apply 系と同じ）。非 mesh 型は `E_PRECONDITION`。
 
 ### シナリオ1: 原点変更

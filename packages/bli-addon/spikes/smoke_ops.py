@@ -198,7 +198,9 @@ def ensure_mesh_fixtures():
         bpy.context.scene.collection.objects.link(shb)
 
     # T7.2: 各 op を clean cube で検証（exact count golden）。
-    _fresh_cube_obj("MeshExtrude")
+    # MeshExtrude は scale=2（world≠local）で extrude offset の world→local 変換を検証する。
+    ext = _fresh_cube_obj("MeshExtrude")
+    ext.scale = (2.0, 2.0, 2.0)
     _fresh_cube_obj("MeshBevel")
     _fresh_cube_obj("MeshInset")
     return flip, dbl, sha
@@ -830,19 +832,25 @@ def run_calls():
     print("mesh_shared_guard_ok")
 
     # 19) mesh（M7 T7.2）: extrude / bevel / inset の exact count golden（clean cube・spike 一致）。
+    # extrude: 先に recalc で clean cube の mesh_fingerprint を取り、extrude で変わることを確認。
+    fp0, _ = call_retry("mesh", {"op": "recalc-normals", "targets": "MeshExtrude"})
     ex, _ = call_retry(
         "mesh", {"op": "extrude", "targets": "MeshExtrude", "offset": [0.0, 0.0, 1.0]}
     )
     assert ex["data"]["op"] == "extrude", ex["data"]
     assert ex["data"]["stats"] == {"vertices": 16, "edges": 24, "polygons": 12}, ex["data"]["stats"]
-    assert ex["data"]["added"]["vertices"] == 8, ex["data"]["added"]
-    assert ex["fingerprint"], ex  # mesh が変わったので fingerprint 返却
-    print("mesh_extrude_ok", ex["data"]["stats"])
+    assert ex["data"]["delta"]["vertices"] == 8, ex["data"]["delta"]
+    assert ex["fingerprint"] != fp0["fingerprint"], (ex["fingerprint"], fp0["fingerprint"])
+    # world 空間 offset 検証: MeshExtrude は scale=2。world (0,0,1) 押し出し → 新シェル top の
+    # world z = 3（local 空間誤実装なら 4 になる）。object-info の world bbox で確認。
+    exi, _ = call_retry("object-info", {"targets": "MeshExtrude"})
+    assert approx([exi["data"]["bbox"]["max"][2]], [3.0], tol=1e-3), exi["data"]["bbox"]
+    print("mesh_extrude_ok", ex["data"]["stats"], "world_max_z=", exi["data"]["bbox"]["max"][2])
 
     bv, _ = call_retry("mesh", {"op": "bevel", "targets": "MeshBevel", "width": 0.2})
     assert bv["data"]["op"] == "bevel" and bv["data"]["segments"] == 1, bv["data"]
     assert bv["data"]["stats"] == {"vertices": 24, "edges": 48, "polygons": 26}, bv["data"]["stats"]
-    assert bv["data"]["added"]["vertices"] == 16, bv["data"]["added"]
+    assert bv["data"]["delta"]["vertices"] == 16, bv["data"]["delta"]
     print("mesh_bevel_ok", bv["data"]["stats"])
 
     ins, _ = call_retry("mesh", {"op": "inset", "targets": "MeshInset", "thickness": 0.2})
@@ -850,7 +858,7 @@ def run_calls():
     assert ins["data"]["stats"] == {"vertices": 32, "edges": 60, "polygons": 30}, ins["data"][
         "stats"
     ]
-    assert ins["data"]["added"]["vertices"] == 24, ins["data"]["added"]
+    assert ins["data"]["delta"]["vertices"] == 24, ins["data"]["delta"]
     print("mesh_inset_ok", ins["data"]["stats"])
 
     # op 別必須/範囲ガード（実機でも USER_INPUT で弾けること）。
