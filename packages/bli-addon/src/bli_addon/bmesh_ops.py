@@ -93,3 +93,74 @@ def merge_by_distance(obj: Any, *, distance: float, message: str | None = None) 
         "distance": distance,
         "stats": mesh_stats(obj),
     }
+
+
+def _stats_delta(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
+    """before→after の頂点/辺/面の増分（追加されたジオメトリ量）。"""
+    return {k: after[k] - before[k] for k in after}
+
+
+def extrude(obj: Any, *, offset: list[float], message: str | None = None) -> dict[str, Any]:
+    """全 face を region として押し出し、新頂点を offset（mesh ローカル）だけ平行移動する。
+
+    extrude_face_region は新ジオメトリを生成するが移動はしないので、戻り 'geom' から新頂点を
+    取り出して translate する。offset は mesh ローカル空間のベクトル（matrix 変換しない・v1）。
+    """
+    before = mesh_stats(obj)
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        ret = bmesh.ops.extrude_face_region(bm, geom=list(bm.faces))
+        new_verts = [g for g in ret["geom"] if isinstance(g, bmesh.types.BMVert)]
+        bmesh.ops.translate(bm, verts=new_verts, vec=tuple(offset))
+        bm.to_mesh(obj.data)
+    finally:
+        bm.free()
+    obj.data.update()
+    after = mesh_stats(obj)
+    if message:
+        push_undo(message)
+    return {"offset": list(offset), "added": _stats_delta(before, after), "stats": after}
+
+
+def bevel(obj: Any, *, width: float, segments: int, message: str | None = None) -> dict[str, Any]:
+    """全 edge をベベルする（affect='EDGES'）。width=オフセット幅（mesh ローカル）・segments=分割数。"""
+    before = mesh_stats(obj)
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        bmesh.ops.bevel(bm, geom=list(bm.edges), offset=width, segments=segments, affect="EDGES")
+        bm.to_mesh(obj.data)
+    finally:
+        bm.free()
+    obj.data.update()
+    after = mesh_stats(obj)
+    if message:
+        push_undo(message)
+    return {
+        "width": width,
+        "segments": segments,
+        "added": _stats_delta(before, after),
+        "stats": after,
+    }
+
+
+def inset(obj: Any, *, thickness: float, message: str | None = None) -> dict[str, Any]:
+    """全 face を個別にインセットする（inset_individual）。
+
+    inset_region は閉じた mesh の全 face 選択だと境界が無く no-op になるため、各面を個別に
+    inset する inset_individual を使う（thickness=インセット厚み・mesh ローカル）。
+    """
+    before = mesh_stats(obj)
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        bmesh.ops.inset_individual(bm, faces=list(bm.faces), thickness=thickness)
+        bm.to_mesh(obj.data)
+    finally:
+        bm.free()
+    obj.data.update()
+    after = mesh_stats(obj)
+    if message:
+        push_undo(message)
+    return {"thickness": thickness, "added": _stats_delta(before, after), "stats": after}

@@ -481,3 +481,91 @@ def test_mesh_make_single_user_not_rejected_as_op_param():
     for op in ("recalc-normals", "merge-by-distance"):
         with pytest.raises(ModuleNotFoundError):
             ops.dispatch("mesh", {"op": op, "targets": "Cube", "make_single_user": True}, INFO)
+
+
+# ---- M7 T7.2 mesh（extrude / bevel / inset）の param 検証（bpy 不要）----
+
+
+def test_mesh_extrude_missing_offset_invalid_params():
+    # extrude は offset 必須（無音 no-op を避ける）→ bpy 到達前に USER_INPUT
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "extrude", "targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_extrude_bad_offset_type_invalid_params():
+    # offset は VEC3（3要素）。要素不足は型エラーで INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "extrude", "targets": "Cube", "offset": [1, 2]}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_mesh_extrude_nonfinite_offset_server_rejected():
+    # nan/inf の offset はサーバ側（schema）で弾く（mesh を壊さない）
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "mesh", {"op": "extrude", "targets": "Cube", "offset": [float("inf"), 0.0, 0.0]}, INFO
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_mesh_extrude_wrong_op_param_invalid_params():
+    # width は bevel 専用。extrude に渡すと弾く（bpy 到達前）
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "mesh", {"op": "extrude", "targets": "Cube", "offset": [0, 0, 1], "width": 0.2}, INFO
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_bevel_missing_width_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "bevel", "targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_bevel_negative_width_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "bevel", "targets": "Cube", "width": -0.1}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_bevel_segments_out_of_range_invalid_params():
+    # segments 上限超過は暴走防止で bpy 到達前に弾く
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "mesh", {"op": "bevel", "targets": "Cube", "width": 0.2, "segments": 1000}, INFO
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_bevel_segments_below_min_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "bevel", "targets": "Cube", "width": 0.2, "segments": 0}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_mesh_inset_missing_thickness_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "inset", "targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_inset_negative_thickness_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "inset", "targets": "Cube", "thickness": -1.0}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"

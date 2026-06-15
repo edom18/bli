@@ -137,19 +137,19 @@ bli <command> [--targets <name|regex>] [options] [--json] [--id <uuid>] [--dry-r
 ### メッシュ編集（bmesh 一次 / 単一 `mesh` コマンド + `--op`）
 - **bmesh-on-data** を基本とする（`from_mesh`→`bmesh.ops`→`to_mesh`・**OBJECT モードのまま** mesh データを編集＝`bpy.ops` の context 依存を回避。5.0.1/4.4.3 で確認済み）。当面 Mode=OBJECT（EDIT モード実機は L4）。
 - material/modifier と同じく **単一 `mesh` コマンド + `--op` ENUM**（操作ごとに別コマンドにはしない）。op 別 params は schema 上は任意・サーバが op 別に検証する（条件付き必須・無効 param は弾く・op 専用 param は schema default を持たせない）。stability はコマンド単位なので（experimental op を含むため）`mesh` 全体を experimental とする。
-- v1 の op（**T7.1 実装済み**: recalc-normals / merge-by-distance / **T7.2–7.3 予定**: extrude / bevel / inset / boolean / decimate）:
+- v1 の op（**T7.1–7.2 実装済み**: recalc-normals / merge-by-distance / extrude / bevel / inset / **T7.3 予定**: boolean / decimate）:
 ```
 bli mesh --op recalc-normals     --targets <name> [--inside]
 bli mesh --op merge-by-distance  --targets <name> [--distance <f>]   # 既定 0.0001・0 以上
-# 以下 T7.2–7.3 で追加予定
-bli mesh --op extrude  --targets <name> [--offset x,y,z] [--faces <selector>]
-bli mesh --op bevel    --targets <name> --width <f> [--segments N]
-bli mesh --op inset    --targets <name> --thickness <f>
+bli mesh --op extrude  --targets <name> --offset x,y,z               # 全 face を region 押し出し
+bli mesh --op bevel    --targets <name> --width <f> [--segments N]   # 全 edge を bevel（既定 seg=1）
+bli mesh --op inset    --targets <name> --thickness <f>              # 全 face を個別 inset
+# 以下 T7.3 で追加予定
 bli mesh --op boolean  --targets <name> --with <other> --operation union|difference|intersect
 bli mesh --op decimate --targets <name> --ratio <f>          # 破壊的削減（編集確定）
 ```
+- T7.2 の寸法（offset/width/thickness）は **mesh ローカル空間**（bmesh ネイティブ・v1。world 空間変換は後続）。extrude offset / bevel width / inset thickness は op 別に**必須**（bevel segments は任意・既定1・1〜100 で暴走防止）。選択は v1 では全 geometry（`--faces` 等の高度なセレクタは Deferred）。inset は閉じた mesh の全 face で `inset_region` が no-op のため `inset_individual` を使う。
 - mesh データを直接書き換える破壊的操作のため、共有 mesh は `--make-single-user` 必須（apply 系と同じ）。非 mesh 型は `E_PRECONDITION`。
-- 選択（`--faces`/頂点グループ等）の指定子は v1で最小限の表現に絞る（Deferred: 高度なセレクタ）。
 
 ### シナリオ1: 原点変更
 ```
