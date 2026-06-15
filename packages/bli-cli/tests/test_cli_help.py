@@ -250,6 +250,29 @@ def test_m8_straighten_discoverable():
     assert schema["properties"]["up_axis"]["default"] == "+Z"
 
 
+def test_m8_print_setup_discoverable():
+    # M8 T8.3 の print-setup が実装済み一覧に出る + スキーマ（stable・unit ENUM 既定 mm）
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    by_name = {c["name"]: c for c in data["commands"]}
+    assert "print-setup" in by_name
+    assert by_name["print-setup"]["stability"] == "stable"  # 3シナリオは全 stable（DoD）
+    assert by_name["print-setup"]["mutates"] is True
+    schema = json.loads(runner.invoke(app, ["help", "--command", "print-setup", "--json"]).output)[
+        "schema"
+    ]
+    assert set(schema["properties"]) == {"unit", "scene"}
+    assert "required" not in schema  # unit は default あり・scene は任意
+    assert schema["properties"]["unit"]["enum"] == ["mm", "m"]
+    assert schema["properties"]["unit"]["default"] == "mm"
+
+
+def test_print_setup_bad_unit_local_validation():
+    # 不正な --unit は送信前ローカル Pydantic 検証で exit 4
+    res = runner.invoke(app, ["print-setup", "--unit", "inch", "--json"])
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
 def test_straighten_bad_method_local_validation():
     # 不正な --method は送信前ローカル Pydantic 検証で exit 4
     res = runner.invoke(app, ["straighten", "--targets", "Cube", "--method", "bogus", "--json"])

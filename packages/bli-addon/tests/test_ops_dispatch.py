@@ -755,3 +755,34 @@ def test_straighten_valid_params_reach_bpy():
     for extra in cases:
         with pytest.raises(ModuleNotFoundError):
             ops.dispatch("straighten", {"targets": "Cube", **extra}, INFO)
+
+
+# ---- M8 T8.3 print-setup（単位設定）の param 検証（bpy 不要）----
+
+
+def test_print_setup_bad_unit_invalid_params():
+    # unit は ENUM(mm|m)。範囲外は schema 検証で INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-setup", {"unit": "inch"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_setup_unknown_param_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-setup", {"unit": "mm", "bogus": 1}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_setup_bad_scene_type_invalid_params():
+    # scene は STR。非文字列は型エラーで INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-setup", {"unit": "mm", "scene": 123}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_setup_valid_params_reach_bpy():
+    # unit 省略（既定 mm）/ mm / m / scene 指定の妥当な params は検証を通過し bpy 遅延 import まで
+    # 到達する（bpy 不在の pytest では ModuleNotFoundError）。退行ガード。
+    for params in ({}, {"unit": "mm"}, {"unit": "m"}, {"unit": "mm", "scene": "Scene"}):
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("print-setup", params, INFO)
