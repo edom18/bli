@@ -202,30 +202,49 @@ command(
     required_mode=Mode.OBJECT,
 )
 
-# ---- メッシュ編集（bmesh 一次 / M7 T7.1）----
+# ---- メッシュ編集（bmesh 一次 / M7 T7.1–7.3）----
 command(
     "mesh",
-    "メッシュを編集する（bmesh 一次・op 別: 法線再計算 / 距離マージ / 押し出し / ベベル / インセット）",
+    "メッシュを編集する（op 別: 法線再計算 / 距離マージ / 押し出し / ベベル / インセット / ブール / デシメート）",
     # op により有効/必須 param が変わる（条件付き）。schema は op 非依存で任意にし、
     # ops 側で op 別に検証する（material/modifier と同じ流儀）。op 専用 param（inside/
-    # distance）は schema default を持たせない（持たせると生成クライアントが既定値を埋めて
-    # 別 op へ誤送信し op 別検証で弾かれるため。§6e の presence-sensitive 方針の一般化）。
+    # distance/offset/width/segments/thickness/operation/with_object/ratio）は schema
+    # default を持たせない（持たせると生成クライアントが既定値を埋めて別 op へ誤送信し
+    # op 別検証で弾かれるため。§6e の presence-sensitive 方針の一般化）。
     params=(
         p(
             "op",
             ParamType.ENUM,
             required=True,
-            choices=["recalc-normals", "merge-by-distance", "extrude", "bevel", "inset"],
-            help="操作: recalc-normals|merge-by-distance|extrude|bevel|inset",
+            choices=[
+                "recalc-normals",
+                "merge-by-distance",
+                "extrude",
+                "bevel",
+                "inset",
+                "boolean",
+                "decimate",
+            ],
+            help="操作: recalc-normals|merge-by-distance|extrude|bevel|inset|boolean|decimate",
         ),
         p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
         p("inside", ParamType.BOOL, help="recalc-normals: 法線を内向きにする"),
         p("distance", ParamType.FLOAT, help="merge-by-distance: マージ距離（既定 0.0001）"),
-        # T7.2（extrude/bevel/inset）の寸法は mesh ローカル空間。op 別に必須（ops で検証）。
-        p("offset", ParamType.VEC3, help="extrude: 押し出しベクトル x,y,z（ローカル・必須）"),
+        # T7.2: extrude offset は world 空間 / bevel width・inset thickness はスカラで mesh ローカル
+        # 単位。いずれも op 別に必須（ops で検証）。
+        p("offset", ParamType.VEC3, help="extrude: 押し出しベクトル x,y,z（world・必須）"),
         p("width", ParamType.FLOAT, help="bevel: ベベル幅（ローカル・必須・0以上）"),
         p("segments", ParamType.INT, help="bevel: 分割数（既定1・1〜100）"),
         p("thickness", ParamType.FLOAT, help="inset: インセット厚み（ローカル・必須・0以上）"),
+        # T7.3（boolean/decimate）: bmesh に無いため modifier add+apply 経由（ops で検証）。
+        p(
+            "operation",
+            ParamType.ENUM,
+            choices=["UNION", "DIFFERENCE", "INTERSECT"],
+            help="boolean: 演算（必須）",
+        ),
+        p("with_object", ParamType.STR, help="boolean: 相手 mesh オブジェクト名（必須）"),
+        p("ratio", ParamType.FLOAT, help="decimate: 削減比率 0..1（必須）"),
         p("make_single_user", ParamType.BOOL, default=False, help="共有mesh時に単一ユーザ化を許可"),
     ),
     mutates=True,

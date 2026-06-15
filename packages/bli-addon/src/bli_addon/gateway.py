@@ -885,3 +885,74 @@ def mesh_fingerprint(obj: Any) -> str:
         norms.update(f"{n.x + 0.0:.4f},{n.y + 0.0:.4f},{n.z + 0.0:.4f};".encode())
     # 幾何カウントは mesh_stats を単一の真実とする（重複定義のドリフトを防ぐ）。
     return _digest16({**mesh_stats(obj), "normals": norms.hexdigest()[:16]})
+
+
+def stats_delta(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
+    """before→after の頂点/辺/面の増減（符号付き＝追加は正・削減は負）。
+
+    extrude/bevel/inset（追加）も decimate/boolean（削減もあり得る）も同じ符号付き表現で
+    返せるよう中立な「delta」にする（mesh_stats を持つ gateway に集約し bmesh_ops と共有）。
+    """
+    return {k: after[k] - before[k] for k in after}
+
+
+# ---- メッシュ編集 heavy（M7 T7.3 / bmesh に boolean/decimate が無く modifier add+apply 経由）----
+#
+# boolean / decimate は bmesh.ops に相当が無い（スパイク E3 で両版 False を確認）。既存の
+# add_modifier（型別プロパティ設定 + 非対応型の RuntimeError→E_PRECONDITION 変換）と apply_modifier
+# （run_operator 経由・生 bpy.ops は gateway のみ＝AST guard 準拠）を**再利用**して mesh へ焼き込む。
+# 共有 mesh の単一ユーザ化ガードは呼び出し側（ops._guard_shared_mesh）が行う。結果は T7.2 と同じ
+# `{<param>, delta, stats}`（stats=編集後 / delta=符号付き増減）。
+#
+# boolean/decimate は対象を**空/退化 mesh にし得る**（INTERSECT で非重複・decimate ratio→0 等）。
+# success は operator 完了を表し幾何的健全性は保証しない（呼び出し側は stats/delta で確認できる）。
+
+
+def _add_then_apply(obj: Any, mod_type: str, message: str | None, **props: Any) -> None:
+    """モディファイアを追加して即適用する（add_modifier+apply_modifier を再利用・アトミック）。
+
+    apply が失敗したら追加したモディファイアを撤去してから再送出する（中途状態でゴミの
+    モディファイアを残さない）。undo 境界は apply（run_operator）が1つだけ作る（add は無 undo）。
+    """
+    summary = add_modifier(obj, mod_type, **props)  # message なし＝add では undo push しない
+    name = summary["name"]
+    try:
+        apply_modifier(obj, name, message=message)
+    except BaseException:
+        leftover = obj.modifiers.get(name)
+        if leftover is not None:
+            obj.modifiers.remove(leftover)
+        raise
+
+
+def mesh_decimate(obj: Any, *, ratio: float, message: str | None = None) -> dict[str, Any]:
+    """DECIMATE モディファイア（COLLAPSE・ratio）を追加して即適用し、ポリゴンを削減する。
+
+    bmesh に decimate 相当が無いため modifier 経由（add+apply）にフォールバックする（研究 §E3・
+    decimate_type 既定は両版とも COLLAPSE）。ratio=1.0 は無削減（delta 0）だが modifier_apply は
+    mesh を焼き直す（破壊的書き込み＝共有 mesh は単一ユーザ化が必要）。
+    """
+    before = mesh_stats(obj)
+    _add_then_apply(obj, "DECIMATE", message, ratio=ratio)
+    after = mesh_stats(obj)
+    return {"ratio": ratio, "delta": stats_delta(before, after), "stats": after}
+
+
+def mesh_boolean(
+    obj: Any, operand: Any, *, operation: str, message: str | None = None
+) -> dict[str, Any]:
+    """BOOLEAN モディファイア（operand を相手・operation）を追加して即適用する。
+
+    bmesh に boolean が無いため modifier 経由（add+apply・solver は既定 EXACT）。operand の
+    **world 位置は Blender が両者の matrix_world から解決**するため手動 world→local 変換は不要
+    （extrude と異なる。研究 §E3）。operand 自体は read-only（編集されない）。
+    """
+    before = mesh_stats(obj)
+    _add_then_apply(obj, "BOOLEAN", message, operation=operation, operand=operand)
+    after = mesh_stats(obj)
+    return {
+        "operation": operation,
+        "with_object": operand.name,
+        "delta": stats_delta(before, after),
+        "stats": after,
+    }
