@@ -244,6 +244,8 @@ def ensure_straighten_fixtures():
     - StrFloor: cube を z=5 に浮かせる（floor で最下点 z→0 へ接地）。
     - StrBake : cube を Z 周り 45° yaw（world-align axis=Z は no-op→bake で mesh へ焼き込み・
                 回転 0 化しても world bbox=見た目は不変）。
+    - StrFloorY: cube を y=5 に浮かせる（floor --up-axis +Y で最下点 y→0・up≠+Z の一般性）。
+    - StrAlignY: 無回転 cube（world-align axis=Z --up-axis +Y で localZ→+Y・up≠+Z の一般性）。
     - StrShA/StrShB: 同一 cube mesh を共有（StrShA は 30° yaw）。bake の共有 mesh ガード検証用。
     いずれも MESH なので list-objects(MESH) golden に加える。
     """
@@ -267,6 +269,9 @@ def ensure_straighten_fixtures():
     floor.location = (0.0, 0.0, 5.0)
     bake = _fresh_cube_obj("StrBake")
     bake.rotation_euler = (0.0, 0.0, math.radians(45))  # yaw（local Z は up のまま）
+    floor_y = _fresh_cube_obj("StrFloorY")
+    floor_y.location = (0.0, 5.0, 0.0)  # +Y 方向に浮かせる（floor --up-axis +Y）
+    _fresh_cube_obj("StrAlignY")  # 無回転（world-align axis=Z --up-axis +Y で localZ→+Y）
 
     # StrPCA: Z に細長い rod（+Z 端に重複頂点で重心を偏らせる）を tilt して主成分復元を検証。
     if "StrPCA" not in bpy.data.objects:
@@ -397,10 +402,12 @@ def run_calls():
         "StrPCA",
         "StrFloor",
         "StrBake",
+        "StrFloorY",
+        "StrAlignY",
         "StrShA",
         "StrShB",
     }, lo_names
-    assert lo["data"]["count"] == 28, lo["data"]
+    assert lo["data"]["count"] == 30, lo["data"]
     lo2, _ = call_retry("list-objects", {"regex": "^Cu"})
     assert [o["name"] for o in lo2["data"]["objects"]] == ["Cube"], lo2["data"]
     print("list_objects_ok mesh=", sorted(lo_names))
@@ -1140,6 +1147,22 @@ def run_calls():
     print(
         "straighten_floor_ok min_up=", fl["data"]["min_up"], "offset=", fl["data"]["floor_offset"]
     )
+
+    # up≠+Z の一般性: floor --up-axis +Y で y=5 の cube が y=0 に接地する（_floor が任意 up 対応）。
+    fly, _ = call_retry("straighten", {"targets": "StrFloorY", "method": "floor", "up_axis": "+Y"})
+    assert approx([fly["data"]["min_up"]], [0.0], tol=1e-4), fly["data"]["min_up"]
+    fyi, _ = call_retry("object-info", {"targets": "StrFloorY"})
+    assert approx([fyi["data"]["bbox"]["min"][1]], [0.0], tol=1e-3), fyi["data"]["bbox"]  # y 接地
+    print("straighten_floor_upY_ok min_up=", fly["data"]["min_up"])
+
+    # up≠+Z の一般性: world-align axis=Z --up-axis +Y → 無回転 cube の localZ を +Y へ整列。
+    way, _ = call_retry(
+        "straighten",
+        {"targets": "StrAlignY", "method": "world-align", "axis": "Z", "up_axis": "+Y"},
+    )
+    assert way["data"]["up_axis"] == "+Y", way["data"]
+    assert approx(way["data"]["aligned_world"], [0.0, 1.0, 0.0]), way["data"]["aligned_world"]
+    print("straighten_world_align_upY_ok aligned=", way["data"]["aligned_world"])
 
     # bake-rotation: 45° yaw の cube。world-align axis=Z は localZ が既に +Z で no-op だが、
     # --bake-rotation で現在の回転を mesh へ焼き込む → 回転 0 化・world bbox（見た目）は不変。

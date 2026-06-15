@@ -983,6 +983,10 @@ _LOCAL_AXIS_UNIT: dict[str, tuple[float, float, float]] = {
 }
 # pca: この値以下の最大固有値（分散）は主成分を決められない（点が一致/直線退化）。
 _PCA_MIN_VARIANCE = 1e-12
+# pca: 原点→重心 の射影がこの閾値以下なら符号が不定（中心対称）→ 正準符号でtie-break。
+_PCA_SIGN_EPS = 1e-9
+# rotation_difference が anti-parallel（真逆）で軸不定になる閾値。
+_ANTIPARALLEL_EPS = 1e-9
 
 
 def require_geometry(obj: Any) -> None:
@@ -1030,6 +1034,31 @@ def _apply_world_rotation(obj: Any, delta_quat: Any) -> None:
     obj.matrix_world = Matrix.LocRotScale(loc, delta_quat @ rot, scale)
 
 
+def _rotation_to(cur: Any, target: Any) -> Any:
+    """cur を target へ重ねる最小回転 quaternion（anti-parallel を決定的に扱う）。
+
+    `Vector.rotation_difference` は cur と target が **真逆**のとき軸が不定（垂直な任意軸まわり
+    180°）で版/数値依存に揺れる。整列軸（cur→target）は乗るが直交2軸（見た目の向き）が
+    非決定になり golden/fingerprint がぶれる。anti-parallel を検出したら target に直交する
+    **固定の**軸まわり 180° を返して決定化する。
+    """
+    from mathutils import Quaternion, Vector  # type: ignore  # lazy: bpy 依存
+
+    if cur.dot(target) < -1.0 + _ANTIPARALLEL_EPS:
+        # target と平行でない決定的な基準ベクトルとの外積で垂直軸を作る。
+        ref = Vector((1.0, 0.0, 0.0)) if abs(target.x) < 0.9 else Vector((0.0, 1.0, 0.0))
+        perp = target.cross(ref).normalized()
+        return Quaternion(perp, math.pi)
+    return cur.rotation_difference(target)
+
+
+def _min_up_projection(obj: Any, up: Any) -> float:
+    """bbox 8隅を up 方向へ射影した最小値（floor の接地量と min_up 報告の単一窓口・DRY）。"""
+    from mathutils import Vector  # type: ignore  # lazy: bpy 依存
+
+    return min((obj.matrix_world @ Vector(c)).dot(up) for c in obj.bound_box)
+
+
 def _world_align(obj: Any, up: Any, axis: str | None) -> str:
     """指定（または up に最も近い）local 軸を up へ最小回転で合わせ、合わせた signed 軸を返す。
 
@@ -1056,9 +1085,10 @@ def _world_align(obj: Any, up: Any, axis: str | None) -> str:
                 d = wd.dot(up)
                 if best is None or d > best[0]:
                     best = (d, wd, sign + letter)
-        assert best is not None  # 3軸×2符号で必ず確定
+        if best is None:  # 3軸×2符号で必ず確定（防御・-O でも安全に）
+            raise _op_error(ErrorCode.E_PRECONDITION, "world-align の軸を決定できません")
         _, cur, chosen = best
-    _apply_world_rotation(obj, cur.rotation_difference(up))
+    _apply_world_rotation(obj, _rotation_to(cur, up))
     return chosen
 
 
@@ -1100,17 +1130,25 @@ def _principal_axis(obj: Any) -> tuple[Any, list[float]]:
             "頂点分布に広がりが無く主成分を決定できません（pca には立体的な mesh が必要）",
         )
     principal = Vector((float(eigvecs[0, 2]), float(eigvecs[1, 2]), float(eigvecs[2, 2])))
-    if (Vector((cx, cy, cz)) - mw.translation).dot(principal) < 0.0:
+    # 符号一意化: 原点→重心 方向に揃える（重心が偏る側を +）。重心が原点に一致（中心対称・
+    # 射影 ≈ 0）の退化時は符号が不定になるため、主成分の最大成分を正にする正準符号で tie-break
+    # する（決定的・5.0/4.4 同値を保つ）。
+    offset = (Vector((cx, cy, cz)) - mw.translation).dot(principal)
+    if offset < -_PCA_SIGN_EPS:
         principal = -principal
+    elif abs(offset) <= _PCA_SIGN_EPS:
+        comps = (principal.x, principal.y, principal.z)
+        dominant = max(range(3), key=lambda i: abs(comps[i]))
+        if comps[dominant] < 0.0:
+            principal = -principal
     return principal.normalized(), [round(float(x), 8) for x in eigvals]
 
 
 def _floor(obj: Any, up: Any) -> list[float]:
     """up 方向の最下点を up=0 平面へ接地する（平行移動のみ）。適用した world 移動量を返す。"""
-    from mathutils import Matrix, Vector  # type: ignore
+    from mathutils import Matrix  # type: ignore
 
-    min_proj = min((obj.matrix_world @ Vector(c)).dot(up) for c in obj.bound_box)
-    shift = -min_proj * up
+    shift = -_min_up_projection(obj, up) * up
     obj.matrix_world = Matrix.Translation(shift) @ obj.matrix_world
     return [round(shift.x, 6), round(shift.y, 6), round(shift.z, 6)]
 
@@ -1141,7 +1179,7 @@ def straighten_object(
         data["axis"] = _world_align(obj, up, axis)
     elif method == "pca":
         principal, eigvals = _principal_axis(obj)
-        delta = principal.rotation_difference(up)
+        delta = _rotation_to(principal, up)
         _apply_world_rotation(obj, delta)
         data["eigenvalues"] = eigvals
         data["principal_world"] = [round(v, 6) for v in principal]
@@ -1158,8 +1196,6 @@ def straighten_object(
     data["rotation_euler_deg"] = _rotation_euler_deg(obj)
     if method == "world-align":  # 合わせた軸の world 方向（≈ up・DoD の整列 golden）
         data["aligned_world"] = [round(v, 6) for v in _local_axis_world(obj, data["axis"])]
-    if world_bbox(obj) is not None:  # up 方向の最下点（floor 後は ≈0）
-        data["min_up"] = round(
-            min((obj.matrix_world @ Vector(c)).dot(up) for c in obj.bound_box), 6
-        )
+    if world_bbox(obj) is not None:  # up 方向の最下点（bbox があれば常時・floor 後は ≈0）
+        data["min_up"] = round(_min_up_projection(obj, up), 6)
     return data

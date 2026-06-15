@@ -359,7 +359,9 @@ def straighten(
     make_single_user: bool = typer.Option(
         False, "--make-single-user", help="bake時に共有mesh単一ユーザ化を許可"
     ),
-    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    request_id: str | None = typer.Option(
+        None, "--id", help="リクエストID(UUIDv4)。冪等リトライで同一IDを再利用する"
+    ),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:

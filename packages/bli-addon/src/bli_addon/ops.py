@@ -745,9 +745,12 @@ def _straighten(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         data["rotation_euler_deg"] = baked["rotation_euler_deg"]
     else:
         data["baked"] = False
-    # straighten は object transform（floor は平行移動 / 他は回転 / bake は mesh も）を変える。
-    # bbox 込みの object_fingerprint で drift を示す（set-origin/transform と同流儀）。
-    return _ok("straighten", data, fingerprint=gateway.object_fingerprint(obj))
+    # fingerprint は操作の本質に合わせる（§6e）。bake は回転を mesh データへ焼き込む（頂点座標が
+    # 変わる）→ 法線込みの mesh_fingerprint で頂点数不変でも幾何変化を検出する（mesh 編集系と一貫・
+    # require_mesh 通過後で MESH 限定が保証される）。非 bake は object transform のみ → bbox 込みの
+    # object_fingerprint（set-origin/transform と同流儀）。
+    fp = gateway.mesh_fingerprint(obj) if bake else gateway.object_fingerprint(obj)
+    return _ok("straighten", data, fingerprint=fp)
 
 
 _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]] = {
