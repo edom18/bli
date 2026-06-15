@@ -24,6 +24,8 @@
 | `list-objects` | `--type?` `--regex?` | フィルタ済み一覧 | - | - | OBJECT | s |
 | `object-info` | `--targets` | 寸法/頂点数/transform/bbox/材質/modifier | - | - | OBJECT | s |
 
+> **`dimensions` と `bbox.size` の違い**（紛らわしいので明記）: `dimensions` は **オブジェクト固有サイズ**（`obj.dimensions`・scale 反映・**回転不変**）。`bbox.size` は **world AABB**（`matrix_world @ bound_box` の軸並行境界・**回転すると変化**）。傾いた物体では両者は一致しない。`--targets` は `--target`（単数）も別名で受け付ける。
+
 ## 汎用編集（オブジェクト操作）
 | method | params | result | M | H | Mode | St |
 |--------|--------|--------|:-:|:-:|----|:--:|
