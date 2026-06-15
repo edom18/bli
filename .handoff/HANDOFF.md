@@ -1,6 +1,6 @@
 # bli (Blender CLI) — 引き継ぎ資料 (HANDOFF)
 
-最終更新: 2026-06-15 / 状態: **PR #1–#8（M0–M6 + M7 T7.1/T7.2）マージ済み。M7 T7.3（mesh: boolean/decimate）は実装完了・独立3視点セルフレビュー済み＝PR 作成/マージ待ち＝これで M7 完了。次は M8（3シナリオ中核価値）を `.handoff/NEXT-M8.md` 参照で着手**。
+最終更新: 2026-06-15 / 状態: **PR #1–#9（M0–M7 全完了）マージ済み（origin/main）。M8（3シナリオ中核価値）着手中: T8.1 set-origin は M3 実装済み（S1 golden 緑）/ T8.2 straighten（直立補正）実装完了・独立3視点セルフレビュー済み＝feature/m8-straighten で PR 作成/マージ待ち。次は T8.3 print-setup（`.handoff/NEXT-M8.md` 参照）**。
 
 > 新規セッションはこの1枚を読めば再開できる。詳細は `specs/blender-cli-core/` を参照。
 > **次の作業（M6）の着手手順とタスクは `.handoff/NEXT-M6.md` を参照**（このファイルは全体史 + 規約）。
@@ -62,10 +62,11 @@
 | **M4 CLI骨格 & 診断コマンド**（Pydanticラッパ/help/list-commands/request-status/--id） | ✅ | pytest 79件 + parity緑 + 実機 request-status OK |
 | **M5 情報取得**（list-objects / object-info bbox / scene-info の output_ref 退避） | ✅ main（PR #2） | pytest 95 + 5.0/4.4 実機 smoke OK |
 | **M6 汎用編集**（select/transform/apply-transform・duplicate/delete・material・modifier） | ✅ main（PR #6 で M6 完了） | pytest 151 + 5.0/4.4 実機 smoke OK |
-| **M7 メッシュ編集**（mesh --op: bmesh一次 + heavy modifier 経由） | ✅ T7.1（recalc/merge）/ T7.2（extrude/bevel/inset）main / T7.3（boolean/decimate）実装完了・セルフレビュー済み・PR待ち＝**M7 完了** | pytest 184 + 5.0/4.4 実機 smoke OK |
-| M8–M14 | 未着手（次は M8 3シナリオ中核価値 / NEXT-M8.md） | — |
+| **M7 メッシュ編集**（mesh --op: bmesh一次 + heavy modifier 経由） | ✅ main（PR #9 で T7.1–7.3 完了＝**M7 完了**） | pytest 184 + 5.0/4.4 実機 smoke OK |
+| **M8 3シナリオ中核価値**（set-origin / straighten / print-*） | 🔶 進行中: T8.1 set-origin ✅（M3 実装・S1 golden）/ T8.2 straighten ✅（PR待ち）/ T8.3–8.5 print-* 未着手 | pytest 195 + 5.0/4.4 実機 smoke OK |
+| M9–M14 | 未着手（M8 完了後は M9 ファイルI/O / NEXT-M9.md） | — |
 
-**状態（feature/m7-mesh-heavy・M7 T7.3 まで）: `uv run pytest` = 184 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright は既存1件のみ（`bli/main.py:101` の narrowing・実行時安全）。main は 176 passed（M7 T7.2 まで）。**
+**状態（feature/m8-straighten・M8 T8.2 まで）: `uv run pytest` = 195 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright は既存1件のみ（`bli/main.py:101` の narrowing・実行時安全）。main は 184 passed（M7 完了）。**
 
 > PR #1 の Codex レビュー対応で M4 を追補（§6b 参照）: ①request-status のロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（settle）③発見系を implemented 済みに限定 ④サーバ/クライアントのタイムアウト整合（DISPATCH_TIMEOUT < CLIENT_READ_TIMEOUT）⑤TIMEOUT 時に request id を提示。
 
@@ -184,6 +185,17 @@ M7 も7操作と大きいため **サブPR分割**（T7.1 stable → T7.2 experi
 - `ops._mesh`: `_MESH_OP_PARAMS` に boolean:{operation,with_object} / decimate:{ratio} 追加。boolean operand は `_resolve_boolean_operand`（mesh boolean と modifier BOOLEAN add の共有ヘルパ＝二重定義廃止）で **共有ガード前**に解決・自己参照/非mesh 検証。実行分岐の終端 else は到達不能ガード（新 op 分岐漏れ検出）。
 - **テスト/検証**: pytest=184。独立3視点セルフレビュー（Codex 上限の代替）で P1（operand 検証二重化 → 共有ヘルパ抽出）+ P2/P3（add_modifier 再利用・add/apply アトミック化・`with`→`with_object` 改名・終端 else 防御・UNION/ratio=1.0/共有ガード/存在しない operand の smoke 追加・退化 mesh 注記）を解消。smoke に boolean UNION/INTERSECT/DIFFERENCE の world bbox golden（solver 非依存）+ decimate ico 80f→40f + ratio=1.0 no-op + 共有ガード。5.0.1/4.4.3 実機 OPS SMOKE OK（両版同値）。
 - **繰越（M8 以降で検討）**: `_mesh` の op 別検証 `elif` 連鎖（7 op に到達）→ 8 op 目を足すなら per-op validator + executor のテーブル化（設計 P3・現状は `_ALL_MESH_OP_PARAMS` 導出 + cross-op leak ガードで追従漏れは弾けるため許容）。boolean/decimate の「対象に他 modifier がある場合は焼き込まれる」前提は v1 未保証（methods.md 注記済み）。
+
+## 6g. M8 3シナリオ中核価値（進行中）
+M8 はサブPR分割（NEXT-M8.md）。順序: T8.2 straighten → T8.3 print-setup → T8.4 print-check/repair → T8.5 print-export。**T8.1 set-origin は M3 実装済み**（S1 golden 緑＝新規実装不要）。
+
+### T8.2 完了 🔶（実装・独立3視点セルフレビュー済み・PR 待ち）— straighten（直立補正・シナリオ2）
+- **判断（キックオフ確定）**: ①対象は単一（`require_single`・set-origin と対称）②world-align の `--axis` 省略時は up に最も近い signed local 軸を自動選択（spec『最も近い主軸』）③`--bake-rotation` の mesh 焼き込みは共有 mesh で `--make-single-user` 必須（straighten に make_single_user param を追加・methods.md/spec 追記）。3シナリオは全 stable（DoD）。
+- **着手前スパイク**（`spikes/straighten_spike.py`・research.md §E4）で 5.0.1/4.4.3 確認: mathutils `Matrix.LocRotScale`/`Vector.rotation_difference`/`matrix_world.decompose` と **numpy 1.26.4（`linalg.eigh`）が両版同梱**。**落とし穴**: background では rotation 直接設定後 `matrix_world` が stale → 読み取り前に `bpy.context.view_layer.update()` 必須（実装も冒頭/補正後に呼ぶ）。
+- `gateway.py`: `straighten_object`（reset=回転 identity / world-align=signed local 軸を up へ最小回転・axis 省略時は最近軸自動 / pca=共分散→numpy eigh の最大分散軸を up へ・符号は原点→重心方向で一意化 / floor=up 方向最下点を接地）。`_rotation_to`（anti-parallel を固定軸 180° で決定化）/ `_min_up_projection`（floor と min_up 報告の単一窓口・DRY）/ `_apply_world_rotation`（decompose→LocRotScale で loc/scale 保持）/ `require_geometry`（floor 用）。**reset/world-align/pca は object 回転のみ・floor は平行移動のみで mesh 非破壊（共有 mesh でも安全）**。numpy は `_principal_axis` 内 lazy import に局所化。
+- `ops._straighten`: `--axis` は world-align 専用（他 method は USER_INPUT）。pca=require_mesh / floor=require_geometry。`--bake-rotation` は **補正より前**に require_mesh + 共有ガード（失敗時に obj を回転させない）→ straighten_object → `apply_transform(rotation)` で焼き込み（apply 経路再利用）。fingerprint は **非 bake=object_fingerprint / bake=mesh_fingerprint**（§6e）。
+- **テスト/検証**: pytest=195。独立3視点セルフレビュー（P1 無し）で P2 群解消（floor 最小射影の DRY 集約 / rotation_difference anti-parallel の決定化 / pca 中心対称符号の正準 tie-break / bake は mesh_fingerprint / up≠+Z の golden 追加）。smoke に world-align(explicit/auto/+Y)/reset/pca/floor(+Z/+Y)/bake(見た目不変)/共有ガード(bake のみ・非 bake は安全)/前提ガードの golden。5.0.1/4.4.3 実機 OPS SMOKE OK（両版同値）。
+- **繰越（v1 未保証・methods.md 注記済み）**: 親付き対象 / 非一様・シアスケール下の整列精度（matrix_world 回転成分で近似）/ 中心対称 mesh の pca 符号（正準 tie-break で決定化済み）/ 複合 tilt の up 周り yaw 残留（最小回転のため向き不保証）。`straighten_object` の実行分岐と report 分岐の二重化は method 追加時にテーブル化検討（設計 P3）。
 
 ## 6e. M6 で確立した再利用パターン（T6.2 以降で踏襲）
 - **破壊的 mesh 操作は共有ガード**: `ops._guard_shared_mesh(gateway, obj, params)` を呼ぶ（delete も対象になり得る）。`--make-single-user` 無しで users>=2 は `E_PRECONDITION`。

@@ -21,9 +21,9 @@ PYTHONUTF8=1 uv run python scripts/check_no_raw_bpy_ops.py packages/bli-addon/sr
 ## 1. M8 スコープ（plan.md §4 M8 / methods.md §シナリオ1–3 / spec.md）
 | タスク | コマンド | 概要 | St | 状態 |
 |---|---|---|:--:|---|
-| T8.1 | `set-origin` | geometry/cursor/world・共有ガード・行列直接 | s | **✅ M3 で実装済み**（既存・golden 緑）|
-| T8.2 | `straighten` | reset / world-align / pca / floor・up-axis・bake-rotation | s | 未着手 |
-| T8.3 | `print-setup` | unit=mm/m・global_scale 一本化 | s | 未着手 |
+| T8.1 | `set-origin` | geometry/cursor/world・共有ガード・行列直接 | s | **✅ M3 で実装済み**（既存・S1 golden 緑）|
+| T8.2 | `straighten` | reset / world-align / pca / floor・up-axis・bake-rotation | s | **✅ 完了**（feature/m8-straighten・PR 待ち / 3視点セルフレビュー済み / research §E4 / HANDOFF §6g）|
+| T8.3 | `print-setup` | unit=mm/m・global_scale 一本化 | s | **← 次はここ**（未着手）|
 | T8.4 | `print-check` / `print-repair` | print3d 能力検出・CAPABILITY_UNAVAILABLE 縮退 | s | 未着手（要スパイク）|
 | T8.5 | `print-export` | stl / 3mf（3mf 不可→stl hint） | s | 未着手 |
 
