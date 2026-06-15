@@ -1,6 +1,6 @@
 # bli (Blender CLI) — 引き継ぎ資料 (HANDOFF)
 
-最終更新: 2026-06-15 / 状態: **PR #1–#6（M0–M6 完了）マージ済み。M7 T7.1（mesh: recalc-normals / merge-by-distance）は実装完了・独立3視点セルフレビュー済み＝PR 作成/マージ待ち。次は M7 T7.2（extrude/bevel/inset）を `.handoff/NEXT-M7.md` 参照で着手**。
+最終更新: 2026-06-15 / 状態: **PR #1–#7（M0–M6 + M7 T7.1）マージ済み。M7 T7.2（mesh: extrude/bevel/inset）は実装完了・独立3視点セルフレビュー済み＝PR 作成/マージ待ち。次は M7 T7.3（boolean/decimate＝M7 完了）を `.handoff/NEXT-M7.md` 参照で着手**。
 
 > 新規セッションはこの1枚を読めば再開できる。詳細は `specs/blender-cli-core/` を参照。
 > **次の作業（M6）の着手手順とタスクは `.handoff/NEXT-M6.md` を参照**（このファイルは全体史 + 規約）。
@@ -62,10 +62,10 @@
 | **M4 CLI骨格 & 診断コマンド**（Pydanticラッパ/help/list-commands/request-status/--id） | ✅ | pytest 79件 + parity緑 + 実機 request-status OK |
 | **M5 情報取得**（list-objects / object-info bbox / scene-info の output_ref 退避） | ✅ main（PR #2） | pytest 95 + 5.0/4.4 実機 smoke OK |
 | **M6 汎用編集**（select/transform/apply-transform・duplicate/delete・material・modifier） | ✅ main（PR #6 で M6 完了） | pytest 151 + 5.0/4.4 実機 smoke OK |
-| **M7 メッシュ編集**（mesh --op: bmesh一次） | 🔶 T7.1（recalc-normals/merge-by-distance）実装完了・PR待ち / T7.2–7.3 未着手 | pytest 162 + 5.0/4.4 実機 smoke OK |
+| **M7 メッシュ編集**（mesh --op: bmesh一次） | 🔶 T7.1（recalc/merge）main / T7.2（extrude/bevel/inset）実装完了・PR待ち / T7.3（boolean/decimate）未着手 | pytest 176 + 5.0/4.4 実機 smoke OK |
 | M8–M14 | 未着手（M7 完了後 = M8 3シナリオ中核価値 / NEXT-M8.md） | — |
 
-**状態（feature/m7-mesh-stable・M7 T7.1 まで）: `uv run pytest` = 162 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright は既存1件のみ（`bli/main.py` の narrowing・実行時安全）。main は 151 passed（M6 完了）。**
+**状態（feature/m7-mesh-exp・M7 T7.2 まで）: `uv run pytest` = 176 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright は既存1件のみ（`bli/main.py` の narrowing・実行時安全）。main は 162 passed（M7 T7.1 まで）。**
 
 > PR #1 の Codex レビュー対応で M4 を追補（§6b 参照）: ①request-status のロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（settle）③発見系を implemented 済みに限定 ④サーバ/クライアントのタイムアウト整合（DISPATCH_TIMEOUT < CLIENT_READ_TIMEOUT）⑤TIMEOUT 時に request id を提示。
 
@@ -168,6 +168,14 @@ M7 も7操作と大きいため **サブPR分割**（T7.1 stable → T7.2 experi
 - `ops._mesh`: op 別の条件付き検証（無効 param 排除・distance>=0）を bpy 前に → `require_mesh` → `_guard_shared_mesh` → bmesh ヘルパ → `mesh_fingerprint`。`_ALL_MESH_OP_PARAMS` は `_MESH_OP_PARAMS` から導出（modifier と同流儀）。op 専用 param（inside/distance）は **schema default なし**（別 op への誤送信を弾けるよう presence 維持）。
 - **テスト/検証**: pytest=162。独立3視点セルフレビュー（Codex 上限の代替）で P2 群解消（**符号付きゼロ fingerprint** / spec.md ドリフト / make_single_user 退行ガード / flipped docstring / 明示 distance smoke）。smoke に mesh golden（recalc flipped=1→0→6・法線変化で fingerprint 変化・merge 9→8・明示 distance collapse・非mesh/共有ガード）。5.0.1/4.4.3 実機 OPS SMOKE OK（fingerprint 両版同値 `clean=8460160a4a4e6d7c`）。
 - **繰越（T7.2 で検討）**: 結果スキーマの冗長（`faces`==`stats.polygons` / `after`==`stats.vertices`）を T7.2 で追加する extrude/bevel/inset（verts/edges/faces 同時変化）に合わせて `stats` 中心に統一するか（設計レビュー P2・現状は methods.md と整合し動作に支障なし）。
+
+### T7.2 完了 🔶（実装・セルフレビュー済み・PR 待ち）— mesh extrude / bevel / inset
+- **判断（着手時確定）**: ①全 geometry 対象（v1・`--faces` セレクタは Deferred）②op 別に必須（extrude=offset / bevel=width / inset=thickness）・segments 任意（既定1・1〜100 で暴走防止）③**extrude offset は world 空間**（matrix_world で world→local 変換・move/duplicate と一貫）/ bevel width・inset thickness はスカラ量のため mesh ローカル単位④inset は閉じた mesh の全 face で `inset_region` が no-op → **`inset_individual`**。
+- **着手前スパイク**（`spikes/bmesh_spike_t72.py`）で 5.0.1/4.4.3 確認（research.md §E2）: extrude=`extrude_face_region`+`translate` / bevel=`bevel(geom=edges, affect=EDGES)` / inset=`inset_individual`。faceless mesh は no-op・no-crash。
+- `bmesh_ops.py`: `extrude`（world offset を `matrix_world.to_3x3().inverted()` で local 変換）/ `bevel` / `inset` / `_stats_delta`。結果 `{<param>, delta, stats}`（`delta`=符号付き増減＝decimate/boolean でも一貫・**`added` から改名**）。
+- `ops._mesh`: op 別の条件付き必須 + 範囲ガード（width/thickness>=0・segments 1〜100）を bpy 前に。`_MESH_OP_PARAMS` 拡張（offset/width/segments/thickness）・`_ALL_MESH_OP_PARAMS` 自動導出。
+- **テスト/検証**: pytest=176。独立3視点セルフレビューで P1（extrude offset の world/local footgun → world 化）+ P2（added→delta 改名 / make_single_user 退行ガード拡張 / segments cross-op leak / nan/inf テスト）を解消。smoke に exact count golden（extrude 8→16v・bevel 24v・inset 32v）+ **world offset 検証**（scale=2 で world_max_z=3）+ op 別ガード。5.0.1/4.4.3 実機 OPS SMOKE OK（両版同値）。
+- **繰越（T7.3 で検討）**: `_mesh` の op 別検証が `elif` 連鎖で伸びる → per-op validator テーブル化（設計 P3）。segments の上限は「segments のみ」で「input_edges×segments」は見ない（高ポリ入力で同期実行が長くなり得る・subsurf levels と同じリスクモデル・experimental では許容）。
 
 ## 6e. M6 で確立した再利用パターン（T6.2 以降で踏襲）
 - **破壊的 mesh 操作は共有ガード**: `ops._guard_shared_mesh(gateway, obj, params)` を呼ぶ（delete も対象になり得る）。`--make-single-user` 無しで users>=2 は `E_PRECONDITION`。

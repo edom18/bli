@@ -93,3 +93,86 @@ def merge_by_distance(obj: Any, *, distance: float, message: str | None = None) 
         "distance": distance,
         "stats": mesh_stats(obj),
     }
+
+
+def _stats_delta(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
+    """before→after の頂点/辺/面の増分（符号付き＝追加は正・削減は負）。
+
+    decimate/boolean（T7.3）は削減もあり得るため、名前と意味を「added」ではなく中立な
+    「delta」にして符号付きで返す（false な常時正の不変条件を契約に焼かない）。
+    """
+    return {k: after[k] - before[k] for k in after}
+
+
+def extrude(obj: Any, *, offset: list[float], message: str | None = None) -> dict[str, Any]:
+    """全 face を region として押し出し、新頂点を offset だけ平行移動する。
+
+    offset は **world 空間** のベクトル（move/duplicate の --offset と一貫）。bmesh は mesh
+    ローカル空間で動くため、matrix_world の 3x3 逆行列で world→local 変換してから translate する
+    （回転/スケールがあっても world 変位が要求どおりになる。set_origin_world と同じ流儀）。
+    extrude_face_region は新ジオメトリを生成するが移動はしないので戻り 'geom' から新頂点を取る。
+    """
+    from mathutils import Vector  # type: ignore  # lazy: bpy 依存
+
+    local_offset = obj.matrix_world.to_3x3().inverted() @ Vector(offset)
+    before = mesh_stats(obj)
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        ret = bmesh.ops.extrude_face_region(bm, geom=list(bm.faces))
+        new_verts = [g for g in ret["geom"] if isinstance(g, bmesh.types.BMVert)]
+        bmesh.ops.translate(bm, verts=new_verts, vec=local_offset)
+        bm.to_mesh(obj.data)
+    finally:
+        bm.free()
+    obj.data.update()
+    after = mesh_stats(obj)
+    if message:
+        push_undo(message)
+    return {"offset": list(offset), "delta": _stats_delta(before, after), "stats": after}
+
+
+def bevel(obj: Any, *, width: float, segments: int, message: str | None = None) -> dict[str, Any]:
+    """全 edge をベベルする（affect='EDGES'）。width=オフセット幅（mesh ローカル単位）・segments=分割数。
+
+    width はスカラ量で、非一様スケール下の "world 幅" は定義できないため mesh ローカル単位とする。
+    """
+    before = mesh_stats(obj)
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        bmesh.ops.bevel(bm, geom=list(bm.edges), offset=width, segments=segments, affect="EDGES")
+        bm.to_mesh(obj.data)
+    finally:
+        bm.free()
+    obj.data.update()
+    after = mesh_stats(obj)
+    if message:
+        push_undo(message)
+    return {
+        "width": width,
+        "segments": segments,
+        "delta": _stats_delta(before, after),
+        "stats": after,
+    }
+
+
+def inset(obj: Any, *, thickness: float, message: str | None = None) -> dict[str, Any]:
+    """全 face を個別にインセットする（inset_individual）。
+
+    inset_region は閉じた mesh の全 face 選択だと境界が無く no-op になるため、各面を個別に
+    inset する inset_individual を使う（thickness=インセット厚み・mesh ローカル単位のスカラ）。
+    """
+    before = mesh_stats(obj)
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        bmesh.ops.inset_individual(bm, faces=list(bm.faces), thickness=thickness)
+        bm.to_mesh(obj.data)
+    finally:
+        bm.free()
+    obj.data.update()
+    after = mesh_stats(obj)
+    if message:
+        push_undo(message)
+    return {"thickness": thickness, "delta": _stats_delta(before, after), "stats": after}

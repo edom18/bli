@@ -509,11 +509,17 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
 _MESH_OP_PARAMS: dict[str, set[str]] = {
     "recalc-normals": {"inside"},
     "merge-by-distance": {"distance"},
+    "extrude": {"offset"},
+    "bevel": {"width", "segments"},
+    "inset": {"thickness"},
 }
 # 全 op 別パラメータの和集合（手書きにせず導出＝op 追加時の追従漏れを防ぐ）。
 _ALL_MESH_OP_PARAMS: set[str] = set().union(*_MESH_OP_PARAMS.values())
 # merge-by-distance の既定マージ距離（Blender 既定と同値・methods.md 準拠）。
 _DEFAULT_MERGE_DISTANCE = 0.0001
+# bevel segments の既定と上限（巨大値で edge×segments のジオメトリが膨らみ固まるのを防ぐ）。
+_DEFAULT_BEVEL_SEGMENTS = 1
+_MAX_BEVEL_SEGMENTS = 100
 
 
 def _mesh(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
@@ -536,6 +542,41 @@ def _mesh(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             symptom=f"distance は 0 以上で指定してください（指定: {params['distance']}）",
             remediation="--distance を 0 以上にしてください",
         )
+    elif op == "extrude":
+        # extrude は押し出しベクトルが必須（省略すると重なり面を作る無音の no-op になる）。
+        _require_input(
+            "offset" in params,
+            symptom="extrude には --offset（押し出しベクトル）が必要です",
+            remediation="--offset x,y,z を指定してください",
+        )
+    elif op == "bevel":
+        _require_input(
+            "width" in params,
+            symptom="bevel には --width が必要です",
+            remediation="--width <f> を指定してください",
+        )
+        _require_input(
+            float(params["width"]) >= 0.0,
+            symptom=f"width は 0 以上で指定してください（指定: {params['width']}）",
+            remediation="--width を 0 以上にしてください",
+        )
+        if "segments" in params:
+            _require_input(
+                1 <= int(params["segments"]) <= _MAX_BEVEL_SEGMENTS,
+                symptom=f"segments は 1〜{_MAX_BEVEL_SEGMENTS} で指定してください（指定: {params['segments']}）",
+                remediation=f"--segments を 1〜{_MAX_BEVEL_SEGMENTS} にしてください",
+            )
+    elif op == "inset":
+        _require_input(
+            "thickness" in params,
+            symptom="inset には --thickness が必要です",
+            remediation="--thickness <f> を指定してください",
+        )
+        _require_input(
+            float(params["thickness"]) >= 0.0,
+            symptom=f"thickness は 0 以上で指定してください（指定: {params['thickness']}）",
+            remediation="--thickness を 0 以上にしてください",
+        )
 
     from . import bmesh_ops, gateway  # lazy: bpy 依存
 
@@ -553,11 +594,20 @@ def _mesh(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         result = bmesh_ops.recalc_normals(
             obj, inside=bool(params.get("inside", False)), message="mesh recalc-normals"
         )
-    else:  # merge-by-distance
+    elif op == "merge-by-distance":
         distance = float(params["distance"]) if "distance" in params else _DEFAULT_MERGE_DISTANCE
         result = bmesh_ops.merge_by_distance(
             obj, distance=distance, message="mesh merge-by-distance"
         )
+    elif op == "extrude":
+        result = bmesh_ops.extrude(obj, offset=list(params["offset"]), message="mesh extrude")
+    elif op == "bevel":
+        segments = int(params["segments"]) if "segments" in params else _DEFAULT_BEVEL_SEGMENTS
+        result = bmesh_ops.bevel(
+            obj, width=float(params["width"]), segments=segments, message="mesh bevel"
+        )
+    else:  # inset
+        result = bmesh_ops.inset(obj, thickness=float(params["thickness"]), message="mesh inset")
     # mesh が変わる → mesh 込みの mesh_fingerprint で drift を示す（recalc は頂点数不変のため
     # object_fingerprint では検出できない。法線込みの専用 fingerprint を使う。§6e）。
     data = {"name": obj.name, "op": op, **result}

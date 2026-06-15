@@ -594,11 +594,25 @@ def modifier(
 
 @app.command()
 def mesh(
-    op: str = typer.Option(..., "--op", help="操作: recalc-normals|merge-by-distance"),
+    op: str = typer.Option(
+        ..., "--op", help="recalc-normals|merge-by-distance|extrude|bevel|inset"
+    ),
     targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
     inside: bool = typer.Option(False, "--inside", help="recalc-normals: 法線を内向きに"),
     distance: float | None = typer.Option(
         None, "--distance", help="merge-by-distance: マージ距離（既定 0.0001）"
+    ),
+    offset: str | None = typer.Option(
+        None,
+        "--offset",
+        help="extrude: 押し出しベクトル x,y,z（world 空間・move/duplicate と同じ）",
+    ),
+    width: float | None = typer.Option(
+        None, "--width", help="bevel: ベベル幅（ローカル単位・0以上）"
+    ),
+    segments: int | None = typer.Option(None, "--segments", help="bevel: 分割数（既定1・1〜100）"),
+    thickness: float | None = typer.Option(
+        None, "--thickness", help="inset: インセット厚み（0以上）"
     ),
     make_single_user: bool = typer.Option(
         False, "--make-single-user", help="共有mesh時に単一ユーザ化を許可"
@@ -607,25 +621,52 @@ def mesh(
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
-    """メッシュを編集する（bmesh 一次: 法線再計算 / 距離マージ）。"""
+    """メッシュを編集する（bmesh 一次: 法線再計算 / 距離マージ / 押し出し / ベベル / インセット）。"""
     params: dict[str, Any] = {"op": op, "targets": targets}
     # op 専用 param は明示時のみ送る（op 別検証で別 op への誤送信を弾けるよう presence を保つ）。
     if inside:
         params["inside"] = True
     if distance is not None:
         params["distance"] = distance
+    if width is not None:
+        params["width"] = width
+    if segments is not None:
+        params["segments"] = segments
+    if thickness is not None:
+        params["thickness"] = thickness
     if make_single_user:
         params["make_single_user"] = True
+    try:
+        if offset is not None:
+            params["offset"] = _parse_vec("offset", offset, 3)
+    except ValueError as e:
+        _emit_error(json_out, ErrorCode.INVALID_PARAMS, str(e))
+        raise typer.Exit(int(ExitCode.INPUT)) from None
 
     def human(data: dict[str, Any]) -> str:
-        if data.get("op") == "recalc-normals":
+        op_ = data.get("op")
+        if op_ == "recalc-normals":
             return (
                 f"{data.get('name')} recalc-normals: faces={data.get('faces')} "
                 f"flipped={data.get('flipped')} inside={data.get('inside')}"
             )
+        if op_ == "merge-by-distance":
+            return (
+                f"{data.get('name')} merge-by-distance: merged={data.get('merged')} "
+                f"({data.get('before')}→{data.get('after')})"
+            )
+        # extrude / bevel / inset: ジオメトリ増減（符号付き）+ 結果統計
+        delta = data.get("delta") or {}
+        st = data.get("stats") or {}
+
+        def _signed(n: Any) -> str:
+            return f"{n:+d}" if isinstance(n, int) else str(n)
+
         return (
-            f"{data.get('name')} merge-by-distance: merged={data.get('merged')} "
-            f"({data.get('before')}→{data.get('after')})"
+            f"{data.get('name')} {op_}: "
+            f"{_signed(delta.get('vertices'))}v/{_signed(delta.get('edges'))}e/"
+            f"{_signed(delta.get('polygons'))}f → "
+            f"{st.get('vertices')}v/{st.get('edges')}e/{st.get('polygons')}f"
         )
 
     _rpc("mesh", params, json_out=json_out, port=port, human=human, request_id=request_id)
