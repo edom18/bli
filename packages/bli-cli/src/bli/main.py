@@ -394,6 +394,32 @@ def straighten(
     _rpc("straighten", params, json_out=json_out, port=port, human=human, request_id=request_id)
 
 
+@app.command("print-setup")
+def print_setup(
+    unit: str = typer.Option("mm", "--unit", help="表示単位: mm|m（既定 mm）"),
+    scene: str | None = typer.Option(None, "--scene", help="対象シーン名（省略時は active）"),
+    request_id: str | None = typer.Option(
+        None, "--id", help="リクエストID(UUIDv4)。冪等リトライで同一IDを再利用する"
+    ),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """3Dプリント向けにシーンの表示単位を設定する（mm/m・geometry 非破壊）。"""
+    params: dict[str, Any] = {"unit": unit}
+    if scene is not None:
+        params["scene"] = scene
+
+    def human(data: dict[str, Any]) -> str:
+        us = data.get("unit_settings") or {}
+        return (
+            f"scene '{data.get('scene')}' unit={data.get('unit')} "
+            f"(system={us.get('system')} length_unit={us.get('length_unit')} "
+            f"changed={data.get('changed')})"
+        )
+
+    _rpc("print-setup", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
 @app.command()
 def select(
     targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),

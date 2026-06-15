@@ -109,6 +109,22 @@ command(
     required_mode=Mode.OBJECT,
 )
 
+# ---- シナリオ3: 3Dプリンタ対応（M8 T8.3 print-setup〜）----
+command(
+    "print-setup",
+    "3Dプリント向けにシーンの表示単位を設定する（mm/m・geometry 非破壊）",
+    # unit は表示単位（length_unit）の設定。geometry は再スケールしない（非破壊・研究 §E5）。
+    # 実寸の export スケールは print-export（T8.5）が一本で算出する（global_scale 一本化）。
+    params=(
+        p("unit", ParamType.ENUM, default="mm", choices=["mm", "m"], help="表示単位（既定 mm）"),
+        p("scene", ParamType.STR, help="対象シーン名（省略時は active）"),
+    ),
+    mutates=True,
+    # 単位設定はモード非依存（geometry を触らない）だが、シナリオ3 全体を OBJECT に統一する方針
+    # （set-origin/straighten/scene-info と同じ・自動遷移せず E_MODE_MISMATCH）。
+    required_mode=Mode.OBJECT,
+)
+
 # ---- 汎用編集（オブジェクト操作 / M6 T6.1）----
 command(
     "select",

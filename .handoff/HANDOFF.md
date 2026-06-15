@@ -1,6 +1,6 @@
 # bli (Blender CLI) — 引き継ぎ資料 (HANDOFF)
 
-最終更新: 2026-06-15 / 状態: **PR #1–#9（M0–M7 全完了）マージ済み（origin/main）。M8（3シナリオ中核価値）着手中: T8.1 set-origin は M3 実装済み（S1 golden 緑）/ T8.2 straighten（直立補正）実装完了・独立3視点セルフレビュー済み＝feature/m8-straighten で PR 作成/マージ待ち。次は T8.3 print-setup（`.handoff/NEXT-M8.md` 参照）**。
+最終更新: 2026-06-15 / 状態: **PR #1–#10（M0–M7 全 + M8 T8.2 straighten）マージ済み（origin/main）。M8（3シナリオ中核価値）着手中: T8.1 set-origin ✅（M3 実装・S1 golden）/ T8.2 straighten ✅（PR #10 マージ済み）/ T8.3 print-setup（単位 mm/m）実装完了・独立3視点セルフレビュー済み＝feature/m8-print-setup で PR 作成/マージ待ち。次は T8.4 print-check/repair（print3d 再スパイク必須・`.handoff/NEXT-M8.md` 参照）**。
 
 > 新規セッションはこの1枚を読めば再開できる。詳細は `specs/blender-cli-core/` を参照。
 > **次の作業（M6）の着手手順とタスクは `.handoff/NEXT-M6.md` を参照**（このファイルは全体史 + 規約）。
@@ -63,10 +63,10 @@
 | **M5 情報取得**（list-objects / object-info bbox / scene-info の output_ref 退避） | ✅ main（PR #2） | pytest 95 + 5.0/4.4 実機 smoke OK |
 | **M6 汎用編集**（select/transform/apply-transform・duplicate/delete・material・modifier） | ✅ main（PR #6 で M6 完了） | pytest 151 + 5.0/4.4 実機 smoke OK |
 | **M7 メッシュ編集**（mesh --op: bmesh一次 + heavy modifier 経由） | ✅ main（PR #9 で T7.1–7.3 完了＝**M7 完了**） | pytest 184 + 5.0/4.4 実機 smoke OK |
-| **M8 3シナリオ中核価値**（set-origin / straighten / print-*） | 🔶 進行中: T8.1 set-origin ✅（M3 実装・S1 golden）/ T8.2 straighten ✅（PR待ち）/ T8.3–8.5 print-* 未着手 | pytest 195 + 5.0/4.4 実機 smoke OK |
+| **M8 3シナリオ中核価値**（set-origin / straighten / print-*） | 🔶 進行中: T8.1 set-origin ✅（M3）/ T8.2 straighten ✅（PR #10 main）/ T8.3 print-setup ✅（PR待ち）/ T8.4 print-check/repair・T8.5 print-export 未着手 | pytest 201 + 5.0/4.4 実機 smoke OK |
 | M9–M14 | 未着手（M8 完了後は M9 ファイルI/O / NEXT-M9.md） | — |
 
-**状態（feature/m8-straighten・M8 T8.2 まで）: `uv run pytest` = 195 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright は既存1件のみ（`bli/main.py:101` の narrowing・実行時安全）。main は 184 passed（M7 完了）。**
+**状態（feature/m8-print-setup・M8 T8.3 まで）: `uv run pytest` = 201 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright は既存1件のみ（`bli/main.py:101` の narrowing・実行時安全）。main は 195 passed（M8 T8.2 まで）。**
 
 > PR #1 の Codex レビュー対応で M4 を追補（§6b 参照）: ①request-status のロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（settle）③発見系を implemented 済みに限定 ④サーバ/クライアントのタイムアウト整合（DISPATCH_TIMEOUT < CLIENT_READ_TIMEOUT）⑤TIMEOUT 時に request id を提示。
 
@@ -196,6 +196,14 @@ M8 はサブPR分割（NEXT-M8.md）。順序: T8.2 straighten → T8.3 print-se
 - `ops._straighten`: `--axis` は world-align 専用（他 method は USER_INPUT）。pca=require_mesh / floor=require_geometry。`--bake-rotation` は **補正より前**に require_mesh + 共有ガード（失敗時に obj を回転させない）→ straighten_object → `apply_transform(rotation)` で焼き込み（apply 経路再利用）。fingerprint は **非 bake=object_fingerprint / bake=mesh_fingerprint**（§6e）。
 - **テスト/検証**: pytest=195。独立3視点セルフレビュー（P1 無し）で P2 群解消（floor 最小射影の DRY 集約 / rotation_difference anti-parallel の決定化 / pca 中心対称符号の正準 tie-break / bake は mesh_fingerprint / up≠+Z の golden 追加）。smoke に world-align(explicit/auto/+Y)/reset/pca/floor(+Z/+Y)/bake(見た目不変)/共有ガード(bake のみ・非 bake は安全)/前提ガードの golden。5.0.1/4.4.3 実機 OPS SMOKE OK（両版同値）。
 - **繰越（v1 未保証・methods.md 注記済み）**: 親付き対象 / 非一様・シアスケール下の整列精度（matrix_world 回転成分で近似）/ 中心対称 mesh の pca 符号（正準 tie-break で決定化済み）/ 複合 tilt の up 周り yaw 残留（最小回転のため向き不保証）。`straighten_object` の実行分岐と report 分岐の二重化は method 追加時にテーブル化検討（設計 P3）。
+
+### T8.3 完了 🔶（実装・独立3視点セルフレビュー済み・PR 待ち）— print-setup（単位 mm/m・シナリオ3）
+- **判断（キックオフ確定）**: print-setup は **表示単位のみ**（`unit_settings.system='METRIC'` + `length_unit`）を設定し geometry を再スケールしない＝**非破壊**（spike で dims 不変を実機確認）。実寸 export スケールは T8.5 で一本化（global_scale 一本化）。`--unit` ENUM(mm|m) 既定 mm / `--scene?` 省略時 active。
+- **着手前スパイク**（`spikes/print_setup_spike.py`・research.md §E5）で 5.0.1/4.4.3 確認: unit_settings 既定 METRIC/scale_length=1.0/METERS。`system='METRIC'`+`length_unit='MILLIMETERS'|'METERS'` 直接代入は両版 OK（background 可）・**length_unit は表示専用で dimensions 不変**。
+- `gateway.py`: `set_print_units`（system=METRIC + length_unit・`changed` 指標）/ `require_scene`（name=完全名 / 省略=active・無ければ E_TARGET_NOT_FOUND）/ `_unit_settings_dict`（scene_summary と共有＝SSOT）/ `unit_settings_fingerprint`。geometry 非破壊のため共有 mesh ガード不要。
+- `ops._print_setup`: 表示単位のみ設定（ガード無し）。fingerprint=unit_settings ハッシュ。`CLI`: `print-setup --unit/--scene`。
+- **テスト/検証**: pytest=201。独立3視点セルフレビュー（P1 無し）で P2/P3 解消（scene_summary の unit_settings を `_unit_settings_dict` に DRY 集約 / required_mode コメント / changed・非破壊・冪等・状態非汚染を3視点確認）。smoke に mm/m・dims 不変（非破壊）・冪等 changed・scene-info 反映・--scene 解決・存在しないシーンガードの golden。5.0.1/4.4.3 実機 OPS SMOKE OK（両版同値）。
+- **繰越**: IMPERIAL 起点の changed=True 経路は golden 未追加（コードは無条件 system=METRIC で対応・P3）。print-export（T8.5）の global_scale はこの表示単位/`scale_length` から一本算出する設計。
 
 ## 6e. M6 で確立した再利用パターン（T6.2 以降で踏襲）
 - **破壊的 mesh 操作は共有ガード**: `ops._guard_shared_mesh(gateway, obj, params)` を呼ぶ（delete も対象になり得る）。`--make-single-user` 無しで users>=2 は `E_PRECONDITION`。

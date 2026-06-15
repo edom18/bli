@@ -22,9 +22,9 @@ PYTHONUTF8=1 uv run python scripts/check_no_raw_bpy_ops.py packages/bli-addon/sr
 | タスク | コマンド | 概要 | St | 状態 |
 |---|---|---|:--:|---|
 | T8.1 | `set-origin` | geometry/cursor/world・共有ガード・行列直接 | s | **✅ M3 で実装済み**（既存・S1 golden 緑）|
-| T8.2 | `straighten` | reset / world-align / pca / floor・up-axis・bake-rotation | s | **✅ 完了**（feature/m8-straighten・PR 待ち / 3視点セルフレビュー済み / research §E4 / HANDOFF §6g）|
-| T8.3 | `print-setup` | unit=mm/m・global_scale 一本化 | s | **← 次はここ**（未着手）|
-| T8.4 | `print-check` / `print-repair` | print3d 能力検出・CAPABILITY_UNAVAILABLE 縮退 | s | 未着手（要スパイク）|
+| T8.2 | `straighten` | reset / world-align / pca / floor・up-axis・bake-rotation | s | **✅ 完了**（PR #10 main マージ済み / research §E4 / HANDOFF §6g）|
+| T8.3 | `print-setup` | unit=mm/m（表示単位のみ・非破壊）・global_scale は T8.5 で一本化 | s | **✅ 完了**（feature/m8-print-setup・PR 待ち / 3視点セルフレビュー済み / research §E5 / HANDOFF §6g）|
+| T8.4 | `print-check` / `print-repair` | print3d 能力検出・CAPABILITY_UNAVAILABLE 縮退 | s | **← 次はここ**（未着手・要 print3d 再スパイク）|
 | T8.5 | `print-export` | stl / 3mf（3mf 不可→stl hint） | s | 未着手 |
 
 - **DoD（plan.md）**: spec §10 受け入れ基準を **golden 数値**で満たす。3シナリオ経路は**全 stable**。

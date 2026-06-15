@@ -201,16 +201,13 @@ def object_summary(obj: Any) -> dict[str, Any]:
 def scene_summary(depth: int = 1) -> dict[str, Any]:
     """シーン要約（オブジェクト一覧 + 単位）。"""
     scene = bpy.context.scene
-    us = scene.unit_settings
     return {
         "scene": scene.name,
         "object_count": len(bpy.data.objects),
         "objects": [object_summary(o) for o in scene.objects],
-        "unit_settings": {
-            "system": us.system,
-            "scale_length": round(us.scale_length, 8),
-            "length_unit": us.length_unit,
-        },
+        # unit_settings の要約は print-setup と同一窓口（_unit_settings_dict）で SSOT 化する
+        # （scene-info と print-setup で単位表現がドリフトしないように。設計レビュー P2）。
+        "unit_settings": _unit_settings_dict(scene.unit_settings),
     }
 
 
@@ -1199,3 +1196,65 @@ def straighten_object(
     if world_bbox(obj) is not None:  # up 方向の最下点（bbox があれば常時・floor 後は ≈0）
         data["min_up"] = round(_min_up_projection(obj, up), 6)
     return data
+
+
+# ---- 3Dプリンタ対応（M8 T8.3 / print-setup・シナリオ3）----
+#
+# print-setup はシーンの **表示単位**（unit_settings.system/length_unit）を mm/m に設定する。
+# length_unit は表示専用で geometry（dimensions）を再スケールしない＝**非破壊**（研究 §E5）。
+# mesh データを触らないため共有 mesh ガード不要。実寸の export スケールは print-export（T8.5）が
+# scale_length/単位から一本で算出する方針（global_scale 一本化）。
+
+_UNIT_LENGTH = {"mm": "MILLIMETERS", "m": "METERS"}
+
+
+def require_scene(name: str | None) -> Any:
+    """シーンを解決する（name=完全名 / 省略=active）。無ければ E_TARGET_NOT_FOUND。"""
+    if name is None:
+        return bpy.context.scene
+    scene = bpy.data.scenes.get(name)
+    if scene is None:
+        raise _op_error(
+            ErrorCode.E_TARGET_NOT_FOUND,
+            f"シーンが見つかりません: {name}",
+            category=ErrorCategory.USER_INPUT,
+        )
+    return scene
+
+
+def _unit_settings_dict(us: Any) -> dict[str, Any]:
+    """unit_settings の要約（system / scale_length / length_unit）。"""
+    return {
+        "system": us.system,
+        "scale_length": round(us.scale_length, 8),
+        "length_unit": us.length_unit,
+    }
+
+
+def set_print_units(
+    unit: str, *, scene_name: str | None = None, message: str | None = None
+) -> dict[str, Any]:
+    """シーンの表示単位を mm/m に設定する（system=METRIC + length_unit・geometry 非破壊）。
+
+    length_unit は表示専用で頂点/寸法を再スケールしない（研究 §E5）。changed は設定前後で
+    system/length_unit が変わったか（冪等性の指標・既に mm なら False）。
+    """
+    scene = require_scene(scene_name)
+    us = scene.unit_settings
+    before = (us.system, us.length_unit)
+    us.system = "METRIC"
+    us.length_unit = _UNIT_LENGTH[unit]
+    changed = (us.system, us.length_unit) != before
+    if message:
+        push_undo(message)
+    return {
+        "scene": scene.name,
+        "unit": unit,
+        "unit_settings": _unit_settings_dict(us),
+        "changed": changed,
+    }
+
+
+def unit_settings_fingerprint(unit_settings: dict[str, Any]) -> str:
+    """単位設定の決定的フィンガープリント（print-setup の drift 検証用）。"""
+    return _digest16(unit_settings)

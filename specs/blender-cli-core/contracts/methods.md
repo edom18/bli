@@ -77,10 +77,12 @@ errors: `E_TARGET_NOT_FOUND` / `E_PRECONDITION(shared mesh: users>=2)` / `E_MODE
 |--------|--------|--------|:-:|:-:|----|:--:|
 | `print-check` | `--targets` `--manifold?` `--normals?` `--thin --min-thickness?` `--intersect?` `--degenerate?` `--save-to?` | チェック結果（大→output_ref） | - | ✓ | print3d_toolbox | s |
 | `print-repair` | `--targets` `--make-manifold?` `--recalc-normals?` `--remove-degenerate?` | 修復前後差分 | ✓ | ✓ | print3d_toolbox | s |
-| `print-setup` | `--unit mm\|m` `--scene?` | 単位設定後の値 | ✓ | - | - | s |
+| `print-setup` | `--unit mm\|m`(既定 mm) `--scene?` | 単位設定後の値 | ✓ | - | - | s |
 | `print-export` | `--targets` `--format stl\|3mf` `--path` `--ascii?` `--apply-transform?` | 出力パス/サイズ | - | ✓ | export.stl / io_mesh_3mf | s |
 
 > `print-check`/`print-repair` は `print3d_toolbox` 未導入時 `addon_utils.enable` を試行→不可なら `CAPABILITY_UNAVAILABLE`。`print-export --format 3mf` 不可時は STL フォールバックを hint。
+>
+> `print-setup`（**T8.3 実装済み**）: シーンの **表示単位** を設定する（`scene.unit_settings.system='METRIC'` + `length_unit=MILLIMETERS|METERS`）。`--unit` 既定 mm（`bli print-setup` 単体で mm）。`--scene?` で対象シーン名（省略時 active・無ければ `E_TARGET_NOT_FOUND`）。**`length_unit` は表示専用で geometry（dimensions/頂点）を再スケールしない＝非破壊**（研究 §E5）ため共有 mesh ガード不要。実寸の export スケールは print-export（T8.5）が `scale_length`/単位から一本で算出する（global_scale 一本化）。result: `{scene, unit, unit_settings:{system, scale_length, length_unit}, changed}`（`changed`=設定前後で変化したか＝冪等性指標）。required_mode=OBJECT。fingerprint=unit_settings の決定的ハッシュ。
 
 ## ファイルI/O
 | method | params | result | M | H | St |

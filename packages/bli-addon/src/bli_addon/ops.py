@@ -753,6 +753,25 @@ def _straighten(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     return _ok("straighten", data, fingerprint=fp)
 
 
+def _print_setup(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("print-setup")
+    _validate(cmd, params)
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    unit = str(params.get("unit", "mm"))  # SSOT default は mm（非 CLI RPC の省略も許容）
+    scene_name = params.get("scene")
+    # 表示単位のみ設定（geometry 非破壊・研究 §E5）→ 共有 mesh ガード不要。
+    data = gateway.set_print_units(
+        unit,
+        scene_name=str(scene_name) if scene_name is not None else None,
+        message="print-setup",
+    )
+    return _ok(
+        "print-setup", data, fingerprint=gateway.unit_settings_fingerprint(data["unit_settings"])
+    )
+
+
 _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]] = {
     "scene-info": _scene_info,
     "object-info": _object_info,
@@ -767,6 +786,7 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "mesh": _mesh,
     "set-origin": _set_origin,
     "straighten": _straighten,
+    "print-setup": _print_setup,
 }
 
 
