@@ -359,6 +359,19 @@ def ensure_print_check_fixtures():
         pcshb = bpy.data.objects.new("PCShB", pcsha.data)  # 同一 mesh を共有
         bpy.context.scene.collection.objects.link(pcshb)
 
+    # PCBroken: 複合破損（1面削除＝非多様体 + 別1面反転＝法線不整合）。print-repair の
+    # 「全省略=全修復」チェーン（remove-degenerate→make-manifold→recalc）の E2E 検証用。
+    pcb = _fresh_cube_obj("PCBroken")
+    if len(pcb.data.polygons) == 6:
+        bm = _bmesh.new()
+        bm.from_mesh(pcb.data)
+        bm.faces.ensure_lookup_table()
+        _bmesh.ops.reverse_faces(bm, faces=[bm.faces[1]])  # 1面反転（法線不整合）
+        _bmesh.ops.delete(bm, geom=[bm.faces[0]], context="FACES_ONLY")  # 別1面削除（穴）
+        bm.to_mesh(pcb.data)
+        bm.free()
+        pcb.data.update()
+
 
 def call_retry(method, params=None, request_id=None, attempts=40):
     """SESSION_BUSY（接続クローズ直後のロック解放待ち）を少し待って再試行する。"""
@@ -477,8 +490,9 @@ def run_calls():
         "PCDegen",
         "PCShA",
         "PCShB",
+        "PCBroken",
     }, lo_names
-    assert lo["data"]["count"] == 36, lo["data"]
+    assert lo["data"]["count"] == 37, lo["data"]
     lo2, _ = call_retry("list-objects", {"regex": "^Cu"})
     assert [o["name"] for o in lo2["data"]["objects"]] == ["Cube"], lo2["data"]
     print("list_objects_ok mesh=", sorted(lo_names))
@@ -1385,7 +1399,12 @@ def run_calls():
     print("print_check_degenerate_ok")
 
     # thin/intersect は print3d 依存（§E6: この環境では実体なし）→ CAPABILITY_UNAVAILABLE。
-    for cap in ({"thin": True, "min_thickness": 0.5}, {"intersect": True}):
+    # bmesh カテゴリと混在指定でも、print3d 要求が混ざれば全体が CAPABILITY_UNAVAILABLE（黙殺しない）。
+    for cap in (
+        {"thin": True, "min_thickness": 0.5},
+        {"intersect": True},
+        {"manifold": True, "thin": True},
+    ):
         try:
             call_retry("print-check", {"targets": "PCClean", **cap})
             raise AssertionError(f"print3d check should be unavailable: {cap}")
@@ -1439,6 +1458,26 @@ def run_calls():
     psa1, _ = call_retry("object-info", {"targets": "PCShA"})
     assert psa1["data"]["mesh_users"] == 1, psa1["data"]  # 単一ユーザ化された
     print("print_repair_shared_guard_ok")
+
+    # print-repair 全省略=全修復（remove-degenerate→make-manifold→recalc の連結）。複合破損 PCBroken
+    # （穴+反転）→ before は非printable・after は printable（致命カテゴリ全 0・S3 完了条件の直接裏付け）。
+    pcb_before, _ = call_retry("print-check", {"targets": "PCBroken"})
+    assert pcb_before["data"]["checks"]["is_printable"] is False, pcb_before["data"]
+    rpa, _ = call_retry("print-repair", {"targets": "PCBroken"})  # 全省略＝全修復
+    assert set(rpa["data"]["applied"]) == {
+        "remove-degenerate",
+        "make-manifold",
+        "recalc-normals",
+    }, rpa["data"]["applied"]
+    assert rpa["data"]["after"]["is_printable"] is True, rpa["data"]
+    assert rpa["data"]["after"]["non_manifold_edges"] == 0, rpa["data"]
+    assert rpa["data"]["after"]["flipped_normals"] == 0, rpa["data"]
+    print(
+        "print_repair_all_ok",
+        rpa["data"]["applied"],
+        "printable=",
+        rpa["data"]["after"]["is_printable"],
+    )
 
 
 def main():

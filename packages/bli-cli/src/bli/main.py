@@ -454,11 +454,9 @@ def print_check(
 
     def human(data: dict[str, Any]) -> str:
         c = data.get("checks") or {}
-        return (
-            f"{data.get('name')} printable={c.get('is_printable')} "
-            f"non_manifold={c.get('non_manifold_edges')} flipped={c.get('flipped_normals')} "
-            f"degenerate={c.get('degenerate_faces')}"
-        )
+        # 報告されたカテゴリのキーのみ並べる（未要求カテゴリで None を出さない）。
+        detail = " ".join(f"{k}={v}" for k, v in c.items() if k != "is_printable")
+        return f"{data.get('name')} printable={c.get('is_printable')} {detail}".rstrip()
 
     _rpc(
         "print-check",

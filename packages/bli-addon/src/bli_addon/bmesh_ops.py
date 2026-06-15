@@ -238,12 +238,14 @@ def mesh_repair(
                 applied.append("remove-degenerate")
         if make_manifold:
             bmesh.ops.remove_doubles(bm, verts=list(bm.verts), dist=_REPAIR_MERGE_DIST)
-            loose_v = [v for v in bm.verts if not v.link_edges]
-            if loose_v:
-                bmesh.ops.delete(bm, geom=loose_v, context="VERTS")
+            # wire 辺を先に消す（端点 vert は残る）→ その後で loose vert を再走査して消す。
+            # 逆順だと wire 削除で新たに孤立した端点 vert を取りこぼす（敵対的 correctness P2）。
             wire_e = [e for e in bm.edges if e.is_wire]
             if wire_e:
                 bmesh.ops.delete(bm, geom=wire_e, context="EDGES")
+            loose_v = [v for v in bm.verts if not v.link_edges]
+            if loose_v:
+                bmesh.ops.delete(bm, geom=loose_v, context="VERTS")
             bmesh.ops.holes_fill(bm, edges=list(bm.edges), sides=0)
             applied.append("make-manifold")
         if recalc_normals or make_manifold:
