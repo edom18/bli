@@ -956,3 +956,210 @@ def mesh_boolean(
         "delta": stats_delta(before, after),
         "stats": after,
     }
+
+
+# ---- 直立補正（M8 T8.2 / straighten・シナリオ2）----
+#
+# 4メソッド: reset（回転を identity に）/ world-align（指定 local 軸を world up へ最小回転で
+# 合わせる）/ pca（頂点分布の最大分散軸を up へ）/ floor（up 方向の最下点を接地）。
+# reset/world-align は **object transform のみ**変更（mesh 非破壊・共有 mesh でも安全）。
+# floor は平行移動のみ。pca は mesh 頂点が必要。`--bake-rotation` の mesh 焼き込みは呼び出し側
+# （ops）が apply_transform 経路（共有ガード付き）で行う。研究 §E4 で 5.0.1/4.4.3 確認済み。
+# matrix_world は読み取り前に view_layer.update() で最新化する（background での stale 対策・§E4）。
+
+_AXIS_VECTORS: dict[str, tuple[float, float, float]] = {
+    "+X": (1.0, 0.0, 0.0),
+    "-X": (-1.0, 0.0, 0.0),
+    "+Y": (0.0, 1.0, 0.0),
+    "-Y": (0.0, -1.0, 0.0),
+    "+Z": (0.0, 0.0, 1.0),
+    "-Z": (0.0, 0.0, -1.0),
+}
+_LOCAL_AXIS_LETTERS = ("X", "Y", "Z")
+_LOCAL_AXIS_UNIT: dict[str, tuple[float, float, float]] = {
+    "X": (1.0, 0.0, 0.0),
+    "Y": (0.0, 1.0, 0.0),
+    "Z": (0.0, 0.0, 1.0),
+}
+# pca: この値以下の最大固有値（分散）は主成分を決められない（点が一致/直線退化）。
+_PCA_MIN_VARIANCE = 1e-12
+
+
+def require_geometry(obj: Any) -> None:
+    """bbox を持たない型（EMPTY/LIGHT/CAMERA 等）は E_PRECONDITION で弾く（floor 用）。
+
+    require_mesh/require_material_support と同じ流儀。world_bbox は退化（全隅同一）を None で
+    返すので、それを接地不能の判定に使う（番号分岐せず値で判定）。
+    """
+    if world_bbox(obj) is None:
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"接地補正にはジオメトリ（bbox）が必要です（type={obj.type}）",
+        )
+
+
+def _reset_rotation(obj: Any) -> None:
+    """rotation_mode に依らず回転を identity にする（QUATERNION/AXIS_ANGLE 対応）。"""
+    rmode = obj.rotation_mode
+    if rmode == "QUATERNION":
+        obj.rotation_quaternion = (1.0, 0.0, 0.0, 0.0)
+    elif rmode == "AXIS_ANGLE":
+        obj.rotation_axis_angle = (0.0, 0.0, 0.0, 1.0)  # angle=0 → identity（軸は任意）
+    else:
+        obj.rotation_euler = (0.0, 0.0, 0.0)
+
+
+def _local_axis_world(obj: Any, signed_axis: str) -> Any:
+    """signed local 軸（"+Z"/"-X" 等）の world 方向（正規化・scale 除去）を返す。"""
+    from mathutils import Vector  # type: ignore  # lazy: bpy 依存
+
+    sign = -1.0 if signed_axis[0] == "-" else 1.0
+    base = Vector(_LOCAL_AXIS_UNIT[signed_axis[-1]]) * sign
+    return (obj.matrix_world.to_quaternion() @ base).normalized()
+
+
+def _apply_world_rotation(obj: Any, delta_quat: Any) -> None:
+    """delta_quat を world 回転へ前合成し、原点・スケール不変で書き戻す（§E4）。
+
+    decompose→LocRotScale で loc/scale を保ったまま回転だけ差し替える。親付きでも matrix_world
+    setter が親逆行列を考慮するため world 空間で正しく整列する。
+    """
+    from mathutils import Matrix  # type: ignore  # lazy: bpy 依存
+
+    loc, rot, scale = obj.matrix_world.decompose()
+    obj.matrix_world = Matrix.LocRotScale(loc, delta_quat @ rot, scale)
+
+
+def _world_align(obj: Any, up: Any, axis: str | None) -> str:
+    """指定（または up に最も近い）local 軸を up へ最小回転で合わせ、合わせた signed 軸を返す。
+
+    axis 指定時はその local 軸（± のうち up に近い向き）。省略時は ±X/±Y/±Z の6方向から up に
+    最も近い signed 軸を自動選択する（spec『最も近い主軸を合わせる』）。
+    """
+    from mathutils import Vector  # type: ignore  # lazy: bpy 依存
+
+    if axis is not None:
+        wd = (obj.matrix_world.to_quaternion() @ Vector(_LOCAL_AXIS_UNIT[axis])).normalized()
+        sign = "+"
+        if wd.dot(up) < 0.0:  # 反対向きの方が近ければ符号反転
+            wd = -wd
+            sign = "-"
+        cur, chosen = wd, sign + axis
+    else:
+        best: tuple[float, Any, str] | None = None
+        for letter in _LOCAL_AXIS_LETTERS:
+            base = (
+                obj.matrix_world.to_quaternion() @ Vector(_LOCAL_AXIS_UNIT[letter])
+            ).normalized()
+            for sign, scalar in (("+", 1.0), ("-", -1.0)):
+                wd = base * scalar
+                d = wd.dot(up)
+                if best is None or d > best[0]:
+                    best = (d, wd, sign + letter)
+        assert best is not None  # 3軸×2符号で必ず確定
+        _, cur, chosen = best
+    _apply_world_rotation(obj, cur.rotation_difference(up))
+    return chosen
+
+
+def _principal_axis(obj: Any) -> tuple[Any, list[float]]:
+    """world 空間頂点分布の最大分散軸（principal）と固有値（昇順）を返す。
+
+    共分散（対称 3x3）を numpy.linalg.eigh で分解し最大固有値の固有ベクトルを主成分とする
+    （numpy は Blender 同梱・§E4）。PCA は符号不定なので **原点→重心 方向**に揃える
+    （重心が偏る側を + に・決定的）。分散が無い（点が一致/退化）場合は E_PRECONDITION。
+    """
+    import numpy as np  # type: ignore  # lazy: Blender 同梱（§E4）
+    from mathutils import Vector  # type: ignore
+
+    mw = obj.matrix_world
+    verts = [mw @ v.co for v in obj.data.vertices]
+    n = len(verts)
+    if n < 2:
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"pca には2頂点以上が必要です（頂点数={n}）",
+        )
+    cx = sum(v.x for v in verts) / n
+    cy = sum(v.y for v in verts) / n
+    cz = sum(v.z for v in verts) / n
+    sxx = syy = szz = sxy = sxz = syz = 0.0
+    for v in verts:
+        dx, dy, dz = v.x - cx, v.y - cy, v.z - cz
+        sxx += dx * dx
+        syy += dy * dy
+        szz += dz * dz
+        sxy += dx * dy
+        sxz += dx * dz
+        syz += dy * dz
+    cov = np.array([[sxx, sxy, sxz], [sxy, syy, syz], [sxz, syz, szz]]) / n
+    eigvals, eigvecs = np.linalg.eigh(cov)  # 昇順固有値・正規直交固有ベクトル
+    if float(eigvals[2]) <= _PCA_MIN_VARIANCE:
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            "頂点分布に広がりが無く主成分を決定できません（pca には立体的な mesh が必要）",
+        )
+    principal = Vector((float(eigvecs[0, 2]), float(eigvecs[1, 2]), float(eigvecs[2, 2])))
+    if (Vector((cx, cy, cz)) - mw.translation).dot(principal) < 0.0:
+        principal = -principal
+    return principal.normalized(), [round(float(x), 8) for x in eigvals]
+
+
+def _floor(obj: Any, up: Any) -> list[float]:
+    """up 方向の最下点を up=0 平面へ接地する（平行移動のみ）。適用した world 移動量を返す。"""
+    from mathutils import Matrix, Vector  # type: ignore
+
+    min_proj = min((obj.matrix_world @ Vector(c)).dot(up) for c in obj.bound_box)
+    shift = -min_proj * up
+    obj.matrix_world = Matrix.Translation(shift) @ obj.matrix_world
+    return [round(shift.x, 6), round(shift.y, 6), round(shift.z, 6)]
+
+
+def straighten_object(
+    obj: Any,
+    *,
+    method: str,
+    up_axis: str = "+Z",
+    axis: str | None = None,
+    message: str | None = None,
+) -> dict[str, Any]:
+    """直立補正を実行し、補正結果（回転/接地/整列の golden 値）を返す。
+
+    reset/world-align/pca は object 回転のみ・floor は平行移動のみ変更する（mesh 非破壊）。
+    `--bake-rotation` の mesh 焼き込みは呼び出し側（ops）が apply_transform 経路で行う。
+    matrix_world は読み取り前に view_layer.update() で最新化する（§E4 の stale 対策）。
+    """
+    from mathutils import Vector  # type: ignore  # lazy: bpy 依存
+
+    bpy.context.view_layer.update()  # §E4: rotation 直接設定後の stale を避ける
+    up = Vector(_AXIS_VECTORS[up_axis])
+    data: dict[str, Any] = {"name": obj.name, "method": method, "up_axis": up_axis}
+
+    if method == "reset":
+        _reset_rotation(obj)
+    elif method == "world-align":
+        data["axis"] = _world_align(obj, up, axis)
+    elif method == "pca":
+        principal, eigvals = _principal_axis(obj)
+        delta = principal.rotation_difference(up)
+        _apply_world_rotation(obj, delta)
+        data["eigenvalues"] = eigvals
+        data["principal_world"] = [round(v, 6) for v in principal]
+        data["principal_world_after"] = [round(v, 6) for v in (delta @ principal).normalized()]
+    elif method == "floor":
+        data["floor_offset"] = _floor(obj, up)
+    else:  # method は ENUM 検証済みのため到達不能（新 method の分岐漏れ検出の防御）。
+        raise _op_error(ErrorCode.E_PRECONDITION, f"未対応の straighten method: {method}")
+
+    bpy.context.view_layer.update()  # 補正後の matrix_world を確定
+    if message:
+        push_undo(message)
+
+    data["rotation_euler_deg"] = _rotation_euler_deg(obj)
+    if method == "world-align":  # 合わせた軸の world 方向（≈ up・DoD の整列 golden）
+        data["aligned_world"] = [round(v, 6) for v in _local_axis_world(obj, data["axis"])]
+    if world_bbox(obj) is not None:  # up 方向の最下点（floor 後は ≈0）
+        data["min_up"] = round(
+            min((obj.matrix_world @ Vector(c)).dot(up) for c in obj.bound_box), 6
+        )
+    return data

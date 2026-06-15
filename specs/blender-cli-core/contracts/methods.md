@@ -68,7 +68,9 @@ errors: `E_TARGET_NOT_FOUND` / `E_PRECONDITION(shared mesh: users>=2)` / `E_MODE
 ## シナリオ2: 直立補正
 | method | params | result | M | Mode | St |
 |--------|--------|--------|:-:|----|:--:|
-| `straighten` | `--targets` `--method reset\|world-align\|pca\|floor` `--up-axis?` `--axis?` `--bake-rotation?` | 補正後回転/接地Z | ✓ | OBJECT | s |
+| `straighten` | `--targets` `--method reset\|world-align\|pca\|floor` `--up-axis?`(既定 +Z) `--axis?` `--bake-rotation?` `--make-single-user?` | 補正後回転/整列軸/接地Z | ✓ | OBJECT | s |
+
+> `straighten`: 対象は単一（`require_single`・set-origin と対称）。**reset** は回転を identity に / **world-align** は指定（`--axis X\|Y\|Z`）または **省略時は up に最も近い signed local 軸を自動選択**して `--up-axis`（既定 +Z）へ最小回転で合わせる / **pca** は頂点分布の最大分散軸を up へ（符号は原点→重心方向で一意化・numpy.linalg.eigh） / **floor** は up 方向の最下点を up=0 平面へ接地（平行移動のみ）。reset/world-align/pca は **object 回転のみ**・floor は **平行移動のみ**変更し mesh データは触らない（共有 mesh でも安全・ガード不要）。`--bake-rotation` のときだけ回転を mesh データへ焼き込む（apply-transform rotation 経路を再利用）破壊的操作になり、共有 mesh は `--make-single-user` 必須。`--axis` は world-align 専用（他 method では `INVALID_PARAMS`）。pca は mesh 型・floor はジオメトリ（bbox）が必要で、非対応は `E_PRECONDITION`。result: `{method, up_axis, rotation_euler_deg, baked}` + world-align は `{axis(signed), aligned_world}` / pca は `{principal_world, principal_world_after, eigenvalues}` / floor は `{floor_offset, min_up}`。DoD: 補正後の整列軸（world-align=aligned_world / pca=principal_world_after）が world up と一致（ゴールデン・5.0.1/4.4.3 同値）。
 
 ## シナリオ3: 3Dプリンタ対応
 | method | params | result | M | H | Cap | St |

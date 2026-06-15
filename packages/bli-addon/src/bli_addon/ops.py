@@ -698,6 +698,58 @@ def _set_origin(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     return _ok("set-origin", data, fingerprint=gateway.object_fingerprint(obj))
 
 
+def _straighten(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("straighten")
+    _validate(cmd, params)
+    method = str(params["method"])
+    # axis は world-align 専用（reset は全回転クリア・pca/floor は無関係）。他 method で渡された
+    # ら silent ignore せず弾く（op 専用 param と同じ流儀・bpy 到達前に USER_INPUT）。
+    if "axis" in params:
+        _require_input(
+            method == "world-align",
+            symptom="--axis は world-align のときのみ有効です",
+            remediation="world-align で使うか --axis を外してください",
+        )
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(params["targets"]))
+    # method 別の前提（非対応型は INTERNAL でなく E_PRECONDITION）。
+    if method == "pca":
+        gateway.require_mesh(obj)  # 頂点分布が必要
+    elif method == "floor":
+        gateway.require_geometry(obj)  # bbox が必要
+
+    bake = bool(params.get("bake_rotation", False))
+    if bake:
+        # bake は回転を mesh データへ焼き込む破壊的操作。焼き込み先（mesh）と共有 mesh ガードを
+        # **補正（obj 回転）より前**に検証する（失敗時に obj を回転させたまま残さない・§6e）。
+        gateway.require_mesh(obj)
+        _guard_shared_mesh(gateway, obj, params)
+
+    data = gateway.straighten_object(
+        obj,
+        method=method,
+        up_axis=str(params.get("up_axis", "+Z")),
+        axis=str(params["axis"]) if "axis" in params else None,
+        message=None if bake else f"straighten {method}",
+    )
+    if bake:
+        # 回転を mesh へ焼き込む（apply-transform rotation 経路を再利用）。焼き込み後は object
+        # 回転が 0 になり頂点が回転する。共有ガードは上で実施済み（undo 境界は apply が作る）。
+        baked = gateway.apply_transform(
+            obj, location=False, rotation=True, scale=False, message=f"straighten {method} bake"
+        )
+        data["baked"] = True
+        data["rotation_euler_deg"] = baked["rotation_euler_deg"]
+    else:
+        data["baked"] = False
+    # straighten は object transform（floor は平行移動 / 他は回転 / bake は mesh も）を変える。
+    # bbox 込みの object_fingerprint で drift を示す（set-origin/transform と同流儀）。
+    return _ok("straighten", data, fingerprint=gateway.object_fingerprint(obj))
+
+
 _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]] = {
     "scene-info": _scene_info,
     "object-info": _object_info,
@@ -711,6 +763,7 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "modifier": _modifier,
     "mesh": _mesh,
     "set-origin": _set_origin,
+    "straighten": _straighten,
 }
 
 

@@ -72,6 +72,43 @@ command(
     required_mode=Mode.OBJECT,
 )
 
+# ---- シナリオ2: 直立補正（M8 T8.2）----
+command(
+    "straighten",
+    "オブジェクトを直立補正する（reset/world-align/pca/floor・up-axis 既定 +Z）",
+    # method により有効/必須 param が変わる（条件付き）。axis は world-align 専用（省略時は
+    # up に最も近い local 軸を自動選択）。bake-rotation は回転を mesh データへ焼き込む破壊的操作
+    # で、共有 mesh は --make-single-user 必須（apply-transform/mesh と同じガード・§6e）。
+    params=(
+        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p(
+            "method",
+            ParamType.ENUM,
+            required=True,
+            choices=["reset", "world-align", "pca", "floor"],
+            help="補正方法: reset|world-align|pca|floor",
+        ),
+        p(
+            "up_axis",
+            ParamType.ENUM,
+            default="+Z",
+            choices=["+Z", "-Z", "+Y", "-Y", "+X", "-X"],
+            help="up 方向（既定 +Z）",
+        ),
+        # axis は world-align 専用・省略時は最近軸を自動選択（presence-sensitive: default なし）。
+        p("axis", ParamType.ENUM, choices=["X", "Y", "Z"], help="world-align で合わせる local 軸"),
+        p("bake_rotation", ParamType.BOOL, default=False, help="回転を mesh データへ焼き込む"),
+        p(
+            "make_single_user",
+            ParamType.BOOL,
+            default=False,
+            help="bake時に共有mesh単一ユーザ化を許可",
+        ),
+    ),
+    mutates=True,
+    required_mode=Mode.OBJECT,
+)
+
 # ---- 汎用編集（オブジェクト操作 / M6 T6.1）----
 command(
     "select",
