@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -21,6 +22,27 @@ from bli_core.errors import ErrorCategory, ErrorCode, ExitCode
 from bli_core.schema import schema_hash, to_json_schema
 
 from . import client, config, models
+
+
+def _force_utf8_output() -> None:
+    """標準出力/エラーを UTF-8 に固定する。
+
+    Windows の既定は CP932 のため、日本語サマリや `ensure_ascii=False` の JSON が
+    化ける/UnicodeEncodeError になる。呼び出し側に `PYTHONUTF8=1` を強制せずとも
+    読めるよう、CLI 起動時に stream を UTF-8 へ張り替える。リダイレクトや pytest の
+    capture など reconfigure を持たない/拒否する stream は黙ってスキップする。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8")
+        except (ValueError, OSError):
+            pass
+
+
+_force_utf8_output()
 
 app = typer.Typer(
     name="bli",
@@ -294,7 +316,9 @@ def list_objects_cmd(
 
 @app.command("object-info")
 def object_info(
-    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(
+        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+    ),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
@@ -311,7 +335,9 @@ def object_info(
 
 @app.command("set-origin")
 def set_origin(
-    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(
+        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+    ),
     to: str = typer.Option(..., "--to", help="原点の決め方: geometry|cursor|world"),
     center: str | None = typer.Option(None, "--center", help="geometry時の中心: median|bounds"),
     x: float | None = typer.Option(None, "--x", help="world時のX"),
@@ -347,7 +373,9 @@ def set_origin(
 
 @app.command()
 def straighten(
-    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(
+        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+    ),
     method: str = typer.Option(..., "--method", help="reset|world-align|pca|floor"),
     up_axis: str = typer.Option("+Z", "--up-axis", help="up 方向: +Z|-Z|+Y|-Y|+X|-X（既定 +Z）"),
     axis: str | None = typer.Option(
@@ -422,7 +450,9 @@ def print_setup(
 
 @app.command("print-check")
 def print_check(
-    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(
+        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+    ),
     manifold: bool = typer.Option(False, "--manifold", help="非多様体チェック"),
     normals: bool = typer.Option(False, "--normals", help="反転法線チェック"),
     degenerate: bool = typer.Option(False, "--degenerate", help="退化面チェック"),
@@ -471,7 +501,9 @@ def print_check(
 
 @app.command("print-repair")
 def print_repair(
-    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(
+        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+    ),
     make_manifold: bool = typer.Option(
         False, "--make-manifold", help="穴埋め/重複マージ/loose 除去で manifold 化"
     ),
@@ -510,7 +542,9 @@ def print_repair(
 
 @app.command()
 def select(
-    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(
+        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+    ),
     type_filter: str | None = typer.Option(None, "--type", help="型フィルタ（MESH/CURVE/...）"),
     active: str | None = typer.Option(None, "--active", help="active にする対象名"),
     request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
@@ -532,7 +566,9 @@ def select(
 
 @app.command()
 def transform(
-    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(
+        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+    ),
     location: str | None = typer.Option(None, "--location", help="位置 x,y,z"),
     rotation: str | None = typer.Option(None, "--rotation", help="回転 x,y,z（度）"),
     scale: str | None = typer.Option(None, "--scale", help="拡縮 x,y,z"),
@@ -567,7 +603,9 @@ def transform(
 
 @app.command("apply-transform")
 def apply_transform_cmd(
-    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(
+        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+    ),
     location: bool = typer.Option(False, "--location", help="位置を適用"),
     rotation: bool = typer.Option(False, "--rotation", help="回転を適用"),
     scale: bool = typer.Option(False, "--scale", help="拡縮を適用"),
@@ -602,7 +640,9 @@ def apply_transform_cmd(
 
 @app.command()
 def duplicate(
-    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(
+        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+    ),
     linked: bool = typer.Option(False, "--linked", help="データを共有する（リンク複製）"),
     count: int = typer.Option(1, "--count", help="複製数（1〜1000）"),
     offset: str | None = typer.Option(None, "--offset", help="複製ごとの world オフセット x,y,z"),
@@ -638,7 +678,9 @@ def duplicate(
 
 @app.command()
 def delete(
-    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(
+        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+    ),
     request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
@@ -656,7 +698,9 @@ def delete(
 @app.command()
 def material(
     action: str = typer.Option(..., "--action", help="操作: assign|create|list"),
-    targets: str | None = typer.Option(None, "--targets", help="対象オブジェクト（name|regex）"),
+    targets: str | None = typer.Option(
+        None, "--targets", "--target", help="対象オブジェクト（name|regex）"
+    ),
     name: str | None = typer.Option(
         None, "--name", help="マテリアル名（assign=既存 / create=新規）"
     ),
@@ -700,7 +744,9 @@ def material(
 @app.command()
 def modifier(
     action: str = typer.Option(..., "--action", help="add|remove|list|apply"),
-    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(
+        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+    ),
     type_: str | None = typer.Option(
         None, "--type", help="add の種類: MIRROR|SUBSURF|SOLIDIFY|DECIMATE|BOOLEAN"
     ),
@@ -760,7 +806,9 @@ def mesh(
     op: str = typer.Option(
         ..., "--op", help="recalc-normals|merge-by-distance|extrude|bevel|inset|boolean|decimate"
     ),
-    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    targets: str = typer.Option(
+        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+    ),
     inside: bool = typer.Option(False, "--inside", help="recalc-normals: 法線を内向きに"),
     distance: float | None = typer.Option(
         None, "--distance", help="merge-by-distance: マージ距離（既定 0.0001）"
