@@ -484,6 +484,8 @@ def test_mesh_make_single_user_not_rejected_as_op_param():
         {"op": "extrude", "offset": [0.0, 0.0, 1.0]},
         {"op": "bevel", "width": 0.1},
         {"op": "inset", "thickness": 0.1},
+        {"op": "boolean", "operation": "UNION", "with_object": "Cube2"},
+        {"op": "decimate", "ratio": 0.5},
     ]
     for extra in cases:
         params = {"targets": "Cube", "make_single_user": True, **extra}
@@ -597,3 +599,92 @@ def test_mesh_nonfinite_width_thickness_server_rejected():
     with pytest.raises(JsonRpcError) as ei:
         ops.dispatch("mesh", {"op": "inset", "targets": "Cube", "thickness": float("nan")}, INFO)
     assert ei.value.code == RPC_INVALID_PARAMS
+
+
+# ---- M7 T7.3 mesh（boolean / decimate）の param 検証（bpy 不要）----
+
+
+def test_mesh_boolean_missing_operation_invalid_params():
+    # boolean は operation 必須（with_object はあっても）→ bpy 到達前に USER_INPUT
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "boolean", "targets": "Cube", "with_object": "Cube2"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_boolean_missing_with_invalid_params():
+    # boolean は with_object 必須 → bpy 到達前に USER_INPUT
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "boolean", "targets": "Cube", "operation": "UNION"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_boolean_bad_operation_invalid_params():
+    # operation は ENUM。範囲外は schema 検証で INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "mesh",
+            {"op": "boolean", "targets": "Cube", "operation": "BOGUS", "with_object": "Cube2"},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_mesh_boolean_wrong_op_param_invalid_params():
+    # ratio は decimate 専用。boolean に渡すと silent ignore せず弾く（cross-op leak ガード）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "mesh",
+            {
+                "op": "boolean",
+                "targets": "Cube",
+                "operation": "UNION",
+                "with_object": "Cube2",
+                "ratio": 0.5,
+            },
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_decimate_missing_ratio_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "decimate", "targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_mesh_decimate_ratio_out_of_range_invalid_params():
+    # ratio は 0..1。範囲外は bpy 到達前に弾く（silent クランプ回避・modifier DECIMATE と同様）。
+    for bad in (-0.1, 1.5):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("mesh", {"op": "decimate", "targets": "Cube", "ratio": bad}, INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, bad
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", bad
+
+
+def test_mesh_decimate_nonfinite_ratio_server_rejected():
+    # FLOAT（ratio）の nan/inf もサーバ側（schema）で弾く。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mesh", {"op": "decimate", "targets": "Cube", "ratio": float("inf")}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_mesh_decimate_wrong_op_param_invalid_params():
+    # operation は boolean 専用。decimate に渡すと弾く（cross-op leak ガード）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "mesh",
+            {"op": "decimate", "targets": "Cube", "ratio": 0.5, "operation": "UNION"},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"

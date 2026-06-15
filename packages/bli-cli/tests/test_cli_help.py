@@ -178,7 +178,7 @@ def test_m7_mesh_discoverable():
     schema = json.loads(runner.invoke(app, ["help", "--command", "mesh", "--json"]).output)[
         "schema"
     ]
-    # T7.1（inside/distance）+ T7.2（offset/width/segments/thickness）
+    # T7.1（inside/distance）+ T7.2（offset/width/segments/thickness）+ T7.3（operation/with_object/ratio）
     assert set(schema["properties"]) == {
         "op",
         "targets",
@@ -188,6 +188,9 @@ def test_m7_mesh_discoverable():
         "width",
         "segments",
         "thickness",
+        "operation",
+        "with_object",
+        "ratio",
         "make_single_user",
     }
     assert set(schema["required"]) == {"op", "targets"}
@@ -197,9 +200,22 @@ def test_m7_mesh_discoverable():
         "extrude",
         "bevel",
         "inset",
+        "boolean",
+        "decimate",
     ]
+    assert schema["properties"]["operation"]["enum"] == ["UNION", "DIFFERENCE", "INTERSECT"]
     # op 専用 param は schema default を持たない（別 op への誤送信を防ぐ・§6e）。
-    for k in ("inside", "distance", "offset", "width", "segments", "thickness"):
+    for k in (
+        "inside",
+        "distance",
+        "offset",
+        "width",
+        "segments",
+        "thickness",
+        "operation",
+        "with_object",
+        "ratio",
+    ):
         assert "default" not in schema["properties"][k], k
     # offset は VEC3
     assert schema["properties"]["offset"]["type"] == "array"

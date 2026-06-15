@@ -48,13 +48,15 @@
 |--------|--------|--------|:-:|:-:|----|:--:|
 | `mesh` | `--op <op>` `--targets` `[op別params]` `--make-single-user?` | op 別（法線統計 / マージ頂点数 / mesh統計） | ✓ | △ | OBJECT | e |
 
-`mesh --op`（v1）= `recalc-normals` / `merge-by-distance`（**T7.1 実装済み**）/ `extrude` / `bevel` / `inset`（**T7.2 実装済み**）/ `boolean` / `decimate`（T7.3 予定）。
+`mesh --op`（v1）= `recalc-normals` / `merge-by-distance`（**T7.1 実装済み**）/ `extrude` / `bevel` / `inset`（**T7.2 実装済み**）/ `boolean` / `decimate`（**T7.3 実装済み＝M7 完了**）。
 
 > `mesh`: 操作は `--op`（ENUM）。material/modifier の `--action` と同じ流儀で、op 別 params は schema 上は任意・サーバが op 別に検証する（条件付き必須・無効 param は弾く）。**bmesh 一次**（`from_mesh`→`bmesh.ops`→`to_mesh`・object モードのまま編集＝context 非依存）。mesh データを直接書き換える破壊的操作のため、共有 mesh は `--make-single-user` 必須。非 mesh 型は `E_PRECONDITION`。stability はコマンド単位なので（experimental op を含むため）`mesh` 全体を **experimental** とする。op 専用 param（`--inside`/`--distance`/`--offset`/`--width`/`--segments`/`--thickness`）は schema default を持たない（生成クライアントが既定値を別 op へ誤送信し op 別検証で弾かれるのを防ぐ）。
 >
 > op 別 params: ① `recalc-normals`:`--inside?` → `{faces, flipped, inside, stats}`（flipped=この操作で向きが変わった面数）。② `merge-by-distance`:`--distance?`（既定 0.0001・0 以上）→ `{merged, before, after, distance, stats}`。③ `extrude`:`--offset x,y,z`（**必須**・world 空間）→ `{offset, delta, stats}`。④ `bevel`:`--width`（**必須**・ローカル単位・0以上）`--segments?`（既定1・1〜100）→ `{width, segments, delta, stats}`。⑤ `inset`:`--thickness`（**必須**・ローカル単位・0以上）→ `{thickness, delta, stats}`。`stats`=`{vertices, edges, polygons}`（編集後）/ `delta`=before→after の増減（符号付き＝追加は正・削減は負。decimate/boolean でも一貫）。fingerprint は mesh 法線込みの専用 `mesh_fingerprint`（頂点数不変の recalc も検出できる）。
 >
-> `extrude --offset` は **world 空間**ベクトル（move/duplicate の `--offset` と一貫・matrix_world で world→local 変換）。`bevel --width` / `inset --thickness` はスカラ量のため **mesh ローカル単位**（非一様スケール下の world 幅は定義不能）。extrude=全 face を region 押し出し / bevel=全 edge を `affect=EDGES` / inset=全 face を `inset_individual`（閉じた mesh の全 face は `inset_region` だと no-op のため個別 inset）。Mode は当面 OBJECT 固定（bmesh-on-data・5.0.1/4.4.3 で確認）。`boolean`/`decimate` は heavy 候補（同期実行・非同期 job は M10）。
+> `extrude --offset` は **world 空間**ベクトル（move/duplicate の `--offset` と一貫・matrix_world で world→local 変換）。`bevel --width` / `inset --thickness` はスカラ量のため **mesh ローカル単位**（非一様スケール下の world 幅は定義不能）。extrude=全 face を region 押し出し / bevel=全 edge を `affect=EDGES` / inset=全 face を `inset_individual`（閉じた mesh の全 face は `inset_region` だと no-op のため個別 inset）。Mode は当面 OBJECT 固定（bmesh-on-data・5.0.1/4.4.3 で確認）。
+>
+> op 別 params（T7.3・**heavy**）: ⑥ `boolean`:`--operation UNION|DIFFERENCE|INTERSECT`（**必須**）`--with <mesh>`（**必須**・相手 mesh）→ `{operation, with, delta, stats}`。⑦ `decimate`:`--ratio 0..1`（**必須**）→ `{ratio, delta, stats}`。`bmesh` に boolean/decimate 相当が無いため（スパイク §E3 で確認）、いずれも **BOOLEAN/DECIMATE モディファイアを追加して `modifier_apply` で焼き込む**（生 bpy.ops は gateway のみ・AST guard 準拠）。boolean 相手の **world 位置は Blender が両者の matrix_world から解決**（手動変換不要）・相手は read-only（編集されない）・自己参照/非 mesh は `INVALID_PARAMS(USER_INPUT)`。boolean/decimate は heavy 候補（同期実行・非同期 job は M10）。多ユーザ mesh への `modifier_apply` は Blender が拒否するため共有 mesh は `--make-single-user` 必須（ratio=1.0 等の実質 no-op でも mesh は焼き直される）。
 
 ## シナリオ1: 原点変更
 | method | params | result | M | Mode | St |

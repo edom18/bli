@@ -512,6 +512,9 @@ _MESH_OP_PARAMS: dict[str, set[str]] = {
     "extrude": {"offset"},
     "bevel": {"width", "segments"},
     "inset": {"thickness"},
+    # T7.3（heavy・modifier add+apply 経由）: boolean=演算+相手 / decimate=削減比率。
+    "boolean": {"operation", "with_object"},
+    "decimate": {"ratio"},
 }
 # 全 op 別パラメータの和集合（手書きにせず導出＝op 追加時の追従漏れを防ぐ）。
 _ALL_MESH_OP_PARAMS: set[str] = set().union(*_MESH_OP_PARAMS.values())
@@ -577,6 +580,29 @@ def _mesh(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             symptom=f"thickness は 0 以上で指定してください（指定: {params['thickness']}）",
             remediation="--thickness を 0 以上にしてください",
         )
+    elif op == "boolean":
+        # operation/相手は必須（相手の実在/型は bpy 到達後に require_single で検証）。
+        _require_input(
+            "operation" in params,
+            symptom="boolean には --operation（演算）が必要です",
+            remediation="--operation UNION|DIFFERENCE|INTERSECT を指定してください",
+        )
+        _require_input(
+            "with_object" in params,
+            symptom="boolean には --with（相手オブジェクト）が必要です",
+            remediation="--with <object> を指定してください",
+        )
+    elif op == "decimate":
+        _require_input(
+            "ratio" in params,
+            symptom="decimate には --ratio（削減比率）が必要です",
+            remediation="--ratio 0..1 を指定してください",
+        )
+        _require_input(
+            0.0 <= float(params["ratio"]) <= 1.0,
+            symptom=f"ratio は 0.0〜1.0 で指定してください（指定: {params['ratio']}）",
+            remediation="--ratio を 0.0〜1.0 にしてください",
+        )
 
     from . import bmesh_ops, gateway  # lazy: bpy 依存
 
@@ -584,10 +610,25 @@ def _mesh(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     obj = gateway.require_single(str(params["targets"]))
     # 非 mesh 型（EMPTY/CURVE 等）を INTERNAL でなく E_PRECONDITION で弾く（material と同様）。
     gateway.require_mesh(obj)
+    # boolean の相手は **共有ガード（単一ユーザ化）の前** に解決・検証する（不正な相手で obj の
+    # mesh を分離しない。modifier の BOOLEAN add と同じ流儀）。operand 自体は read-only。
+    operand = None
+    if op == "boolean":
+        operand = gateway.require_single(str(params["with_object"]))
+        _require_input(
+            operand.name != obj.name,
+            symptom="boolean の相手に自分自身は指定できません",
+            remediation="別のオブジェクトを --with に指定してください",
+        )
+        _require_input(
+            operand.type == "MESH",
+            symptom=f"boolean の相手は mesh が必要です（--with={operand.name} type={operand.type}）",
+            remediation="mesh オブジェクトを --with に指定してください",
+        )
     # 破壊的（mesh データを直接書き換える）→ 共有 mesh は単一ユーザ化を要求（apply 系と同様）。
-    # 現状の op（recalc/merge）は必ず obj.data を書き換える前提でガードを掛ける。将来 no-op に
-    # なり得る op（例: decimate ratio=1.0）を足す際は、material のように「実書き込み時のみ」
-    # ガードする方式（false-positive な単一ユーザ化を避ける）を検討すること。
+    # 全 op が obj.data を書き換える: bmesh 系は to_mesh で上書き / boolean・decimate は
+    # modifier_apply で焼き込む（多ユーザ mesh への modifier_apply は Blender が拒否するため
+    # 単一ユーザ化は必須）。ratio=1.0 等の実質 no-op でも mesh は焼き直されるためガードする。
     _guard_shared_mesh(gateway, obj, params)
 
     if op == "recalc-normals":
@@ -606,8 +647,14 @@ def _mesh(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         result = bmesh_ops.bevel(
             obj, width=float(params["width"]), segments=segments, message="mesh bevel"
         )
-    else:  # inset
+    elif op == "inset":
         result = bmesh_ops.inset(obj, thickness=float(params["thickness"]), message="mesh inset")
+    elif op == "boolean":
+        result = gateway.mesh_boolean(
+            obj, operand, operation=str(params["operation"]), message="mesh boolean"
+        )
+    else:  # decimate
+        result = gateway.mesh_decimate(obj, ratio=float(params["ratio"]), message="mesh decimate")
     # mesh が変わる → mesh 込みの mesh_fingerprint で drift を示す（recalc は頂点数不変のため
     # object_fingerprint では検出できない。法線込みの専用 fingerprint を使う。§6e）。
     data = {"name": obj.name, "op": op, **result}

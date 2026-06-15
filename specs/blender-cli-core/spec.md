@@ -137,18 +137,18 @@ bli <command> [--targets <name|regex>] [options] [--json] [--id <uuid>] [--dry-r
 ### メッシュ編集（bmesh 一次 / 単一 `mesh` コマンド + `--op`）
 - **bmesh-on-data** を基本とする（`from_mesh`→`bmesh.ops`→`to_mesh`・**OBJECT モードのまま** mesh データを編集＝`bpy.ops` の context 依存を回避。5.0.1/4.4.3 で確認済み）。当面 Mode=OBJECT（EDIT モード実機は L4）。
 - material/modifier と同じく **単一 `mesh` コマンド + `--op` ENUM**（操作ごとに別コマンドにはしない）。op 別 params は schema 上は任意・サーバが op 別に検証する（条件付き必須・無効 param は弾く・op 専用 param は schema default を持たせない）。stability はコマンド単位なので（experimental op を含むため）`mesh` 全体を experimental とする。
-- v1 の op（**T7.1–7.2 実装済み**: recalc-normals / merge-by-distance / extrude / bevel / inset / **T7.3 予定**: boolean / decimate）:
+- v1 の op（**T7.1–7.3 実装済み＝M7 完了**: recalc-normals / merge-by-distance / extrude / bevel / inset / boolean / decimate）:
 ```
 bli mesh --op recalc-normals     --targets <name> [--inside]
 bli mesh --op merge-by-distance  --targets <name> [--distance <f>]   # 既定 0.0001・0 以上
 bli mesh --op extrude  --targets <name> --offset x,y,z               # 全 face を region 押し出し
 bli mesh --op bevel    --targets <name> --width <f> [--segments N]   # 全 edge を bevel（既定 seg=1）
 bli mesh --op inset    --targets <name> --thickness <f>              # 全 face を個別 inset
-# 以下 T7.3 で追加予定
-bli mesh --op boolean  --targets <name> --with <other> --operation union|difference|intersect
-bli mesh --op decimate --targets <name> --ratio <f>          # 破壊的削減（編集確定）
+bli mesh --op boolean  --targets <name> --with <other> --operation UNION|DIFFERENCE|INTERSECT
+bli mesh --op decimate --targets <name> --ratio <f>                  # 破壊的削減（編集確定）
 ```
 - T7.2: `extrude --offset` は **world 空間**ベクトル（move/duplicate と一貫・matrix_world で world→local 変換）。`bevel --width` / `inset --thickness` はスカラ量のため **mesh ローカル単位**。extrude offset / bevel width / inset thickness は op 別に**必須**（bevel segments は任意・既定1・1〜100 で暴走防止）。選択は v1 では全 geometry（`--faces` 等の高度なセレクタは Deferred）。inset は閉じた mesh の全 face で `inset_region` が no-op のため `inset_individual` を使う。結果の `delta` は before→after の符号付き増減（decimate/boolean でも一貫）。
+- T7.3（heavy）: `boolean` / `decimate` は **bmesh に相当 op が無い**ため（スパイク確認）、BOOLEAN/DECIMATE モディファイアを追加して `modifier_apply` で焼き込む（bmesh-on-data ではなく modifier 経由・生 bpy.ops は gateway のみ）。boolean は `--operation`（UNION/DIFFERENCE/INTERSECT）と `--with`（相手 mesh）が**必須**・相手の world 位置は Blender が解決・相手は read-only・自己参照/非 mesh は弾く。decimate は `--ratio`（0..1）が**必須**（COLLAPSE）。両者 heavy 候補だが同期実行（非同期 job は M10）。
 - mesh データを直接書き換える破壊的操作のため、共有 mesh は `--make-single-user` 必須（apply 系と同じ）。非 mesh 型は `E_PRECONDITION`。
 
 ### シナリオ1: 原点変更

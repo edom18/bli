@@ -885,3 +885,58 @@ def mesh_fingerprint(obj: Any) -> str:
         norms.update(f"{n.x + 0.0:.4f},{n.y + 0.0:.4f},{n.z + 0.0:.4f};".encode())
     # 幾何カウントは mesh_stats を単一の真実とする（重複定義のドリフトを防ぐ）。
     return _digest16({**mesh_stats(obj), "normals": norms.hexdigest()[:16]})
+
+
+def stats_delta(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
+    """before→after の頂点/辺/面の増減（符号付き＝追加は正・削減は負）。
+
+    extrude/bevel/inset（追加）も decimate/boolean（削減もあり得る）も同じ符号付き表現で
+    返せるよう中立な「delta」にする（mesh_stats を持つ gateway に集約し bmesh_ops と共有）。
+    """
+    return {k: after[k] - before[k] for k in after}
+
+
+# ---- メッシュ編集 heavy（M7 T7.3 / bmesh に boolean/decimate が無く modifier add+apply 経由）----
+#
+# boolean / decimate は bmesh.ops に相当が無い（スパイク E3 で両版 False を確認）。モディファイアを
+# 追加して run_operator(modifier_apply) で mesh へ焼き込む（生 bpy.ops は gateway のみ＝AST guard 準拠）。
+# 共有 mesh の単一ユーザ化ガードは呼び出し側（ops._guard_shared_mesh）が行う。結果は T7.2 と同じ
+# `{<param>, delta, stats}`（stats=編集後 / delta=符号付き増減）。
+
+
+def mesh_decimate(obj: Any, *, ratio: float, message: str | None = None) -> dict[str, Any]:
+    """DECIMATE モディファイア（COLLAPSE・ratio）を追加して即適用し、ポリゴンを削減する。
+
+    bmesh に decimate 相当が無いため modifier 経由（add+apply）にフォールバックする（研究 §E3）。
+    ratio=1.0 は無削減（delta 0）だが modifier_apply は mesh を焼き直す（破壊的書き込み）。
+    """
+    before = mesh_stats(obj)
+    mod = obj.modifiers.new("BLI_Decimate", "DECIMATE")
+    mod.decimate_type = "COLLAPSE"
+    mod.ratio = ratio
+    run_operator(bpy.ops.object.modifier_apply, obj, message=message, modifier=mod.name)
+    after = mesh_stats(obj)
+    return {"ratio": ratio, "delta": stats_delta(before, after), "stats": after}
+
+
+def mesh_boolean(
+    obj: Any, operand: Any, *, operation: str, message: str | None = None
+) -> dict[str, Any]:
+    """BOOLEAN モディファイア（operand を相手・operation）を追加して即適用する。
+
+    bmesh に boolean が無いため modifier 経由（add+apply・solver は既定 EXACT）。operand の
+    **world 位置は Blender が両者の matrix_world から解決**するため手動 world→local 変換は不要
+    （extrude と異なる。研究 §E3）。operand 自体は read-only（編集されない）。
+    """
+    before = mesh_stats(obj)
+    mod = obj.modifiers.new("BLI_Boolean", "BOOLEAN")
+    mod.operation = operation
+    mod.object = operand
+    run_operator(bpy.ops.object.modifier_apply, obj, message=message, modifier=mod.name)
+    after = mesh_stats(obj)
+    return {
+        "operation": operation,
+        "with": operand.name,
+        "delta": stats_delta(before, after),
+        "stats": after,
+    }

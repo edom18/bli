@@ -18,7 +18,7 @@ from typing import Any
 
 import bmesh  # type: ignore
 
-from .gateway import mesh_stats, push_undo
+from .gateway import mesh_stats, push_undo, stats_delta
 
 
 def _face_normals(mesh: Any) -> list[tuple[float, float, float]]:
@@ -95,15 +95,6 @@ def merge_by_distance(obj: Any, *, distance: float, message: str | None = None) 
     }
 
 
-def _stats_delta(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
-    """before→after の頂点/辺/面の増分（符号付き＝追加は正・削減は負）。
-
-    decimate/boolean（T7.3）は削減もあり得るため、名前と意味を「added」ではなく中立な
-    「delta」にして符号付きで返す（false な常時正の不変条件を契約に焼かない）。
-    """
-    return {k: after[k] - before[k] for k in after}
-
-
 def extrude(obj: Any, *, offset: list[float], message: str | None = None) -> dict[str, Any]:
     """全 face を region として押し出し、新頂点を offset だけ平行移動する。
 
@@ -129,7 +120,7 @@ def extrude(obj: Any, *, offset: list[float], message: str | None = None) -> dic
     after = mesh_stats(obj)
     if message:
         push_undo(message)
-    return {"offset": list(offset), "delta": _stats_delta(before, after), "stats": after}
+    return {"offset": list(offset), "delta": stats_delta(before, after), "stats": after}
 
 
 def bevel(obj: Any, *, width: float, segments: int, message: str | None = None) -> dict[str, Any]:
@@ -152,7 +143,7 @@ def bevel(obj: Any, *, width: float, segments: int, message: str | None = None) 
     return {
         "width": width,
         "segments": segments,
-        "delta": _stats_delta(before, after),
+        "delta": stats_delta(before, after),
         "stats": after,
     }
 
@@ -175,4 +166,4 @@ def inset(obj: Any, *, thickness: float, message: str | None = None) -> dict[str
     after = mesh_stats(obj)
     if message:
         push_undo(message)
-    return {"thickness": thickness, "delta": _stats_delta(before, after), "stats": after}
+    return {"thickness": thickness, "delta": stats_delta(before, after), "stats": after}
