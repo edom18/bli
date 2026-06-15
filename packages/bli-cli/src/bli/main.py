@@ -677,7 +677,7 @@ def mesh(
 
         prefix = f"{data.get('name')} {op_}"
         if op_ == "boolean":
-            prefix += f" ({data.get('operation')} with {data.get('with')})"
+            prefix += f" ({data.get('operation')} with {data.get('with_object')})"
         elif op_ == "decimate":
             prefix += f" (ratio={data.get('ratio')})"
         return (

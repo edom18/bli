@@ -199,6 +199,27 @@ def _guard_shared_mesh(gateway: Any, obj: Any, params: dict[str, Any]) -> None:
         gateway.make_single_user_mesh(obj)
 
 
+def _resolve_boolean_operand(gateway: Any, obj: Any, with_object: Any) -> Any:
+    """BOOLEAN 演算の相手を解決し、自己参照/非 mesh を弾く。
+
+    `modifier --action add --type BOOLEAN` と `mesh --op boolean` の両方から呼ぶ共有ロジック
+    （二重定義で文言/条件がドリフトするのを防ぐ）。呼び出し側は **状態変更（共有 mesh の単一
+    ユーザ化）より前** にこれを通すこと（不正な相手で対象 mesh を分離しないため）。
+    """
+    operand = gateway.require_single(str(with_object))
+    _require_input(
+        operand.name != obj.name,
+        symptom="BOOLEAN の相手に自分自身は指定できません",
+        remediation="別のオブジェクトを --with に指定してください",
+    )
+    _require_input(
+        operand.type == "MESH",
+        symptom=f"BOOLEAN の相手は mesh が必要です（--with={operand.name} type={operand.type}）",
+        remediation="mesh オブジェクトを --with に指定してください",
+    )
+    return operand
+
+
 def _transform(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     cmd = _command("transform")
     _validate(cmd, params)
@@ -470,20 +491,10 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         data = {"name": obj.name, "action": "apply", **result}
         return _ok("modifier", data, fingerprint=gateway.object_fingerprint(obj))
 
-    # add（type 別 param を設定。BOOLEAN は相手を require_single で解決し型/自己参照を検証）。
+    # add（type 別 param を設定。BOOLEAN は相手を解決し型/自己参照を検証＝mesh boolean と共有）。
     operand = None
     if mtype == "BOOLEAN":
-        operand = gateway.require_single(str(params["with_object"]))
-        _require_input(
-            operand.name != obj.name,
-            symptom="BOOLEAN の相手に自分自身は指定できません",
-            remediation="別のオブジェクトを --with に指定してください",
-        )
-        _require_input(
-            operand.type == "MESH",
-            symptom=f"BOOLEAN の相手は mesh が必要です（--with={operand.name} type={operand.type}）",
-            remediation="mesh オブジェクトを --with に指定してください",
-        )
+        operand = _resolve_boolean_operand(gateway, obj, params["with_object"])
     summary = gateway.add_modifier(
         obj,
         str(mtype),
@@ -611,20 +622,10 @@ def _mesh(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     # 非 mesh 型（EMPTY/CURVE 等）を INTERNAL でなく E_PRECONDITION で弾く（material と同様）。
     gateway.require_mesh(obj)
     # boolean の相手は **共有ガード（単一ユーザ化）の前** に解決・検証する（不正な相手で obj の
-    # mesh を分離しない。modifier の BOOLEAN add と同じ流儀）。operand 自体は read-only。
+    # mesh を分離しない。modifier の BOOLEAN add と同じ共有ヘルパ）。operand 自体は read-only。
     operand = None
     if op == "boolean":
-        operand = gateway.require_single(str(params["with_object"]))
-        _require_input(
-            operand.name != obj.name,
-            symptom="boolean の相手に自分自身は指定できません",
-            remediation="別のオブジェクトを --with に指定してください",
-        )
-        _require_input(
-            operand.type == "MESH",
-            symptom=f"boolean の相手は mesh が必要です（--with={operand.name} type={operand.type}）",
-            remediation="mesh オブジェクトを --with に指定してください",
-        )
+        operand = _resolve_boolean_operand(gateway, obj, params["with_object"])
     # 破壊的（mesh データを直接書き換える）→ 共有 mesh は単一ユーザ化を要求（apply 系と同様）。
     # 全 op が obj.data を書き換える: bmesh 系は to_mesh で上書き / boolean・decimate は
     # modifier_apply で焼き込む（多ユーザ mesh への modifier_apply は Blender が拒否するため
@@ -653,8 +654,10 @@ def _mesh(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         result = gateway.mesh_boolean(
             obj, operand, operation=str(params["operation"]), message="mesh boolean"
         )
-    else:  # decimate
+    elif op == "decimate":
         result = gateway.mesh_decimate(obj, ratio=float(params["ratio"]), message="mesh decimate")
+    else:  # op は ENUM 検証済みのため到達不能。新 op の実行分岐漏れを早期検出する防御。
+        raise JsonRpcError(RPC_METHOD_NOT_FOUND, f"mesh op の実行分岐がありません: {op}")
     # mesh が変わる → mesh 込みの mesh_fingerprint で drift を示す（recalc は頂点数不変のため
     # object_fingerprint では検出できない。法線込みの専用 fingerprint を使う。§6e）。
     data = {"name": obj.name, "op": op, **result}

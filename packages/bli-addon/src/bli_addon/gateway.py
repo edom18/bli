@@ -898,23 +898,42 @@ def stats_delta(before: dict[str, int], after: dict[str, int]) -> dict[str, int]
 
 # ---- メッシュ編集 heavy（M7 T7.3 / bmesh に boolean/decimate が無く modifier add+apply 経由）----
 #
-# boolean / decimate は bmesh.ops に相当が無い（スパイク E3 で両版 False を確認）。モディファイアを
-# 追加して run_operator(modifier_apply) で mesh へ焼き込む（生 bpy.ops は gateway のみ＝AST guard 準拠）。
+# boolean / decimate は bmesh.ops に相当が無い（スパイク E3 で両版 False を確認）。既存の
+# add_modifier（型別プロパティ設定 + 非対応型の RuntimeError→E_PRECONDITION 変換）と apply_modifier
+# （run_operator 経由・生 bpy.ops は gateway のみ＝AST guard 準拠）を**再利用**して mesh へ焼き込む。
 # 共有 mesh の単一ユーザ化ガードは呼び出し側（ops._guard_shared_mesh）が行う。結果は T7.2 と同じ
 # `{<param>, delta, stats}`（stats=編集後 / delta=符号付き増減）。
+#
+# boolean/decimate は対象を**空/退化 mesh にし得る**（INTERSECT で非重複・decimate ratio→0 等）。
+# success は operator 完了を表し幾何的健全性は保証しない（呼び出し側は stats/delta で確認できる）。
+
+
+def _add_then_apply(obj: Any, mod_type: str, message: str | None, **props: Any) -> None:
+    """モディファイアを追加して即適用する（add_modifier+apply_modifier を再利用・アトミック）。
+
+    apply が失敗したら追加したモディファイアを撤去してから再送出する（中途状態でゴミの
+    モディファイアを残さない）。undo 境界は apply（run_operator）が1つだけ作る（add は無 undo）。
+    """
+    summary = add_modifier(obj, mod_type, **props)  # message なし＝add では undo push しない
+    name = summary["name"]
+    try:
+        apply_modifier(obj, name, message=message)
+    except BaseException:
+        leftover = obj.modifiers.get(name)
+        if leftover is not None:
+            obj.modifiers.remove(leftover)
+        raise
 
 
 def mesh_decimate(obj: Any, *, ratio: float, message: str | None = None) -> dict[str, Any]:
     """DECIMATE モディファイア（COLLAPSE・ratio）を追加して即適用し、ポリゴンを削減する。
 
-    bmesh に decimate 相当が無いため modifier 経由（add+apply）にフォールバックする（研究 §E3）。
-    ratio=1.0 は無削減（delta 0）だが modifier_apply は mesh を焼き直す（破壊的書き込み）。
+    bmesh に decimate 相当が無いため modifier 経由（add+apply）にフォールバックする（研究 §E3・
+    decimate_type 既定は両版とも COLLAPSE）。ratio=1.0 は無削減（delta 0）だが modifier_apply は
+    mesh を焼き直す（破壊的書き込み＝共有 mesh は単一ユーザ化が必要）。
     """
     before = mesh_stats(obj)
-    mod = obj.modifiers.new("BLI_Decimate", "DECIMATE")
-    mod.decimate_type = "COLLAPSE"
-    mod.ratio = ratio
-    run_operator(bpy.ops.object.modifier_apply, obj, message=message, modifier=mod.name)
+    _add_then_apply(obj, "DECIMATE", message, ratio=ratio)
     after = mesh_stats(obj)
     return {"ratio": ratio, "delta": stats_delta(before, after), "stats": after}
 
@@ -929,14 +948,11 @@ def mesh_boolean(
     （extrude と異なる。研究 §E3）。operand 自体は read-only（編集されない）。
     """
     before = mesh_stats(obj)
-    mod = obj.modifiers.new("BLI_Boolean", "BOOLEAN")
-    mod.operation = operation
-    mod.object = operand
-    run_operator(bpy.ops.object.modifier_apply, obj, message=message, modifier=mod.name)
+    _add_then_apply(obj, "BOOLEAN", message, operation=operation, operand=operand)
     after = mesh_stats(obj)
     return {
         "operation": operation,
-        "with": operand.name,
+        "with_object": operand.name,
         "delta": stats_delta(before, after),
         "stats": after,
     }

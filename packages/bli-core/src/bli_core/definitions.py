@@ -230,7 +230,8 @@ command(
         p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
         p("inside", ParamType.BOOL, help="recalc-normals: 法線を内向きにする"),
         p("distance", ParamType.FLOAT, help="merge-by-distance: マージ距離（既定 0.0001）"),
-        # T7.2（extrude/bevel/inset）の寸法は mesh ローカル空間。op 別に必須（ops で検証）。
+        # T7.2: extrude offset は world 空間 / bevel width・inset thickness はスカラで mesh ローカル
+        # 単位。いずれも op 別に必須（ops で検証）。
         p("offset", ParamType.VEC3, help="extrude: 押し出しベクトル x,y,z（world・必須）"),
         p("width", ParamType.FLOAT, help="bevel: ベベル幅（ローカル・必須・0以上）"),
         p("segments", ParamType.INT, help="bevel: 分割数（既定1・1〜100）"),
