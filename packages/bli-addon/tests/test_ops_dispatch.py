@@ -688,3 +688,70 @@ def test_mesh_decimate_wrong_op_param_invalid_params():
     assert ei.value.code == RPC_INVALID_PARAMS
     assert ei.value.data is not None
     assert ei.value.data.category == "USER_INPUT"
+
+
+# ---- M8 T8.2 straighten（直立補正）の param 検証（bpy 不要）----
+
+
+def test_straighten_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("straighten", {"method": "reset"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_straighten_missing_method_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("straighten", {"targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_straighten_bad_method_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("straighten", {"targets": "Cube", "method": "bogus"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_straighten_bad_up_axis_invalid_params():
+    # up_axis は ENUM。範囲外は schema 検証で INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "straighten", {"targets": "Cube", "method": "world-align", "up_axis": "UP"}, INFO
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_straighten_bad_axis_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("straighten", {"targets": "Cube", "method": "world-align", "axis": "W"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_straighten_axis_on_non_world_align_invalid_params():
+    # axis は world-align 専用。reset/pca/floor に渡すと silent ignore せず弾く（bpy 到達前）。
+    for method in ("reset", "pca", "floor"):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("straighten", {"targets": "Cube", "method": method, "axis": "Z"}, INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, method
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", method
+
+
+def test_straighten_unknown_param_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("straighten", {"targets": "Cube", "method": "reset", "bogus": 1}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_straighten_valid_params_reach_bpy():
+    # 妥当な params（各 method・bake/make_single_user knob）は USER_INPUT で弾かれず検証を通過し、
+    # bpy の遅延 import まで到達する（bpy 不在の pytest では ModuleNotFoundError）。退行ガード。
+    cases = [
+        {"method": "reset"},
+        {"method": "world-align", "up_axis": "+Z"},
+        {"method": "world-align", "axis": "Z"},
+        {"method": "pca", "up_axis": "-Y"},
+        {"method": "floor", "bake_rotation": True, "make_single_user": True},
+    ]
+    for extra in cases:
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("straighten", {"targets": "Cube", **extra}, INFO)

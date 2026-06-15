@@ -346,6 +346,55 @@ def set_origin(
 
 
 @app.command()
+def straighten(
+    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    method: str = typer.Option(..., "--method", help="reset|world-align|pca|floor"),
+    up_axis: str = typer.Option("+Z", "--up-axis", help="up 方向: +Z|-Z|+Y|-Y|+X|-X（既定 +Z）"),
+    axis: str | None = typer.Option(
+        None, "--axis", help="world-align で合わせる local 軸: X|Y|Z（省略時は最近軸を自動）"
+    ),
+    bake_rotation: bool = typer.Option(
+        False, "--bake-rotation", help="回転を mesh データへ焼き込む"
+    ),
+    make_single_user: bool = typer.Option(
+        False, "--make-single-user", help="bake時に共有mesh単一ユーザ化を許可"
+    ),
+    request_id: str | None = typer.Option(
+        None, "--id", help="リクエストID(UUIDv4)。冪等リトライで同一IDを再利用する"
+    ),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """オブジェクトを直立補正する（reset/world-align/pca/floor）。"""
+    params: dict[str, Any] = {"targets": targets, "method": method, "up_axis": up_axis}
+    if axis is not None:
+        params["axis"] = axis
+    if bake_rotation:
+        params["bake_rotation"] = True
+    if make_single_user:
+        params["make_single_user"] = True
+
+    def human(data: dict[str, Any]) -> str:
+        m = data.get("method")
+        head = f"straighten {data.get('name')} [{m}] up={data.get('up_axis')}"
+        if m == "floor":
+            return f"{head}: grounded min_up={data.get('min_up')} offset={data.get('floor_offset')}"
+        if m == "world-align":
+            return (
+                f"{head}: axis={data.get('axis')} -> {data.get('aligned_world')} "
+                f"rot={data.get('rotation_euler_deg')}"
+            )
+        if m == "pca":
+            return (
+                f"{head}: principal -> {data.get('principal_world_after')} "
+                f"rot={data.get('rotation_euler_deg')}"
+            )
+        return f"{head}: rot={data.get('rotation_euler_deg')} baked={data.get('baked')}"
+
+    _rpc("straighten", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command()
 def select(
     targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
     type_filter: str | None = typer.Option(None, "--type", help="型フィルタ（MESH/CURVE/...）"),

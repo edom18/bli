@@ -222,6 +222,48 @@ def test_m7_mesh_discoverable():
     assert schema["properties"]["offset"]["minItems"] == 3
 
 
+def test_m8_straighten_discoverable():
+    # M8 T8.2 の straighten が実装済み一覧に出る + スキーマ（stable・enum・presence-sensitive axis）
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    by_name = {c["name"]: c for c in data["commands"]}
+    assert "straighten" in by_name
+    assert by_name["straighten"]["stability"] == "stable"  # 3シナリオは全 stable（DoD）
+    assert by_name["straighten"]["mutates"] is True
+    schema = json.loads(runner.invoke(app, ["help", "--command", "straighten", "--json"]).output)[
+        "schema"
+    ]
+    assert set(schema["properties"]) == {
+        "targets",
+        "method",
+        "up_axis",
+        "axis",
+        "bake_rotation",
+        "make_single_user",
+    }
+    assert set(schema["required"]) == {"targets", "method"}
+    assert schema["properties"]["method"]["enum"] == ["reset", "world-align", "pca", "floor"]
+    assert schema["properties"]["up_axis"]["enum"] == ["+Z", "-Z", "+Y", "-Y", "+X", "-X"]
+    assert schema["properties"]["axis"]["enum"] == ["X", "Y", "Z"]
+    # axis は world-align 専用で presence-sensitive → schema default を持たない（§6e）。
+    assert "default" not in schema["properties"]["axis"]
+    # up_axis は既定 +Z を持つ（非 presence-sensitive・spec『既定 +Z』）。
+    assert schema["properties"]["up_axis"]["default"] == "+Z"
+
+
+def test_straighten_bad_method_local_validation():
+    # 不正な --method は送信前ローカル Pydantic 検証で exit 4
+    res = runner.invoke(app, ["straighten", "--targets", "Cube", "--method", "bogus", "--json"])
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
+def test_straighten_bad_up_axis_local_validation():
+    res = runner.invoke(
+        app, ["straighten", "--targets", "Cube", "--method", "world-align", "--up-axis", "UP"]
+    )
+    assert res.exit_code == 4
+
+
 def test_mesh_bad_op_local_validation():
     # 不正な --op は送信前ローカル Pydantic 検証で exit 4
     res = runner.invoke(app, ["mesh", "--op", "bogus", "--targets", "Cube", "--json"])

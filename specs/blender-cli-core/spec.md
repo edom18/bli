@@ -163,8 +163,9 @@ bli set-origin --targets <name> --to geometry|cursor|world
 ```
 bli straighten --targets <name> --method reset|world-align|pca|floor
     [--up-axis +Z|-Z|+Y|...]      # 既定 +Z
-    [--axis X|Y|Z]                # reset/world-align時
-    [--bake-rotation]             # 回転を適用して焼き込む
+    [--axis X|Y|Z]                # world-align時（省略時は up に最も近い軸を自動選択）
+    [--bake-rotation]             # 回転を mesh データに適用して焼き込む
+    [--make-single-user]          # bake時の共有meshデータを明示で許可
 ```
 
 ### シナリオ3: 3Dプリンタ対応
