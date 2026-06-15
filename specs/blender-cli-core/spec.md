@@ -404,7 +404,8 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--ap
 
 ### S3: 3Dプリンタ対応
 - `print-check`: 非多様体・反転法線・薄壁・自己交差・退化面の件数を構造化で返す。
-- `print-repair`: `object_print3d_utils` 等で可能な範囲を修復し、修復前後の差分を報告。完全修復は保証しない旨を明記。
+  - **v1 実装注記（T8.4）**: 非多様体・反転法線・退化面は **bmesh 自前計算で常時提供**（print3d 非依存）。薄壁（`--thin`）・自己交差（`--intersect`）は **print3d Toolbox 依存**で、未導入環境（M0.5/§E6 で 5.0.1・4.4.3 とも実体なし）では要求時に **`CAPABILITY_UNAVAILABLE`** を返す（黙って件数 0 にせず能力欠如を明示）。print3d が Extensions で導入されれば自動的に有効化される設計。
+- `print-repair`: bmesh 自前で可能な範囲を修復し（make-manifold=穴埋め/重複マージ/loose 除去・recalc-normals・remove-degenerate）、修復前後の差分を報告。**完全修復は保証しない**旨を明記（穴形状により埋めきれない）。
 - `print-setup --unit mm`: 単位がmmに設定される。
 - `print-export --format stl`: STL（または3MF）が出力され、ファイルが生成される。
 - 完了条件: `print-check` の致命カテゴリ（非多様体）件数が repair 後に減少し、export ファイルが存在。

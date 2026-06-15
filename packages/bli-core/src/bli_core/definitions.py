@@ -124,6 +124,42 @@ command(
     # （set-origin/straighten/scene-info と同じ・自動遷移せず E_MODE_MISMATCH）。
     required_mode=Mode.OBJECT,
 )
+command(
+    "print-check",
+    "3Dプリント健全性をチェックする（manifold/normals/degenerate は bmesh 自前・件数を返す）",
+    # manifold/normals/degenerate は bmesh 自前計算（print3d 非依存・常時 stable）。thin/intersect は
+    # print3d 依存で、未導入時は CAPABILITY_UNAVAILABLE（研究 §E6）。カテゴリ flag は presence-sensitive
+    # （省略時は bmesh 3種すべて）。min_thickness は thin 専用。--save-to はファイルI/O のため M9 へ繰越。
+    params=(
+        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("manifold", ParamType.BOOL, help="非多様体チェック"),
+        p("normals", ParamType.BOOL, help="反転法線チェック"),
+        p("degenerate", ParamType.BOOL, help="退化面チェック"),
+        p(
+            "thin",
+            ParamType.BOOL,
+            help="薄壁チェック（print3d 依存・未導入は CAPABILITY_UNAVAILABLE）",
+        ),
+        p("min_thickness", ParamType.FLOAT, help="thin の最小厚み（thin 専用）"),
+        p("intersect", ParamType.BOOL, help="自己交差チェック（print3d 依存・未導入は同上）"),
+    ),
+    required_mode=Mode.OBJECT,
+)
+command(
+    "print-repair",
+    "3Dプリント向けに mesh を best-effort 修復する（make-manifold/recalc-normals/remove-degenerate）",
+    # 修復フラグは presence-sensitive（全省略時は全修復）。完全修復は保証しない（spec §10 S3）。
+    # mesh データを書き換える破壊的操作のため共有 mesh は --make-single-user 必須（§6e）。
+    params=(
+        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("make_manifold", ParamType.BOOL, help="穴埋め/重複マージ/loose 除去で manifold 化"),
+        p("recalc_normals", ParamType.BOOL, help="面法線を一貫化"),
+        p("remove_degenerate", ParamType.BOOL, help="退化面/辺を除去"),
+        p("make_single_user", ParamType.BOOL, default=False, help="共有mesh時に単一ユーザ化を許可"),
+    ),
+    mutates=True,
+    required_mode=Mode.OBJECT,
+)
 
 # ---- 汎用編集（オブジェクト操作 / M6 T6.1）----
 command(

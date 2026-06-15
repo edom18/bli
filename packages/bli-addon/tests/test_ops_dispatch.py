@@ -786,3 +786,98 @@ def test_print_setup_valid_params_reach_bpy():
     for params in ({}, {"unit": "mm"}, {"unit": "m"}, {"unit": "mm", "scene": "Scene"}):
         with pytest.raises(ModuleNotFoundError):
             ops.dispatch("print-setup", params, INFO)
+
+
+# ---- M8 T8.4 print-check / print-repair の param 検証（bpy 不要）----
+
+
+def test_print_check_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-check", {}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_check_unknown_param_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-check", {"targets": "Cube", "bogus": 1}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_check_min_thickness_without_thin_invalid_params():
+    # min_thickness は thin 専用。thin 無しで渡したら弾く（bpy 到達前に USER_INPUT）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-check", {"targets": "Cube", "min_thickness": 1.0}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_print_check_nonfinite_min_thickness_server_rejected():
+    # FLOAT（min_thickness）の nan/inf もサーバ側（schema）で弾く。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "print-check", {"targets": "Cube", "thin": True, "min_thickness": float("inf")}, INFO
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_check_valid_params_reach_bpy():
+    # 妥当な params（カテゴリ flag・thin/min_thickness 含む）は検証を通過し bpy 遅延 import まで
+    # 到達する（CAPABILITY 判定は bpy 必須＝smoke で検証）。退行ガード。
+    for params in (
+        {},
+        {"manifold": True},
+        {"normals": True, "degenerate": True},
+        {"thin": True, "min_thickness": 0.5},
+        {"intersect": True},
+    ):
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("print-check", {"targets": "Cube", **params}, INFO)
+
+
+def test_print_repair_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-repair", {}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_repair_unknown_param_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-repair", {"targets": "Cube", "bogus": 1}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_repair_all_false_invalid_params():
+    # 明示的に全 false（生成クライアントの既定埋め）は「修復なし」として弾く（apply-transform と同流儀）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "print-repair",
+            {
+                "targets": "Cube",
+                "make_manifold": False,
+                "recalc_normals": False,
+                "remove_degenerate": False,
+            },
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_print_repair_bad_bool_type_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-repair", {"targets": "Cube", "make_manifold": "yes"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_repair_valid_params_reach_bpy():
+    # 全省略（=全修復）/ 個別指定 / make_single_user knob は検証を通過し bpy 遅延 import まで到達。
+    for params in (
+        {},
+        {"make_manifold": True},
+        {"recalc_normals": True, "remove_degenerate": True},
+        {"make_manifold": True, "make_single_user": True},
+    ):
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("print-repair", {"targets": "Cube", **params}, INFO)

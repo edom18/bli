@@ -167,3 +167,106 @@ def inset(obj: Any, *, thickness: float, message: str | None = None) -> dict[str
     if message:
         push_undo(message)
     return {"thickness": thickness, "delta": stats_delta(before, after), "stats": after}
+
+
+# ---- 3Dプリント健全性チェック/修復（M8 T8.4 / bmesh 自前・print3d 非依存・研究 §E6）----
+#
+# print3d Toolbox は両版で実体なし（§E6）。manifold/normals/degenerate は **bmesh 自前**で計算する
+# （print3d 非依存で stable）。thin/intersect は print3d 依存のため ops 側で CAPABILITY_UNAVAILABLE。
+
+_DEGENERATE_AREA_EPS = 1e-8  # この面積未満の面を退化面とみなす
+_REPAIR_MERGE_DIST = 1e-6  # repair の dissolve_degenerate / remove_doubles の許容距離
+
+
+def mesh_check(obj: Any) -> dict[str, Any]:
+    """bmesh で 3Dプリント健全性をチェックする（manifold/normals/degenerate・読み取り専用）。
+
+    - 非多様体辺: 2面共有でない辺（`not is_manifold`＝boundary/wire/3面以上）。watertight なら 0。
+    - 反転法線: 2面共有だが巻き順が逆（`is_manifold and not is_contiguous`）。一貫なら 0。
+    - 退化面: 面積が _DEGENERATE_AREA_EPS 未満。
+    `is_printable` は致命カテゴリ（非多様体/反転法線/退化面）が全て 0 かの要約（§E6 で両版確認）。
+    """
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        bm.normal_update()
+        non_manifold = sum(1 for e in bm.edges if not e.is_manifold)
+        boundary = sum(1 for e in bm.edges if e.is_boundary)
+        wire = sum(1 for e in bm.edges if e.is_wire)
+        flipped = sum(1 for e in bm.edges if e.is_manifold and not e.is_contiguous)
+        degenerate = sum(1 for f in bm.faces if f.calc_area() < _DEGENERATE_AREA_EPS)
+        loose = sum(1 for v in bm.verts if not v.link_edges)
+    finally:
+        bm.free()
+    return {
+        "non_manifold_edges": non_manifold,
+        "boundary_edges": boundary,
+        "wire_edges": wire,
+        "flipped_normals": flipped,
+        "degenerate_faces": degenerate,
+        "loose_verts": loose,
+        "is_manifold": non_manifold == 0,
+        "normals_consistent": flipped == 0,
+        "is_printable": non_manifold == 0 and flipped == 0 and degenerate == 0,
+    }
+
+
+def mesh_repair(
+    obj: Any,
+    *,
+    make_manifold: bool,
+    recalc_normals: bool,
+    remove_degenerate: bool,
+    message: str | None = None,
+) -> dict[str, Any]:
+    """bmesh で best-effort 修復する（修復前後のチェック差分を返す・**完全修復は非保証**）。
+
+    - remove-degenerate: `dissolve_degenerate`（退化面/辺を除去）。
+    - make-manifold: 退化除去 + `remove_doubles`（重複頂点マージ）+ loose 除去 + `holes_fill`
+      （boundary の穴埋め）。穴の形状によっては埋めきれない（非保証）。
+    - recalc-normals: `recalc_face_normals`（巻き順一貫化）。make-manifold は穴埋め後の整合のため
+      末尾で必ず recalc する。各 bmesh.ops は実行時点の bm を都度読む（delete でトポロジが変わるため）。
+    """
+    before = mesh_check(obj)
+    applied: list[str] = []
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        if remove_degenerate or make_manifold:
+            bmesh.ops.dissolve_degenerate(bm, dist=_REPAIR_MERGE_DIST, edges=list(bm.edges))
+            if remove_degenerate:
+                applied.append("remove-degenerate")
+        if make_manifold:
+            bmesh.ops.remove_doubles(bm, verts=list(bm.verts), dist=_REPAIR_MERGE_DIST)
+            # wire 辺を先に消す（端点 vert は残る）→ その後で loose vert を再走査して消す。
+            # 逆順だと wire 削除で新たに孤立した端点 vert を取りこぼす（敵対的 correctness P2）。
+            wire_e = [e for e in bm.edges if e.is_wire]
+            if wire_e:
+                bmesh.ops.delete(bm, geom=wire_e, context="EDGES")
+            loose_v = [v for v in bm.verts if not v.link_edges]
+            if loose_v:
+                bmesh.ops.delete(bm, geom=loose_v, context="VERTS")
+            bmesh.ops.holes_fill(bm, edges=list(bm.edges), sides=0)
+            applied.append("make-manifold")
+        if recalc_normals or make_manifold:
+            bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
+            if recalc_normals:
+                applied.append("recalc-normals")
+        bm.to_mesh(obj.data)
+    finally:
+        bm.free()
+    obj.data.update()
+    if message:
+        push_undo(message)
+    after = mesh_check(obj)
+    return {
+        "applied": applied,
+        "before": before,
+        "after": after,
+        # 致命カテゴリの改善数（正＝減った＝改善）。完全修復は保証しない（after で確認）。
+        "fixed": {
+            "non_manifold_edges": before["non_manifold_edges"] - after["non_manifold_edges"],
+            "flipped_normals": before["flipped_normals"] - after["flipped_normals"],
+            "degenerate_faces": before["degenerate_faces"] - after["degenerate_faces"],
+        },
+    }

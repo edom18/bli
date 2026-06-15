@@ -420,6 +420,94 @@ def print_setup(
     _rpc("print-setup", params, json_out=json_out, port=port, human=human, request_id=request_id)
 
 
+@app.command("print-check")
+def print_check(
+    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    manifold: bool = typer.Option(False, "--manifold", help="非多様体チェック"),
+    normals: bool = typer.Option(False, "--normals", help="反転法線チェック"),
+    degenerate: bool = typer.Option(False, "--degenerate", help="退化面チェック"),
+    thin: bool = typer.Option(False, "--thin", help="薄壁チェック（print3d 依存）"),
+    min_thickness: float | None = typer.Option(None, "--min-thickness", help="thin の最小厚み"),
+    intersect: bool = typer.Option(False, "--intersect", help="自己交差チェック（print3d 依存）"),
+    fetch: bool = typer.Option(
+        False, "--fetch", help="退避(output_ref)を読み込み sha256 検証して展開する"
+    ),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """3Dプリント健全性をチェックする（manifold/normals/degenerate・件数を返す）。"""
+    params: dict[str, Any] = {"targets": targets}
+    # カテゴリ flag は presence-sensitive（省略時はサーバが bmesh 3種すべて）。
+    if manifold:
+        params["manifold"] = True
+    if normals:
+        params["normals"] = True
+    if degenerate:
+        params["degenerate"] = True
+    if thin:
+        params["thin"] = True
+    if intersect:
+        params["intersect"] = True
+    if min_thickness is not None:
+        params["min_thickness"] = min_thickness
+
+    def human(data: dict[str, Any]) -> str:
+        c = data.get("checks") or {}
+        # 報告されたカテゴリのキーのみ並べる（未要求カテゴリで None を出さない）。
+        detail = " ".join(f"{k}={v}" for k, v in c.items() if k != "is_printable")
+        return f"{data.get('name')} printable={c.get('is_printable')} {detail}".rstrip()
+
+    _rpc(
+        "print-check",
+        params,
+        json_out=json_out,
+        port=port,
+        human=human,
+        request_id=request_id,
+        fetch=fetch,
+    )
+
+
+@app.command("print-repair")
+def print_repair(
+    targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
+    make_manifold: bool = typer.Option(
+        False, "--make-manifold", help="穴埋め/重複マージ/loose 除去で manifold 化"
+    ),
+    recalc_normals: bool = typer.Option(False, "--recalc-normals", help="面法線を一貫化"),
+    remove_degenerate: bool = typer.Option(False, "--remove-degenerate", help="退化面/辺を除去"),
+    make_single_user: bool = typer.Option(
+        False, "--make-single-user", help="共有mesh時に単一ユーザ化を許可"
+    ),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """3Dプリント向けに mesh を best-effort 修復する（全省略で全修復・完全修復は非保証）。"""
+    params: dict[str, Any] = {"targets": targets}
+    # presence-sensitive: 全省略時はサーバが全修復を実行。
+    if make_manifold:
+        params["make_manifold"] = True
+    if recalc_normals:
+        params["recalc_normals"] = True
+    if remove_degenerate:
+        params["remove_degenerate"] = True
+    if make_single_user:
+        params["make_single_user"] = True
+
+    def human(data: dict[str, Any]) -> str:
+        fixed = data.get("fixed") or {}
+        after = data.get("after") or {}
+        return (
+            f"repaired {data.get('name')} applied={data.get('applied')} "
+            f"fixed_non_manifold={fixed.get('non_manifold_edges')} "
+            f"printable={after.get('is_printable')}"
+        )
+
+    _rpc("print-repair", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
 @app.command()
 def select(
     targets: str = typer.Option(..., "--targets", help="対象オブジェクト（name|regex）"),
