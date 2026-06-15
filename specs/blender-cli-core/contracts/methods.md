@@ -75,12 +75,16 @@ errors: `E_TARGET_NOT_FOUND` / `E_PRECONDITION(shared mesh: users>=2)` / `E_MODE
 ## シナリオ3: 3Dプリンタ対応
 | method | params | result | M | H | Cap | St |
 |--------|--------|--------|:-:|:-:|----|:--:|
-| `print-check` | `--targets` `--manifold?` `--normals?` `--thin --min-thickness?` `--intersect?` `--degenerate?` `--save-to?` | チェック結果（大→output_ref） | - | ✓ | print3d_toolbox | s |
-| `print-repair` | `--targets` `--make-manifold?` `--recalc-normals?` `--remove-degenerate?` | 修復前後差分 | ✓ | ✓ | print3d_toolbox | s |
+| `print-check` | `--targets` `--manifold?` `--normals?` `--degenerate?` `--thin --min-thickness?` `--intersect?` | チェック結果（大→output_ref） | - | ✓ | thin/intersect のみ print3d | s |
+| `print-repair` | `--targets` `--make-manifold?` `--recalc-normals?` `--remove-degenerate?` `--make-single-user?` | 修復前後差分 | ✓ | ✓ | - | s |
 | `print-setup` | `--unit mm\|m`(既定 mm) `--scene?` | 単位設定後の値 | ✓ | - | - | s |
 | `print-export` | `--targets` `--format stl\|3mf` `--path` `--ascii?` `--apply-transform?` | 出力パス/サイズ | - | ✓ | export.stl / io_mesh_3mf | s |
 
-> `print-check`/`print-repair` は `print3d_toolbox` 未導入時 `addon_utils.enable` を試行→不可なら `CAPABILITY_UNAVAILABLE`。`print-export --format 3mf` 不可時は STL フォールバックを hint。
+> `print-export --format 3mf` 不可時は STL フォールバックを hint。
+>
+> `print-check`（**T8.4 実装済み・読み取り専用**）: `manifold`（非多様体辺）/`normals`（反転法線）/`degenerate`（退化面）は **bmesh 自前計算**（print3d 非依存・常時 stable・研究 §E6）。カテゴリ flag は presence-sensitive で、省略時は bmesh 3種すべて・指定時はそのサブセットのみ報告。result `{name, checked:[...], checks:{non_manifold_edges, boundary_edges, wire_edges, loose_verts, is_manifold, flipped_normals, normals_consistent, degenerate_faces, is_printable}}`（要求カテゴリのキーのみ + `is_printable` は常時）。`is_printable`=致命カテゴリ（非多様体/反転法線/退化面）が全 0。`--thin`（薄壁・`--min-thickness` 専用）/`--intersect`（自己交差）は **print3d 依存**で、未導入時（`addon_utils.enable` 試行も失敗・§E6 で両版実体なし）は **`CAPABILITY_UNAVAILABLE`（category=ENVIRONMENT）**。大きい結果は output_ref 退避（M5・_ok_offload）。fingerprint=mesh_fingerprint（検査した mesh 状態の確定）。**`--save-to`（ファイル書き出し）は M9 ファイルI/O へ繰越**。
+>
+> `print-repair`（**T8.4 実装済み・破壊的**）: `make-manifold`（退化除去 + 重複マージ + loose 除去 + 穴埋め holes_fill）/`recalc-normals`（面法線一貫化）/`remove-degenerate`（dissolve_degenerate）を **bmesh 自前**で実行（print3d 非依存）。フラグは presence-sensitive で **全省略時は全修復**。**完全修復は保証しない**（spec §10 S3・穴形状により埋めきれない）。result `{name, applied:[...], before, after, fixed:{non_manifold_edges, flipped_normals, degenerate_faces}}`（`fixed`=致命カテゴリの改善数＝正で減少）。mesh データを書き換えるため共有 mesh は `--make-single-user` 必須。fingerprint=mesh_fingerprint。`print-check`/`print-repair` は heavy 候補（同期実行・非同期 job は M10）。
 >
 > `print-setup`（**T8.3 実装済み**）: シーンの **表示単位** を設定する（`scene.unit_settings.system='METRIC'` + `length_unit=MILLIMETERS|METERS`）。`--unit` 既定 mm（`bli print-setup` 単体で mm）。`--scene?` で対象シーン名（省略時 active・無ければ `E_TARGET_NOT_FOUND`）。**`length_unit` は表示専用で geometry（dimensions/頂点）を再スケールしない＝非破壊**（研究 §E5）ため共有 mesh ガード不要。実寸の export スケールは print-export（T8.5）が `scale_length`/単位から一本で算出する（global_scale 一本化）。result: `{scene, unit, unit_settings:{system, scale_length, length_unit}, changed}`（`changed`=設定前後で変化したか＝冪等性指標）。required_mode=OBJECT。fingerprint=unit_settings の決定的ハッシュ。
 

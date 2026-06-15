@@ -772,6 +772,103 @@ def _print_setup(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     )
 
 
+# print-check の bmesh カテゴリ -> 報告キー（カテゴリ flag 指定時の出力サブセット）。
+_BMESH_CHECK_CATEGORIES: dict[str, tuple[str, ...]] = {
+    "manifold": (
+        "non_manifold_edges",
+        "boundary_edges",
+        "wire_edges",
+        "loose_verts",
+        "is_manifold",
+    ),
+    "normals": ("flipped_normals", "normals_consistent"),
+    "degenerate": ("degenerate_faces",),
+}
+
+
+def _print_check(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("print-check")
+    _validate(cmd, params)
+    # min_thickness は thin 専用（他で渡されたら silent ignore せず弾く・bpy 到達前）。
+    if "min_thickness" in params:
+        _require_input(
+            bool(params.get("thin", False)),
+            symptom="--min-thickness は --thin のときのみ有効です",
+            remediation="--thin と一緒に使ってください",
+        )
+
+    from . import bmesh_ops, gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(params["targets"]))
+    gateway.require_mesh(obj)
+    # thin（薄壁）/ intersect（自己交差）は print3d 依存。要求 かつ 未導入なら CAPABILITY_UNAVAILABLE
+    # で縮退する（§E6・この環境では print3d 実体なし）。manifold/normals/degenerate は bmesh 自前で常時可。
+    wants_print3d = bool(params.get("thin", False)) or bool(params.get("intersect", False))
+    if wants_print3d and not gateway.print3d_available():
+        raise JsonRpcError(
+            RPC_BUSINESS_ERROR,
+            ErrorCode.CAPABILITY_UNAVAILABLE,
+            make_error(
+                ErrorCode.CAPABILITY_UNAVAILABLE,
+                category=ErrorCategory.ENVIRONMENT,
+                retryable=False,
+                symptom="薄壁/自己交差チェックには print3d Toolbox が必要ですが利用できません",
+                remediation="print3d Toolbox（Extensions）を導入するか、--manifold/--normals/--degenerate を使ってください",
+            ),
+        )
+    # bmesh カテゴリは presence-sensitive（省略時は3種すべて）。1パスで全計算し要求分のみ報告する。
+    cats = [c for c in ("manifold", "normals", "degenerate") if bool(params.get(c, False))] or [
+        "manifold",
+        "normals",
+        "degenerate",
+    ]
+    full = bmesh_ops.mesh_check(obj)
+    checks = {k: full[k] for cat in cats for k in _BMESH_CHECK_CATEGORIES[cat]}
+    checks["is_printable"] = full["is_printable"]  # 致命カテゴリ全 0 の要約は常時付与
+    data = {"name": obj.name, "checked": sorted(cats), "checks": checks}
+    # 読み取り専用だが mesh_fingerprint を返し「どの mesh 状態を検査したか」を確定（M5 退避も再利用）。
+    return _ok_offload(
+        "print-check", data, "print-check/v1", fingerprint=gateway.mesh_fingerprint(obj)
+    )
+
+
+def _print_repair(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("print-repair")
+    _validate(cmd, params)
+    # presence-sensitive: 全省略 = 全修復（apply-transform と同流儀）。明示時はその真偽を尊重。
+    keys = ("make_manifold", "recalc_normals", "remove_degenerate")
+    if not any(k in params for k in keys):
+        make_manifold = recalc_normals = remove_degenerate = True
+    else:
+        make_manifold = bool(params.get("make_manifold", False))
+        recalc_normals = bool(params.get("recalc_normals", False))
+        remove_degenerate = bool(params.get("remove_degenerate", False))
+        _require_input(
+            make_manifold or recalc_normals or remove_degenerate,
+            symptom="適用する修復がありません（全 false）",
+            remediation="--make-manifold/--recalc-normals/--remove-degenerate のいずれか（全省略で全修復）",
+        )
+
+    from . import bmesh_ops, gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(params["targets"]))
+    gateway.require_mesh(obj)
+    # mesh データを書き換える破壊的操作 → 共有 mesh は単一ユーザ化を要求（apply 系と同様）。
+    _guard_shared_mesh(gateway, obj, params)
+    result = bmesh_ops.mesh_repair(
+        obj,
+        make_manifold=make_manifold,
+        recalc_normals=recalc_normals,
+        remove_degenerate=remove_degenerate,
+        message="print-repair",
+    )
+    return _ok(
+        "print-repair", {"name": obj.name, **result}, fingerprint=gateway.mesh_fingerprint(obj)
+    )
+
+
 _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]] = {
     "scene-info": _scene_info,
     "object-info": _object_info,
@@ -787,6 +884,8 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "set-origin": _set_origin,
     "straighten": _straighten,
     "print-setup": _print_setup,
+    "print-check": _print_check,
+    "print-repair": _print_repair,
 }
 
 

@@ -273,6 +273,50 @@ def test_print_setup_bad_unit_local_validation():
     assert "INVALID_PARAMS" in res.output
 
 
+def test_m8_print_check_repair_discoverable():
+    # M8 T8.4 の print-check / print-repair が実装済み一覧に出る + スキーマ
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    by_name = {c["name"]: c for c in data["commands"]}
+    assert {"print-check", "print-repair"} <= set(by_name)
+    assert by_name["print-check"]["stability"] == "stable"
+    assert by_name["print-check"]["mutates"] is False  # 読み取り専用
+    assert by_name["print-repair"]["stability"] == "stable"
+    assert by_name["print-repair"]["mutates"] is True  # 破壊的
+
+    chk = json.loads(runner.invoke(app, ["help", "--command", "print-check", "--json"]).output)[
+        "schema"
+    ]
+    assert set(chk["properties"]) == {
+        "targets",
+        "manifold",
+        "normals",
+        "degenerate",
+        "thin",
+        "min_thickness",
+        "intersect",
+    }
+    assert chk["required"] == ["targets"]
+    # カテゴリ flag は presence-sensitive → schema default を持たない（§6e）。
+    for k in ("manifold", "normals", "degenerate", "thin", "intersect"):
+        assert "default" not in chk["properties"][k], k
+
+    rep = json.loads(runner.invoke(app, ["help", "--command", "print-repair", "--json"]).output)[
+        "schema"
+    ]
+    assert set(rep["properties"]) == {
+        "targets",
+        "make_manifold",
+        "recalc_normals",
+        "remove_degenerate",
+        "make_single_user",
+    }
+    assert rep["required"] == ["targets"]
+    # 修復フラグは presence-sensitive（default なし）/ make_single_user は通常フラグ（default あり）。
+    for k in ("make_manifold", "recalc_normals", "remove_degenerate"):
+        assert "default" not in rep["properties"][k], k
+    assert rep["properties"]["make_single_user"]["default"] is False
+
+
 def test_straighten_bad_method_local_validation():
     # 不正な --method は送信前ローカル Pydantic 検証で exit 4
     res = runner.invoke(app, ["straighten", "--targets", "Cube", "--method", "bogus", "--json"])

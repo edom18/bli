@@ -1258,3 +1258,39 @@ def set_print_units(
 def unit_settings_fingerprint(unit_settings: dict[str, Any]) -> str:
     """単位設定の決定的フィンガープリント（print-setup の drift 検証用）。"""
     return _digest16(unit_settings)
+
+
+# ---- print3d 能力検出（M8 T8.4 / thin/intersect は print3d 依存・研究 §E6）----
+#
+# print3d Toolbox は両版とも実体なし（§E6）。manifold/normals/degenerate は bmesh 自前で計算する
+# （print3d 非依存・bmesh_ops.mesh_check）。thin（薄壁）/ intersect（自己交差）のみ print3d 依存で、
+# 不在時は ops 側が CAPABILITY_UNAVAILABLE を返す。将来 Extensions で導入された場合のみ True になる。
+
+_PRINT3D_ENABLE_CANDIDATES = (
+    "object_print3d_utils",
+    "print3d_toolbox",
+    "bl_ext.blender_org.print3d_toolbox",
+)
+_PRINT3D_CHECK_OP = "mesh.print3d_check_all"
+
+
+def print3d_available() -> bool:
+    """print3d Toolbox の能力を検出する（未導入なら enable 試行→不可なら False）。
+
+    operator が既に実在すれば True。無ければ候補 module を `addon_utils.enable` で試行し、
+    実在判定（`get_rna_type`）し直す。§E6 でこの環境（5.0.1/4.4.3）では module 自体が無く常に False。
+    """
+    from . import capability  # lazy: operator_real（bpy 依存）
+
+    if capability.operator_real(_PRINT3D_CHECK_OP):
+        return True
+    import addon_utils  # type: ignore  # lazy: bpy 依存
+
+    for mod in _PRINT3D_ENABLE_CANDIDATES:
+        try:
+            addon_utils.enable(mod, default_set=False, persistent=False)
+        except Exception:
+            continue
+        if capability.operator_real(_PRINT3D_CHECK_OP):
+            return True
+    return False
