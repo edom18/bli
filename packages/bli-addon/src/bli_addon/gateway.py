@@ -201,16 +201,13 @@ def object_summary(obj: Any) -> dict[str, Any]:
 def scene_summary(depth: int = 1) -> dict[str, Any]:
     """シーン要約（オブジェクト一覧 + 単位）。"""
     scene = bpy.context.scene
-    us = scene.unit_settings
     return {
         "scene": scene.name,
         "object_count": len(bpy.data.objects),
         "objects": [object_summary(o) for o in scene.objects],
-        "unit_settings": {
-            "system": us.system,
-            "scale_length": round(us.scale_length, 8),
-            "length_unit": us.length_unit,
-        },
+        # unit_settings の要約は print-setup と同一窓口（_unit_settings_dict）で SSOT 化する
+        # （scene-info と print-setup で単位表現がドリフトしないように。設計レビュー P2）。
+        "unit_settings": _unit_settings_dict(scene.unit_settings),
     }
 
 

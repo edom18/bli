@@ -120,6 +120,8 @@ command(
         p("scene", ParamType.STR, help="対象シーン名（省略時は active）"),
     ),
     mutates=True,
+    # 単位設定はモード非依存（geometry を触らない）だが、シナリオ3 全体を OBJECT に統一する方針
+    # （set-origin/straighten/scene-info と同じ・自動遷移せず E_MODE_MISMATCH）。
     required_mode=Mode.OBJECT,
 )
 
