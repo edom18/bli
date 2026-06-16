@@ -1,9 +1,9 @@
 # bli (Blender CLI) — 引き継ぎ資料 (HANDOFF)
 
-最終更新: 2026-06-15 / 状態: **PR #1–#11（M0–M7 全 + M8 T8.2 straighten + T8.3 print-setup）マージ済み（origin/main）。M8（3シナリオ中核価値）着手中: T8.1 set-origin ✅（M3）/ T8.2 straighten ✅（PR #10）/ T8.3 print-setup ✅（PR #11）/ T8.4 print-check/repair（bmesh 自前 + print3d 縮退）実装完了・独立3視点セルフレビュー済み＝feature/m8-print-check で PR 作成/マージ待ち。次は T8.5 print-export（M8 完了・`.handoff/NEXT-M8.md` 参照）**。
+最終更新: 2026-06-16 / 状態: **PR #1–#15 マージ済み（origin/main）。M0–M7 全 + M8 T8.1–T8.4（set-origin/straighten/print-setup/print-check/print-repair）完了。さらに M8 に「実地フィードバック対応ワークストリーム」を feedback-first で差し込み中: PR-1 横断クイックウィン #7 ✅（PR #13）/ PR-2 straighten 根本修正 #5/#2/#6 ✅（PR #14）/ PR-3 capture #1 ✅（PR #15）。次は PR-4 基準指定整列 #4 → PR-5 undo #3 → T8.5 print-export（M8 完了）。詳細は `.handoff/NEXT-M8-feedback.md`・俯瞰は `.handoff/ROADMAP.md`**。
 
 > 新規セッションはこの1枚を読めば再開できる。詳細は `specs/blender-cli-core/` を参照。
-> **次の作業（M6）の着手手順とタスクは `.handoff/NEXT-M6.md` を参照**（このファイルは全体史 + 規約）。
+> **全体俯瞰は `.handoff/ROADMAP.md`。次の作業（M8 実地フィードバック PR-4〜）は `.handoff/NEXT-M8-feedback.md`**（このファイルは全体史 + 規約・§6h に実地フィードバックの確定要約）。
 
 ---
 
@@ -63,10 +63,10 @@
 | **M5 情報取得**（list-objects / object-info bbox / scene-info の output_ref 退避） | ✅ main（PR #2） | pytest 95 + 5.0/4.4 実機 smoke OK |
 | **M6 汎用編集**（select/transform/apply-transform・duplicate/delete・material・modifier） | ✅ main（PR #6 で M6 完了） | pytest 151 + 5.0/4.4 実機 smoke OK |
 | **M7 メッシュ編集**（mesh --op: bmesh一次 + heavy modifier 経由） | ✅ main（PR #9 で T7.1–7.3 完了＝**M7 完了**） | pytest 184 + 5.0/4.4 実機 smoke OK |
-| **M8 3シナリオ中核価値**（set-origin / straighten / print-*） | 🔶 進行中: T8.1 ✅（M3）/ T8.2 straighten ✅（PR #10）/ T8.3 print-setup ✅（PR #11）/ T8.4 print-check/repair ✅（PR待ち）/ T8.5 print-export 未着手 | pytest 212 + 5.0/4.4 実機 smoke OK |
-| M9–M14 | 未着手（M8 完了後は M9 ファイルI/O / NEXT-M9.md） | — |
+| **M8 3シナリオ中核価値**（set-origin / straighten / print-*）+ 実地フィードバック対応 | 🔶 進行中: T8.1 ✅（M3）/ T8.2 ✅（#10）/ T8.3 ✅（#11）/ T8.4 ✅（#12）。実地FB: PR-1 #7 ✅（#13）/ PR-2 #5/#2/#6 ✅（#14）/ PR-3 capture #1 ✅（#15）。**次は PR-4 基準整列 #4 → PR-5 undo #3 → T8.5 print-export**（§6h / NEXT-M8-feedback.md） | pytest 228 + 5.0/4.4 実機 smoke OK |
+| M9–M14 | 未着手（M8 完了後は M9 ファイルI/O / NEXT-M9.md 要作成） | — |
 
-**状態（feature/m8-print-check・M8 T8.4 まで）: `uv run pytest` = 212 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright は既存1件のみ（`bli/main.py:101` の narrowing・実行時安全）。main は 201 passed（M8 T8.3 まで）。**
+**状態（main・M8 実地FB PR-3 まで）: `uv run pytest` = 228 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright 新規 0（既存: `bli/main.py` narrowing / `gateway.py:196` object_summary / `ops.py:386` _material・いずれも実行時安全）。**
 
 > PR #1 の Codex レビュー対応で M4 を追補（§6b 参照）: ①request-status のロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（settle）③発見系を implemented 済みに限定 ④サーバ/クライアントのタイムアウト整合（DISPATCH_TIMEOUT < CLIENT_READ_TIMEOUT）⑤TIMEOUT 時に request id を提示。
 
@@ -213,6 +213,29 @@ M8 はサブPR分割（NEXT-M8.md）。順序: T8.2 straighten → T8.3 print-se
 - `ops.py`: `_print_check`（thin/intersect 要求 かつ print3d 不在で CAPABILITY_UNAVAILABLE(ENVIRONMENT)・カテゴリは1パス計算しサブセット報告・min_thickness は thin 専用・`_ok_offload` で大結果退避・fingerprint=mesh_fingerprint）/ `_print_repair`（破壊的→共有ガードを編集前に）。`CLI`: print-check（--fetch 対応・human はサブセット表示）/ print-repair。
 - **テスト/検証**: pytest=212。独立3視点セルフレビュー（P1 無し）で P2/P3 解消（make-manifold の wire/loose 削除順 / 全省略=全修復の複合破損 golden 追加 / thin+manifold 混在も CAPABILITY / spec §10 S3 に v1 注記 / human サブセット表示）。smoke に clean/面欠け/反転/退化 の check・CAPABILITY_UNAVAILABLE・非mesh ガード・make-manifold/recalc/remove-degenerate/全修復 の repair・共有ガードの golden。5.0.1/4.4.3 同値。
 - **繰越**: `--save-to`→M9。thin/intersect は print3d 導入時に配線（min_thickness は現状 dead param）。print3d/check/repair は heavy 候補（M10 で job 化）。holes_fill の非平面 n-gon・退化 eps 絶対値は v1 単純化（methods.md 注記）。
+
+## 6h. M8 実地フィードバック対応ワークストリーム（feedback-first・T8.5 の前に差し込み）
+エージェントに `straighten` 傾き補正を実地で使わせた検証で「単体では完遂不可」と判明（主因: PCA が重心ベース符号で上下反転 + 計画確認手段なし）。出典 `FEEDBACK-straighten-2026-06-15.md`（全7項目）。サブPR分割・各 PR は独立3視点セルフレビュー済み。**残作業 PR-4/PR-5 と詳細は `.handoff/NEXT-M8-feedback.md`**。
+
+### PR-1 ✅ main（PR #13）— 横断クイックウィン（#7）
+- **UTF-8 出力固定**: `bli/main.py` の `_force_utf8_output()`（import 時に `sys.stdout/stderr.reconfigure("utf-8")`・reconfigure 不可な stream は黙ってスキップ）。Windows CP932 化けを `PYTHONUTF8=1` 強制なしで解消。
+- 全 `--targets` に単数別名 `--target`（Typer の複数宣言）。methods.md に dimensions（回転不変）vs bbox.size（world AABB）の注記。FEEDBACK 資料を tracked 化・`scripts/launch_blender_gui.py`（GUI 起動ヘルパ）追加。CLI のみ＝実機 smoke 対象外。
+- **CI 教訓**: `--help` レンダリング（rich・端末幅依存）に文字列マッチするテストは CI(80桁)で偽陰性 → **登録済み click オプション名（`param.opts`）を直接検証**する方式に修正。
+
+### PR-2 ✅ main（PR #14）— straighten 根本修正（#5/#2/#6）
+- **#5 符号反転防止**: `gateway._principal_axis(obj, *, up, up_hint)`。`up_hint="current"` は principal を **up に近い側**に符号付け（`principal·up>=0`）し最小回転で合わせ、ベースが重いスキャン物体の上下反転を防ぐ。`auto`(既定)=従来の重心ベース（**既存 golden 不変**）。pca 結果に `tilt_from_up_deg`（up からの傾き鋭角・符号非依存）。
+- **#2 dry-run / #6 非破壊計測**: `straighten_object(..., dry_run)`。`_snapshot_transform`/`_restore_transform` が全 transform チャンネル（mode/loc/3回転表現/scale）を raw 値で退避→適用→レポート読取→**厳密復元**（push_undo もしない）。`--dry-run` と `--bake-rotation` は矛盾のため**排他**（USER_INPUT）。fingerprint は bake=mesh / それ以外=object。
+- smoke: StrPCADown（-Z 偏重 rod・20°tilt）で auto=`principal_world.z<0`（反転）/ current=`z>0`（反転せず）・tilt=20.0、dry-run 非破壊（前後不変・計画=実適用）、QUATERNION reset と floor の dry-run 復元を 5.0/4.4 両版確認。
+
+### PR-3 ✅ main（PR #15）— capture（#1 状態キャプチャ）
+- 新コマンド `capture --source viewport|screen|render`（読み取り専用 mutates=False・**Mode.ANY**＝EDIT 中も可）。viewport=gpu offscreen `draw_view3d`（UI なし・`--width/--height`・numpy 保存）/ screen=`screenshot_area`（領域そのまま）/ render=カメラ（`--camera` 省略時 active・render 設定 save/restore で非破壊）。
+- 出力 PNG は `outputs_dir` に **content-address 名**で書きパス/サイズ/sha256/**実解像度**（保存 PNG の IHDR から抽出＝screen の領域≠出力ずれ吸収）を返す。viewport/screen は GUI 必須（`--background` は `E_PRECONDITION` で graceful 縮退）。
+- バイナリ退避は `output_ref.offload_file`（パス安全・アトミック・ストリーミング sha・content-address 規約を JSON 退避と共有）。gateway 成功後のファイル I/O 失敗は `E_OPERATOR` へ写像（INTERNAL 回避）。`camera` は render 専用 / `width・height` は screen 不可。
+- **着手前スパイク `spikes/capture_spike.py`（Spike V・GUI モードで実行＝`blender.exe --python`・`--background` 不可）**: 5.0.1/4.4.3 両版で 4手法 + 本番 gateway.capture_* + 本番 `ops.dispatch("capture")`（viewport 320x240 / render 1024x768）を確認。background smoke は viewport/screen→E_PRECONDITION・不正 camera→E_TARGET_NOT_FOUND の graceful 縮退。
+
+### 残（次セッション）
+- **PR-4 基準指定整列（#4・支柱問題の本丸）**: 明示角度/ベクトル method / 参照オブジェクト / 部分ジオメトリ PCA。**kickoff 判断あり**（v1 スコープ・部分指定方法・transform との重複整理）→ `.handoff/NEXT-M8-feedback.md §2`。
+- **PR-5 undo 公開（#3）**: `gateway.push_undo` を CLI 露出。`ed.undo` は GUI 前提（background 不定）→ GUI スパイク推奨 → 同 §3。
 
 ## 6e. M6 で確立した再利用パターン（T6.2 以降で踏襲）
 - **破壊的 mesh 操作は共有ガード**: `ops._guard_shared_mesh(gateway, obj, params)` を呼ぶ（delete も対象になり得る）。`--make-single-user` 無しで users>=2 は `E_PRECONDITION`。
