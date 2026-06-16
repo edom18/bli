@@ -97,6 +97,14 @@ command(
         ),
         # axis は world-align 専用・省略時は最近軸を自動選択（presence-sensitive: default なし）。
         p("axis", ParamType.ENUM, choices=["X", "Y", "Z"], help="world-align で合わせる local 軸"),
+        # up_hint は pca 専用（presence-sensitive: default なし）。auto=重心方向で符号決定（既定）/
+        # current=現在の up に近い側を + にする＝最小回転で上下反転を防ぐ（実地フィードバック #5）。
+        p(
+            "up_hint",
+            ParamType.ENUM,
+            choices=["auto", "current"],
+            help="pca の符号決定: auto(重心)|current(現在 up 寄り=反転防止)",
+        ),
         p("bake_rotation", ParamType.BOOL, default=False, help="回転を mesh データへ焼き込む"),
         p(
             "make_single_user",
@@ -104,6 +112,8 @@ command(
             default=False,
             help="bake時に共有mesh単一ユーザ化を許可",
         ),
+        # dry_run は適用せず計画（回転/傾き角）のみ返す（実地フィードバック #2・通常モードフラグ）。
+        p("dry_run", ParamType.BOOL, default=False, help="適用せず計画（回転/傾き角）のみ返す"),
     ),
     mutates=True,
     required_mode=Mode.OBJECT,

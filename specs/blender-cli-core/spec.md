@@ -164,7 +164,9 @@ bli set-origin --targets <name> --to geometry|cursor|world
 bli straighten --targets <name> --method reset|world-align|pca|floor
     [--up-axis +Z|-Z|+Y|...]      # 既定 +Z
     [--axis X|Y|Z]                # world-align時（省略時は up に最も近い軸を自動選択）
-    [--bake-rotation]             # 回転を mesh データに適用して焼き込む
+    [--up-hint auto|current]      # pca時の符号決定（current=現在 up 寄り・上下反転防止／実地FB #5）
+    [--dry-run]                   # 適用せず計画（回転/tilt_from_up_deg）のみ返す（非破壊／実地FB #2）
+    [--bake-rotation]             # 回転を mesh データに適用して焼き込む（--dry-run と排他）
     [--make-single-user]          # bake時の共有meshデータを明示で許可
 ```
 
@@ -401,6 +403,7 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--ap
 - `--method reset`: 回転がクリアされる。
 - `--bake-rotation` 指定時は回転が適用（焼き込み）される。
 - 完了条件: 補正後のローカル+Z軸とワールド+Zの角度が閾値内（ゴールデン検証）。
+- **v1 実装注記（実地フィードバック #5/#2/#6）**: `--method pca` の主成分は符号不定。`--up-hint current` は**現在の up に近い側**を + に選び、土台が重いスキャン物体でも**上下反転しない**（既定 `auto` は重心方向で符号決定）。pca 結果は `tilt_from_up_deg`（up からの傾き角・符号非依存の鋭角）を返す。`--dry-run` は**適用→読取→厳密復元**で副作用なく計画（回転・`tilt_from_up_deg`）を返す（非破壊計測にも使える・`--bake-rotation` とは排他）。完了条件（追加）: 重心が下に偏る tilt 物体で `pca --up-hint current` が反転せず傾きを除去（principal_world.z>0）、`--dry-run` 前後で transform 不変かつ計画＝実適用（ゴールデン検証・両版同値）。
 
 ### S3: 3Dプリンタ対応
 - `print-check`: 非多様体・反転法線・薄壁・自己交差・退化面の件数を構造化で返す。

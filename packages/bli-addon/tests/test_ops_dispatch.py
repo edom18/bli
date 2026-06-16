@@ -742,14 +742,48 @@ def test_straighten_unknown_param_invalid_params():
     assert ei.value.code == RPC_INVALID_PARAMS
 
 
+def test_straighten_up_hint_on_non_pca_invalid_params():
+    # up_hint は pca 専用。reset/world-align/floor に渡すと silent ignore せず弾く（bpy 到達前・#5）。
+    for method in ("reset", "world-align", "floor"):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch(
+                "straighten", {"targets": "Cube", "method": method, "up_hint": "current"}, INFO
+            )
+        assert ei.value.code == RPC_INVALID_PARAMS, method
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", method
+
+
+def test_straighten_bad_up_hint_invalid_params():
+    # up_hint は ENUM(auto|current)。範囲外は schema 検証で INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("straighten", {"targets": "Cube", "method": "pca", "up_hint": "bogus"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_straighten_dry_run_with_bake_invalid_params():
+    # dry-run（書き込まない）と bake（mesh 焼き込み）は矛盾 → silent ignore せず弾く（bpy 到達前・#2）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "straighten",
+            {"targets": "Cube", "method": "pca", "dry_run": True, "bake_rotation": True},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
 def test_straighten_valid_params_reach_bpy():
-    # 妥当な params（各 method・bake/make_single_user knob）は USER_INPUT で弾かれず検証を通過し、
-    # bpy の遅延 import まで到達する（bpy 不在の pytest では ModuleNotFoundError）。退行ガード。
+    # 妥当な params（各 method・up_hint/dry_run/bake/make_single_user knob）は USER_INPUT で弾かれず
+    # 検証を通過し、bpy の遅延 import まで到達する（bpy 不在の pytest では ModuleNotFoundError）。退行ガード。
     cases = [
         {"method": "reset"},
         {"method": "world-align", "up_axis": "+Z"},
         {"method": "world-align", "axis": "Z"},
         {"method": "pca", "up_axis": "-Y"},
+        {"method": "pca", "up_hint": "current"},  # #5: up_hint は pca で受理
+        {"method": "pca", "dry_run": True},  # #2: dry-run は受理
         {"method": "floor", "bake_rotation": True, "make_single_user": True},
     ]
     for extra in cases:
