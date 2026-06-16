@@ -1,6 +1,7 @@
-# 次の作業 — M8 実地フィードバック対応ワークストリーム（残: PR-4 → PR-5 → T8.5）
+# 次の作業 — M8 実地フィードバック対応ワークストリーム（**PR-1〜5 完了 → 残: T8.5**）
 
-最終更新: 2026-06-16 / 前提: **M0–M7 + M8 T8.1–T8.4 完了。実地フィードバック PR-1〜PR-3 main マージ済み（PR #13/#14/#15）**。
+最終更新: 2026-06-16 / 前提: **M0–M7 + M8 T8.1–T8.4 完了。実地フィードバック PR-1〜PR-5 全て main マージ済み（PR #13/#14/#15/#17/#18・docs は #16）**。
+> **このワークストリームは完了。次に着手すべきは T8.5 print-export（§4）= `.handoff/NEXT-M8.md`。それで M8 完了 → M9。**
 > まず `.handoff/HANDOFF.md`（全体史 + 規約 + §6e 再利用パターン）と `.handoff/ROADMAP.md`（俯瞰）を読む。
 > 出典: `FEEDBACK-straighten-2026-06-15.md`（実地検証レポート・全7項目）。
 > このワークストリームは「3シナリオを**エージェントが実際に使える**ようにする」差し込み。**feedback-first**（T8.5 print-export より前）。
@@ -26,14 +27,22 @@ PYTHONUTF8=1 uv run python scripts/check_no_raw_bpy_ops.py packages/bli-addon/sr
 | PR-1 | #7 横断クイックウィン | ✅ #13 | CLI UTF-8 出力固定（`_force_utf8_output`）・全 `--targets` に `--target` 別名・dimensions/bbox 文書化 |
 | PR-2 | #5/#2/#6 straighten 根本修正 | ✅ #14 | pca `--up-hint current`（最小回転で反転防止）・`tilt_from_up_deg`・`--dry-run`（snapshot/restore で非破壊・bake と排他） |
 | PR-3 | #1 capture | ✅ #15 | `capture --source viewport\|screen\|render`・PNG を outputs_dir に content-address 名・実解像度は PNG IHDR・GUI 必須（background は E_PRECONDITION）・`output_ref.offload_file` 集約 |
-| **PR-4** | **#4 基準指定整列** | ⬜ **次** | 下記 §2（kickoff 判断あり・支柱問題の本丸） |
-| PR-5 | #3 undo 公開 | ⬜ | 下記 §3 |
+| PR-4 | #4 基準指定整列 | ✅ #17 | `straighten --method angle\|align-vector\|reference`（下記 §2）。支柱問題は align-vector（向きを数値指定）で実用解。部分 PCA は別 PR 繰越 |
+| PR-5 | #3 undo/redo 公開 | ✅ #18 | `bli undo`/`redo --steps N`（下記 §3）。bare `ed.undo/redo`・GUI 必須（background は E_PRECONDITION）・スタック端 RuntimeError 頑健化（研究 §E7） |
 
-→ **PR-4・PR-5 後 → T8.5 print-export（§4）→ M8 完了 → M9**。
+→ **実地フィードバック PR-1〜5 完了。残るは T8.5 print-export（§4・着手書は `.handoff/NEXT-M8.md`）→ M8 完了 → M9**。
 
 ---
 
-## 2. PR-4: 基準指定整列（FB #4・支柱問題の本丸）
+## 2. PR-4: 基準指定整列（FB #4・支柱問題の本丸）✅ **完了（PR #17 マージ済み）**
+
+**確定スコープ（kickoff: ユーザー選択 (b)）+ 実装結果**: `straighten` に基準指定 method 3種を追加。
+- **angle**: world 軸 `--axis X|Y|Z` まわりに `--degrees`（符号で向き）回転。
+- **align-vector**: `--from-dir`(world) を `--to-dir`(world・**省略時 up**) へ最小回転で合わせる。**向きを数値で渡せば同一メッシュ内の支柱でも整列でき、`transform --mode delta` 手計算迂回を解消**（支柱問題への実用解）。
+- **reference**: 参照 obj の `--ref-axis`(signed local・省略時 up_axis) world 方向へ、対象の `--axis`(local・省略時最近軸) を合わせる（`_world_align` の目標を up→参照軸へ差し替え）。
+いずれも object 回転のみ・既存作法を継承（presence-sensitive 検証・bpy 前必須/ゼロベクトル/自己参照=USER_INPUT・gateway も None ガードで E_PRECONDITION・dry-run 厳密復元・bake 共有ガード・fingerprint 使い分け）。result: angle=`{axis,degrees}` / align-vector=`{from_dir,to_dir,from_world_after,angle_deg}` / reference=`{axis,aligned_world,reference,ref_axis,reference_world}`。両版 smoke golden 緑（angle Z45→[0,0,45] / align-vector tilt20°→+Z / reference は参照軸[sin25,0,cos25]へ整列し world up と区別）。**繰越**: 部分ジオメトリ PCA（頂点サブセット基準）は部分指定方法（頂点グループ/参照領域/world bbox）の決定が要るため別 PR。`straighten_object`/`_straighten` の if/elif 7 method テーブル化（非緊急）。詳細は spec.md §S2 / methods.md シナリオ2。
+
+<details><summary>（参考）着手前の設計空間と kickoff 判断の記録</summary>
 
 ### 背景（FB §1–§5 の核心）
 - 実地対象はスキャンメッシュ1個。傾きが **object 回転ではなく mesh 形状に焼き込まれている**（object rotation は綺麗な `[90,0,0]`）。
@@ -71,23 +80,27 @@ PYTHONUTF8=1 uv run python scripts/check_no_raw_bpy_ops.py packages/bli-addon/sr
 - `packages/bli-cli/src/bli/main.py`: `straighten` コマンド。
 - `packages/bli-addon/spikes/smoke_ops.py`: `ensure_straighten_fixtures` / straighten smoke 群（StrPCADown 等を参考に新 fixture）。
 - contracts/methods.md・spec.md のシナリオ2行（PR-2 で up_hint/dry-run/tilt 追記済み）。
+</details>
 
 ---
 
-## 3. PR-5: undo 公開（FB #3）
-- **概要**: `gateway.push_undo`（既存・`gateway.py:74`）を CLI コマンド `bli undo` として露出。可逆性を「直前 transform の自力再構築」に頼らせず、試行錯誤の安全性を上げる。
-- **注意点**:
-  - `push_undo` は undo **境界を積む**だけ。実際に1ステップ戻すには `bpy.ops.ed.undo()` が必要 → これは bpy.ops なので **gateway 経由（run_operator）**。
-  - **background では undo stack 挙動が不定**（M0.5: `ed.undo_push` は OK だが `ed.undo` の実発火は GUI 前提）。GUI スパイク（capture と同様 `blender.exe --python`）で挙動確認推奨。
-  - 冪等性/状態: undo は「直前の dispatch を戻す」意味づけが曖昧になりやすい。スコープ（何ステップ・何を戻すか）を kickoff で確認。読み取り専用ではない（状態を変える）。
-- **kickoff 判断**: `undo` の意味（1ステップ固定 / メッセージ指定 / セッション境界）と、GUI 必須にするか（background は CAPABILITY/PRECONDITION 縮退）。
+## 3. PR-5: undo/redo 公開（FB #3）✅ **完了（PR #18 マージ済み）**
+
+**確定（kickoff: ユーザー選択）+ 実装結果**: `bli undo` / `bli redo --steps N`（1〜`runtime.MAX_UNDO_STEPS`=100）。グローバル undo スタックを steps 段戻す/進める。
+- **gateway** `undo_steps`/`redo_steps` = bare `bpy.ops.ed.undo()`/`ed.redo()` を steps 回（**GUI で context override 不要**・研究 §E7）。`_step_undo_stack` がスタック端を正規化（`FINISHED` 以外 **および RuntimeError** の両方を break＝端で applied 頭打ち・INTERNAL 化回避）。**スタック端は両版とも `RuntimeError('poll() failed, context is incorrect')` を投げる**（spike で確証）。`_require_gui_for_undo`=`bpy.app.background`→E_PRECONDITION（capture と同流儀）。`scene_state_fingerprint`（name/type/matrix_world の粗いシーン指標・mesh 内部編集は捉えない）。
+- **ops** `_do_undo_redo` 共通ヘルパ（steps 範囲を bpy 前検証・上限 runtime 集約）。CLI も送信前に弾く（duplicate と同流儀）。`mutates=True`・`Mode.ANY`。result `{requested, applied}`。
+- **GUI スパイク** `spikes/undo_spike.py`（GUI モード実行）で 5.0.1/4.4.3 確認（実巻き戻し/redo/複数段/matrix_world 確定/スタック端 RuntimeError）。background smoke は E_PRECONDITION 縮退・steps 範囲外 INVALID_PARAMS。
+- **繰越**: redo スタックは新規操作で消える（Blender 仕様・v1 許容）。fingerprint は粗い（mesh 内部編集 undo は前後同値になり得る）。詳細は spec.md / methods.md「状態操作」/ research §E7。
 
 ---
 
-## 4. その後: T8.5 print-export（M8 完了）
+## 4. ★次に着手: T8.5 print-export（これで M8 完了）
+> **詳細な着手書・キックオフ判断は `.handoff/NEXT-M8.md`**（T8.5 行 + §2 スパイク3 + §3 kickoff）。
 - `print-export`（stl / 3mf）。**3mf は標準で実体なし → STL フォールバック hint**（research.md D11/付録）。stl=`wm.stl_export`（M0.5 確定・capability.RESOLVERS）。
-- `global_scale` は print-setup の表示単位/`scale_length` から**一本算出**（T8.3 で設計済み）。
-- 完了で **M8 完了 → `.handoff/NEXT-M9.md`（ファイルI/O）を作成**（未作成）。
+- `global_scale` は print-setup の表示単位/`scale_length` から**一本算出**（T8.3 で設計済み・unit_settings から導出）。
+- 着手前スパイク: 3mf addon（`io_mesh_3mf`）有無の分岐と STL hint・`wm.stl_export` の引数（`global_scale`/`apply_modifiers`/`ascii`?）を 5.0.1/4.4.3 で確認し research に確定値（§E8）。
+- ファイル書き出しは `outputs_dir` ではなくユーザー指定 `--path`（capture とは別系統・パス安全性に注意）。`--apply-transform` 等のオプションは kickoff で確定。
+- 完了で **M8 完了 → `.handoff/NEXT-M9.md`（ファイルI/O save/open/import/export）を作成**（未作成）。M9 は print-export と実装が重なる領域があるため設計を引き継ぐ。
 
 ## 5. 必ず守る規約（HANDOFF §8 / §6e・再掲）
 - bli-core 純Python・依存ゼロ。生 `bpy.ops` は gateway のみ（AST guard）。検証は bpy 前（`_require_input`）。
