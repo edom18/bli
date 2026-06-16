@@ -1,6 +1,6 @@
 # 次の作業 — M8「3シナリオ（中核価値）」
 
-> **⚠️ 2026-06-16 更新**: T8.1–T8.4 完了（PR #10–#12 マージ済み）。**T8.5 print-export の前に「実地フィードバック対応ワークストリーム」を feedback-first で差し込み中**（エージェント実地検証の指摘に対応）。PR-1〜PR-3 マージ済み（#13–#15）。**次に着手すべきは PR-4 基準整列 → PR-5 undo →（その後）T8.5**。**着手手順は `.handoff/NEXT-M8-feedback.md`**、全体俯瞰は `.handoff/ROADMAP.md`。このファイル（NEXT-M8.md）は T8.1–T8.5 のコア計画の記録として残す。
+> **⚠️ 2026-06-16 更新**: T8.1–T8.4 完了（PR #10–#12）+ **実地フィードバック対応ワークストリーム PR-1〜5 完了**（PR #13/#14/#15/#17/#18・経緯は `.handoff/NEXT-M8-feedback.md`）。**残るは T8.5 print-export のみ＝これで M8 完了**。**次に着手すべきは T8.5（このファイルの §1 表 T8.5 行 + §2 スパイク3「print-export 3mf」+ §3 kickoff）**。全体俯瞰は `.handoff/ROADMAP.md`。
 
 最終更新: 2026-06-15 / 前提: **M0–M7 完了**（M7 T7.3 boolean/decimate は PR マージ待ち＝マージで M7 完了）。**M8 = このプロダクトの中核価値**（spec の3シナリオ: 原点変更 / 直立補正 / 3Dプリンタ対応）。
 > まず `.handoff/HANDOFF.md`（全体史 + 規約 + §6e 再利用パターン + §6f M7 確定事項）を読む。出典: `plan.md §4 M8` / `spec.md §シナリオ1–3 + §10 受け入れ基準` / `contracts/methods.md §シナリオ1–3`。
@@ -8,10 +8,10 @@
 ## 0. 着手前（コピペ可）
 ```bash
 cd "D:/MyDesktop/PythonProjects/blender-auto-cli"
-git checkout main && git pull origin main          # M7 T7.3 PR マージ後
-git checkout -b feature/m8-scenario1               # 最初のサブPR（例）
+git checkout main && git pull origin main          # PR #18 マージ後
+git checkout -b feature/m8-print-export             # T8.5
 uv sync
-PYTHONUTF8=1 uv run pytest -q                       # 184 passed（M7 まで）を確認
+PYTHONUTF8=1 uv run pytest -q                       # 244 passed（実地FB PR-5 まで）を確認
 uv run ruff check . && uv run ruff format --check .
 PYTHONUTF8=1 uv run python scripts/check_no_raw_bpy_ops.py packages/bli-addon/src
 # 実機スモーク（ops 一式・両版）:

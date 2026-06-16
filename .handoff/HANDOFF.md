@@ -1,9 +1,9 @@
 # bli (Blender CLI) — 引き継ぎ資料 (HANDOFF)
 
-最終更新: 2026-06-16 / 状態: **PR #1–#15 マージ済み（origin/main）。M0–M7 全 + M8 T8.1–T8.4（set-origin/straighten/print-setup/print-check/print-repair）完了。さらに M8 に「実地フィードバック対応ワークストリーム」を feedback-first で差し込み中: PR-1 横断クイックウィン #7 ✅（PR #13）/ PR-2 straighten 根本修正 #5/#2/#6 ✅（PR #14）/ PR-3 capture #1 ✅（PR #15）。次は PR-4 基準指定整列 #4 → PR-5 undo #3 → T8.5 print-export（M8 完了）。詳細は `.handoff/NEXT-M8-feedback.md`・俯瞰は `.handoff/ROADMAP.md`**。
+最終更新: 2026-06-16 / 状態: **PR #1–#18 マージ済み（origin/main）。M0–M7 全 + M8 T8.1–T8.4（set-origin/straighten/print-setup/print-check/print-repair）完了。M8「実地フィードバック対応ワークストリーム」（feedback-first）も PR-1〜5 完了: PR-1 横断クイックウィン #7 ✅（#13）/ PR-2 straighten 根本修正 #5/#2/#6 ✅（#14）/ PR-3 capture #1 ✅（#15）/ PR-4 基準指定整列 #4 ✅（#17・straighten に angle/align-vector/reference）/ PR-5 undo/redo #3 ✅（#18）。次は T8.5 print-export＝これで M8 完了。着手書 `.handoff/NEXT-M8.md`・経緯 `.handoff/NEXT-M8-feedback.md`・俯瞰 `.handoff/ROADMAP.md`**。
 
 > 新規セッションはこの1枚を読めば再開できる。詳細は `specs/blender-cli-core/` を参照。
-> **全体俯瞰は `.handoff/ROADMAP.md`。次の作業（M8 実地フィードバック PR-4〜）は `.handoff/NEXT-M8-feedback.md`**（このファイルは全体史 + 規約・§6h に実地フィードバックの確定要約）。
+> **全体俯瞰は `.handoff/ROADMAP.md`。次の作業（T8.5 print-export＝M8 完了）は `.handoff/NEXT-M8.md`**（実地フィードバック PR-1〜5 の経緯は `.handoff/NEXT-M8-feedback.md`。このファイルは全体史 + 規約・§6h に実地フィードバックの確定要約）。
 
 ---
 
@@ -63,10 +63,10 @@
 | **M5 情報取得**（list-objects / object-info bbox / scene-info の output_ref 退避） | ✅ main（PR #2） | pytest 95 + 5.0/4.4 実機 smoke OK |
 | **M6 汎用編集**（select/transform/apply-transform・duplicate/delete・material・modifier） | ✅ main（PR #6 で M6 完了） | pytest 151 + 5.0/4.4 実機 smoke OK |
 | **M7 メッシュ編集**（mesh --op: bmesh一次 + heavy modifier 経由） | ✅ main（PR #9 で T7.1–7.3 完了＝**M7 完了**） | pytest 184 + 5.0/4.4 実機 smoke OK |
-| **M8 3シナリオ中核価値**（set-origin / straighten / print-*）+ 実地フィードバック対応 | 🔶 進行中: T8.1 ✅（M3）/ T8.2 ✅（#10）/ T8.3 ✅（#11）/ T8.4 ✅（#12）。実地FB: PR-1 #7 ✅（#13）/ PR-2 #5/#2/#6 ✅（#14）/ PR-3 capture #1 ✅（#15）。**次は PR-4 基準整列 #4 → PR-5 undo #3 → T8.5 print-export**（§6h / NEXT-M8-feedback.md） | pytest 228 + 5.0/4.4 実機 smoke OK |
+| **M8 3シナリオ中核価値**（set-origin / straighten / print-*）+ 実地フィードバック対応 | 🔶 進行中: T8.1 ✅（M3）/ T8.2 ✅（#10）/ T8.3 ✅（#11）/ T8.4 ✅（#12）。実地FB **PR-1〜5 完了**: #7（#13）/ #5#2#6（#14）/ capture #1（#15）/ 基準整列 #4（#17）/ undo·redo #3（#18）。**残るは T8.5 print-export＝これで M8 完了**（NEXT-M8.md） | pytest 244 + 5.0/4.4 実機 smoke OK（undo/redo は GUI スパイクで検証） |
 | M9–M14 | 未着手（M8 完了後は M9 ファイルI/O / NEXT-M9.md 要作成） | — |
 
-**状態（main・M8 実地FB PR-3 まで）: `uv run pytest` = 228 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright 新規 0（既存: `bli/main.py` narrowing / `gateway.py:196` object_summary / `ops.py:386` _material・いずれも実行時安全）。**
+**状態（main・M8 実地FB PR-5 まで）: `uv run pytest` = 244 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright 新規 0（既存: `bli/main.py` narrowing / `gateway.py:196` object_summary / `ops.py` _material・いずれも実行時安全）。Blender 5.0.1/4.4.3 両版 background smoke OPS SMOKE OK + undo/redo は GUI スパイク（`undo_spike.py`）で実巻き戻し確認。**
 
 > PR #1 の Codex レビュー対応で M4 を追補（§6b 参照）: ①request-status のロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（settle）③発見系を implemented 済みに限定 ④サーバ/クライアントのタイムアウト整合（DISPATCH_TIMEOUT < CLIENT_READ_TIMEOUT）⑤TIMEOUT 時に request id を提示。
 
@@ -233,9 +233,22 @@ M8 はサブPR分割（NEXT-M8.md）。順序: T8.2 straighten → T8.3 print-se
 - バイナリ退避は `output_ref.offload_file`（パス安全・アトミック・ストリーミング sha・content-address 規約を JSON 退避と共有）。gateway 成功後のファイル I/O 失敗は `E_OPERATOR` へ写像（INTERNAL 回避）。`camera` は render 専用 / `width・height` は screen 不可。
 - **着手前スパイク `spikes/capture_spike.py`（Spike V・GUI モードで実行＝`blender.exe --python`・`--background` 不可）**: 5.0.1/4.4.3 両版で 4手法 + 本番 gateway.capture_* + 本番 `ops.dispatch("capture")`（viewport 320x240 / render 1024x768）を確認。background smoke は viewport/screen→E_PRECONDITION・不正 camera→E_TARGET_NOT_FOUND の graceful 縮退。
 
-### 残（次セッション）
-- **PR-4 基準指定整列（#4・支柱問題の本丸）**: 明示角度/ベクトル method / 参照オブジェクト / 部分ジオメトリ PCA。**kickoff 判断あり**（v1 スコープ・部分指定方法・transform との重複整理）→ `.handoff/NEXT-M8-feedback.md §2`。
-- **PR-5 undo 公開（#3）**: `gateway.push_undo` を CLI 露出。`ed.undo` は GUI 前提（background 不定）→ GUI スパイク推奨 → 同 §3。
+### PR-4 ✅ main（PR #17）— 基準指定整列（#4・支柱問題の本丸）
+- **kickoff スコープ（ユーザー確定 (b)）**: `straighten` に基準指定 method 3種を追加。いずれも object 回転のみ・既存作法（dry-run/bake 共有ガード/fingerprint 使い分け）を継承。
+  - **angle**: world 軸 `--axis X|Y|Z` まわりに `--degrees`（符号で向き）回転。result `{axis, degrees}`。
+  - **align-vector**: `--from-dir`(world) を `--to-dir`(world・**省略時 up**) へ最小回転で合わせる（`_rotation_to`）。**向きを数値で渡せば同一メッシュ内の支柱でも整列でき `transform` 手計算迂回を解消**＝支柱問題の実用解。result `{from_dir, to_dir, from_world_after, angle_deg}`。
+  - **reference**: 参照 obj の `--ref-axis`(signed local・省略時 up_axis) world 方向へ、対象の `--axis`(local・省略時最近軸) を合わせる（`_world_align` の目標を up→参照軸へ差し替え・再利用）。result `{axis, aligned_world, reference, ref_axis, reference_world}`。
+- 検証は bpy 前（method 別 presence/必須/ゼロベクトル/自己参照=USER_INPUT）。gateway も None ガードで E_PRECONDITION（INTERNAL 化回避）。op 専用 param（degrees/from_dir/to_dir/reference/ref_axis）は schema default なし。CLI `_parse_vec` は try/except→INVALID_PARAMS。**スパイク不要**（検証済みプリミティブの合成）＝smoke golden で両版検証（angle Z45→[0,0,45] / align-vector tilt20°→+Z / reference は参照軸[sin25,0,cos25]へ整列し world up と区別 / ref_axis 省略の up_axis フォールバック）。
+- **繰越**: 部分ジオメトリ PCA（頂点サブセット基準・部分指定方法の決定要）は別 PR。`straighten_object`/`_straighten` の if/elif 7 method テーブル化（非緊急）。
+
+### PR-5 ✅ main（PR #18）— undo/redo 公開（#3）
+- 新コマンド `bli undo` / `bli redo --steps N`（1〜`runtime.MAX_UNDO_STEPS`=100）。グローバル undo スタックを steps 段戻す/進める。`mutates=True`・`Mode.ANY`・result `{requested, applied}` + 粗いシーン fingerprint。
+- gateway `undo_steps`/`redo_steps` = bare `bpy.ops.ed.undo()`/`ed.redo()` を steps 回（**GUI で context override 不要**）。`_step_undo_stack` がスタック端を正規化（`FINISHED` 以外 **および RuntimeError** の両方を break＝applied 頭打ち・INTERNAL 化回避）。`_require_gui_for_undo`=`bpy.app.background`→E_PRECONDITION（capture と同流儀）。`scene_state_fingerprint`（name/type/matrix_world の粗い指標・mesh 内部編集は捉えない）。
+- ops `_do_undo_redo` 共通ヘルパ（steps 範囲を bpy 前検証・上限 runtime 集約）。CLI も送信前に弾く（duplicate と同流儀）。
+- **着手前 GUI スパイク `spikes/undo_spike.py`（GUI モード実行・研究 §E7）**: 5.0.1/4.4.3 両版で実巻き戻し/redo/複数段/undo 直後の matrix_world 確定を確認。**重要発見**: スタック端は両版とも `RuntimeError('poll() failed, context is incorrect')` を投げる（CANCELLED ではない）→ `_step_undo_stack` の try/except で頑健化。background smoke は E_PRECONDITION 縮退・steps 範囲外 INVALID_PARAMS。
+
+### ★次に着手: T8.5 print-export（これで M8 完了）
+- 実地フィードバック PR-1〜5 は完了。残るは **T8.5 print-export**（stl / 3mf→STL hint・`global_scale` は print-setup の単位/scale_length から一本算出）。**着手書は `.handoff/NEXT-M8.md`**（§1 表 T8.5 行 + §2 スパイク3 + §3 kickoff）。完了で M8 完了 → M9 ファイルI/O（`.handoff/NEXT-M9.md` 要作成）。
 
 ## 6e. M6 で確立した再利用パターン（T6.2 以降で踏襲）
 - **破壊的 mesh 操作は共有ガード**: `ops._guard_shared_mesh(gateway, obj, params)` を呼ぶ（delete も対象になり得る）。`--make-single-user` 無しで users>=2 は `E_PRECONDITION`。
@@ -272,9 +285,9 @@ PYTHONUTF8=1 uv run python scripts/check_no_raw_bpy_ops.py packages/bli-addon/sr
 PYTHONUTF8=1 uv run bli list-commands --json
 PYTHONUTF8=1 uv run bli help --command set-origin --json
 ```
-M7 は T7.1–7.3 完了（T7.3 は PR マージ待ち＝M7 完了）。**次は M8（3シナリオ中核価値）= `.handoff/NEXT-M8.md`**。
-（feature/m7-mesh-heavy のベースライン緑は `uv run pytest` = 184 passed。M8 は T7.3 PR マージ後に main から新ブランチを切る＝共有ファイルのコンフリクト回避。）
-M5/M6/M7 は概ね並行可（plan.md §4）。GUI 常駐での `bpy.app.timers` 実発火は L4 手動検証で別途。
+M8 は T8.1–T8.4 + 実地フィードバック PR-1〜5 完了。**次は T8.5 print-export = `.handoff/NEXT-M8.md`**（これで M8 完了）。
+（main のベースライン緑は `uv run pytest` = 244 passed。新ブランチは main pull 後に `feature/m8-print-export` で切る。）
+GUI 常駐での `bpy.app.timers` 実発火・undo/redo の実巻き戻しは GUI スパイク/L4 手動検証で別途（background では近似/縮退）。
 
 ## 8. 重要な落とし穴
 - **bli-core は純Python・依存ゼロを厳守**（アドオンにPydanticを入れない。CLI側のみPydantic可）。3.10互換を維持。
@@ -298,7 +311,7 @@ packages/{bli-core, bli-cli, bli-addon}（uv workspace）。
 - M6: T6.1–6.4 全完了。`exec-python` は M11。
 - M7: T7.1–7.3 全完了（T7.3 boolean/decimate は PR マージ待ち＝M7 完了）。次は M8。`_mesh` の op 別検証テーブル化（設計 P3）は 8 op 目を足す時に検討。boolean/decimate の「対象に他 modifier がある場合は焼き込まれる」前提は v1 未保証（methods.md 注記済み）。
 - M6 編集系の**孤児データブロック**（delete の sole-user mesh / material create-and-assign の置換で外れた material）の purge は後続（save/cleanup 系）で対応。即時 GC しない bpy 仕様どおりで設計上は意図的（レビューで P2 記録）。
-- M8: print3d Toolbox の実モジュールid特定（Extensions）。3MFは addon 必要 or STLフォールバック。
-- M9: import/export 各フォーマット（RESOLVERS は capability.py に確定値あり）。
+- M8: T8.1–T8.4 + 実地FB PR-1〜5 完了。**残 T8.5 print-export**（3MF は addon 必要 or STL フォールバック・global_scale 一本化）。print3d Toolbox は両版実体なし確定済み（§E6）。実地FB 繰越: 部分ジオメトリ PCA（straighten・別 PR）/ straighten・mesh の op 別検証テーブル化（非緊急）/ undo の fingerprint は粗い（mesh 内部編集は捉えない）/ redo スタックは新規操作で消える（v1 許容）。
+- M9: import/export 各フォーマット（RESOLVERS は capability.py に確定値あり）。T8.5 print-export と実装が重なるため設計を引き継ぐ。`.handoff/NEXT-M9.md` 要作成。
 - M10: `job-status`/`job-wait`（非同期job）+ `--dry-run`。settle/RUNNING 機構は M4 で土台済み。
 - M12: Claude Code Skill 同梱（`.claude/skills/bli/`）+ `help --json` 自動生成 + `schema_hash` 同期。

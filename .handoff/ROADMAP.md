@@ -45,21 +45,22 @@
 | T8.2 | `straighten`（reset/world-align/pca/floor） | ✅ PR #10 |
 | T8.3 | `print-setup`（単位 mm/m・非破壊） | ✅ PR #11 |
 | T8.4 | `print-check` / `print-repair`（bmesh 自前 + print3d 縮退） | ✅ PR #12 |
-| **T8.5** | **`print-export`（stl / 3mf→STL hint）** | ⬜ **未着手＝これで M8 完了** |
+| **T8.5** | **`print-export`（stl / 3mf→STL hint）** | ⬜ **次はここ＝これで M8 完了**（着手書 `.handoff/NEXT-M8.md`） |
 
-### 実地フィードバック対応ワークストリーム（T8.5 の前に差し込み・feedback-first）
+### 実地フィードバック対応ワークストリーム（T8.5 の前に差し込み・feedback-first）✅ **完了（PR-1〜5）**
 エージェントに `straighten` 傾き補正を実地で使わせた検証で「単体では完遂不可」と判明 → 全7項目に対応。
-出典: `FEEDBACK-straighten-2026-06-15.md`。詳細・残作業は **`.handoff/NEXT-M8-feedback.md`**。
+出典: `FEEDBACK-straighten-2026-06-15.md`。詳細は **`.handoff/NEXT-M8-feedback.md`**。
 
 | PR | 対応（FB番号） | 状態 |
 |:--:|---|:--:|
 | PR-1 | 横断クイックウィン（#7 UTF-8 出力固定・`--target` 別名・dimensions/bbox 文書化） | ✅ PR #13 |
 | PR-2 | straighten 根本修正（#5 up_hint/tilt・#2 dry-run・#6 吸収） | ✅ PR #14 |
 | PR-3 | capture（#1 viewport/screen/render の状態キャプチャ） | ✅ PR #15 |
-| **PR-4** | **基準指定整列（#4 `--reference`/選択ジオメトリ/明示角度・支柱問題の本丸）** | ⬜ **次はここ** |
-| PR-5 | undo 公開（#3 `gateway.push_undo` を CLI 露出） | ⬜ 未着手 |
+| PR-4 | 基準指定整列（#4 straighten に angle/align-vector/reference 追加・支柱問題） | ✅ PR #17 |
+| PR-5 | undo/redo 公開（#3 `bli undo`/`redo`・GUI 必須・スタック端 RuntimeError 頑健化） | ✅ PR #18 |
 
-→ **PR-4・PR-5 完了 → T8.5 print-export → M8 完了 → M9（`.handoff/NEXT-M9.md` 要作成）**。
+→ **実地フィードバック PR-1〜5 完了。残るは T8.5 print-export → M8 完了 → M9（`.handoff/NEXT-M9.md` 要作成）**。
+※ FB #4 の「部分ジオメトリ PCA（頂点サブセット基準）」は部分指定方法の決定が要るため別 PR 繰越（PR-4 では angle/align-vector/reference で支柱問題に実用解を提供済み）。
 
 ---
 
