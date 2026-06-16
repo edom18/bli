@@ -240,21 +240,39 @@ def test_m8_straighten_discoverable():
         "up_axis",
         "axis",
         "up_hint",
+        "degrees",
+        "from_dir",
+        "to_dir",
+        "reference",
+        "ref_axis",
         "dry_run",
         "bake_rotation",
         "make_single_user",
     }
     assert set(schema["required"]) == {"targets", "method"}
-    assert schema["properties"]["method"]["enum"] == ["reset", "world-align", "pca", "floor"]
+    # 基準指定 method（angle/align-vector/reference）を追加（実地フィードバック #4）。
+    assert schema["properties"]["method"]["enum"] == [
+        "reset",
+        "world-align",
+        "pca",
+        "floor",
+        "angle",
+        "align-vector",
+        "reference",
+    ]
     assert schema["properties"]["up_axis"]["enum"] == ["+Z", "-Z", "+Y", "-Y", "+X", "-X"]
     assert schema["properties"]["axis"]["enum"] == ["X", "Y", "Z"]
-    # axis は world-align 専用で presence-sensitive → schema default を持たない（§6e）。
+    # axis は world-align/reference/angle で有効・presence-sensitive → schema default を持たない（§6e）。
     assert "default" not in schema["properties"]["axis"]
     # up_axis は既定 +Z を持つ（非 presence-sensitive・spec『既定 +Z』）。
     assert schema["properties"]["up_axis"]["default"] == "+Z"
     # up_hint は pca 専用・presence-sensitive（default なし）・ENUM auto|current（実地フィードバック #5）。
     assert schema["properties"]["up_hint"]["enum"] == ["auto", "current"]
     assert "default" not in schema["properties"]["up_hint"]
+    # 基準指定 method の op 専用 param は presence-sensitive（default なし・別 method への誤送信を弾く）。
+    for key in ("degrees", "from_dir", "to_dir", "reference", "ref_axis"):
+        assert "default" not in schema["properties"][key], key
+    assert schema["properties"]["ref_axis"]["enum"] == ["+Z", "-Z", "+Y", "-Y", "+X", "-X"]
     # dry_run は通常モードフラグ（default False・実地フィードバック #2）。
     assert schema["properties"]["dry_run"]["default"] is False
 

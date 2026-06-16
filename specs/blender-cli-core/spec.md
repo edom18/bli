@@ -164,10 +164,16 @@ bli set-origin --targets <name> --to geometry|cursor|world
 
 ### シナリオ2: 直立補正
 ```
-bli straighten --targets <name> --method reset|world-align|pca|floor
+bli straighten --targets <name> --method reset|world-align|pca|floor|angle|align-vector|reference
     [--up-axis +Z|-Z|+Y|...]      # 既定 +Z
-    [--axis X|Y|Z]                # world-align時（省略時は up に最も近い軸を自動選択）
+    [--axis X|Y|Z]                # world-align/reference=合わせる local 軸（省略時は最近軸を自動）
+                                  #   / angle=回転する world 軸（必須）
     [--up-hint auto|current]      # pca時の符号決定（current=現在 up 寄り・上下反転防止／実地FB #5）
+    [--degrees D]                 # angle時（world 軸 axis まわりの回転量・符号で向き／実地FB #4）
+    [--from-dir x,y,z]            # align-vector時（揃えたい現在の world 方向／実地FB #4）
+    [--to-dir x,y,z]             # align-vector時（目標 world 方向・省略時は up）
+    [--reference <name>]          # reference時（基準にする別オブジェクト／実地FB #4）
+    [--ref-axis +Z|-Z|...]        # reference時（参照側の signed local 軸・省略時は up-axis）
     [--dry-run]                   # 適用せず計画（回転/tilt_from_up_deg）のみ返す（非破壊／実地FB #2）
     [--bake-rotation]             # 回転を mesh データに適用して焼き込む（--dry-run と排他）
     [--make-single-user]          # bake時の共有meshデータを明示で許可
@@ -407,6 +413,7 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--ap
 - `--bake-rotation` 指定時は回転が適用（焼き込み）される。
 - 完了条件: 補正後のローカル+Z軸とワールド+Zの角度が閾値内（ゴールデン検証）。
 - **v1 実装注記（実地フィードバック #5/#2/#6）**: `--method pca` の主成分は符号不定。`--up-hint current` は**現在の up に近い側**を + に選び、土台が重いスキャン物体でも**上下反転しない**（既定 `auto` は重心方向で符号決定）。pca 結果は `tilt_from_up_deg`（up からの傾き角・符号非依存の鋭角）を返す。`--dry-run` は**適用→読取→厳密復元**で副作用なく計画（回転・`tilt_from_up_deg`）を返す（非破壊計測にも使える・`--bake-rotation` とは排他）。完了条件（追加）: 重心が下に偏る tilt 物体で `pca --up-hint current` が反転せず傾きを除去（principal_world.z>0）、`--dry-run` 前後で transform 不変かつ計画＝実適用（ゴールデン検証・両版同値）。
+- **基準指定 method（実地フィードバック #4・支柱問題）**: 実地検証では傾きが mesh 形状に焼き込まれ、基準にしたい「支柱」が同一メッシュの一部だったため、エージェントは補正回転を手計算し `transform --mode delta` で迂回適用した。これを解消するため、エージェントが算出した補正を straighten 経由（dry-run/bake/共有ガードの作法込み）で安全に適用する3 method を追加する。`--method angle`（world 軸 `--axis` まわりに `--degrees` 回転）/ `--method align-vector`（`--from-dir` を `--to-dir`〔省略時 up〕へ最小回転で合わせる＝向きを数値で与えれば同一メッシュ内の基準でも整列可）/ `--method reference`（参照オブジェクトの軸方向へ合わせる）。完了条件（追加）: angle の Z 45° 回転で `rotation_euler_deg≈[0,0,45]`、align-vector で `from_world_after≈up`・`angle_deg≈傾き`、reference で対象の整列軸 world 方向が参照軸方向に一致（world up とは異なる・ゴールデン検証・両版同値）。**v1 未保証**: align-vector の最小回転は up 周りの yaw を保存しない（向き不定・pca/world-align と同様）。部分ジオメトリ PCA（頂点サブセット基準）は別 PR へ繰越（部分指定方法の決定が必要）。
 
 ### S3: 3Dプリンタ対応
 - `print-check`: 非多様体・反転法線・薄壁・自己交差・退化面の件数を構造化で返す。

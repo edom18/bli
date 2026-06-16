@@ -376,13 +376,30 @@ def straighten(
     targets: str = typer.Option(
         ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
     ),
-    method: str = typer.Option(..., "--method", help="reset|world-align|pca|floor"),
+    method: str = typer.Option(
+        ..., "--method", help="reset|world-align|pca|floor|angle|align-vector|reference"
+    ),
     up_axis: str = typer.Option("+Z", "--up-axis", help="up 方向: +Z|-Z|+Y|-Y|+X|-X（既定 +Z）"),
     axis: str | None = typer.Option(
-        None, "--axis", help="world-align で合わせる local 軸: X|Y|Z（省略時は最近軸を自動）"
+        None,
+        "--axis",
+        help="world-align/reference=合わせる local 軸 / angle=回転する world 軸: X|Y|Z",
     ),
     up_hint: str | None = typer.Option(
         None, "--up-hint", help="pca の符号: auto|current（current=現在 up 寄り・反転防止）"
+    ),
+    degrees: float | None = typer.Option(None, "--degrees", help="angle: 回転量（度・符号で向き）"),
+    from_dir: str | None = typer.Option(
+        None, "--from-dir", help="align-vector: 揃えたい現在の world 方向 x,y,z"
+    ),
+    to_dir: str | None = typer.Option(
+        None, "--to-dir", help="align-vector: 目標 world 方向 x,y,z（省略時は up）"
+    ),
+    reference: str | None = typer.Option(
+        None, "--reference", help="reference: 基準にする別オブジェクト名"
+    ),
+    ref_axis: str | None = typer.Option(
+        None, "--ref-axis", help="reference: 参照側の signed local 軸 +X..-Z（省略時 up-axis）"
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="適用せず計画（回転/傾き角）のみ返す"),
     bake_rotation: bool = typer.Option(
@@ -397,12 +414,26 @@ def straighten(
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
-    """オブジェクトを直立補正する（reset/world-align/pca/floor）。"""
+    """オブジェクトを直立補正する（reset/world-align/pca/floor/angle/align-vector/reference）。"""
     params: dict[str, Any] = {"targets": targets, "method": method, "up_axis": up_axis}
     if axis is not None:
         params["axis"] = axis
     if up_hint is not None:
         params["up_hint"] = up_hint
+    if degrees is not None:
+        params["degrees"] = degrees
+    try:
+        if from_dir is not None:
+            params["from_dir"] = _parse_vec("from-dir", from_dir, 3)
+        if to_dir is not None:
+            params["to_dir"] = _parse_vec("to-dir", to_dir, 3)
+    except ValueError as e:
+        _emit_error(json_out, ErrorCode.INVALID_PARAMS, str(e))
+        raise typer.Exit(int(ExitCode.INPUT)) from None
+    if reference is not None:
+        params["reference"] = reference
+    if ref_axis is not None:
+        params["ref_axis"] = ref_axis
     if dry_run:
         params["dry_run"] = True
     if bake_rotation:
@@ -416,9 +447,10 @@ def straighten(
         head = f"{prefix}straighten {data.get('name')} [{m}] up={data.get('up_axis')}"
         if m == "floor":
             return f"{head}: grounded min_up={data.get('min_up')} offset={data.get('floor_offset')}"
-        if m == "world-align":
+        if m in ("world-align", "reference"):
+            ref = f" ref={data.get('reference')}:{data.get('ref_axis')}" if m == "reference" else ""
             return (
-                f"{head}: axis={data.get('axis')} -> {data.get('aligned_world')} "
+                f"{head}: axis={data.get('axis')}{ref} -> {data.get('aligned_world')} "
                 f"rot={data.get('rotation_euler_deg')}"
             )
         if m == "pca":
@@ -426,6 +458,17 @@ def straighten(
                 f"{head}: tilt={data.get('tilt_from_up_deg')}deg "
                 f"principal -> {data.get('principal_world_after')} "
                 f"rot={data.get('rotation_euler_deg')}"
+            )
+        if m == "angle":
+            return (
+                f"{head}: axis={data.get('axis')} degrees={data.get('degrees')} "
+                f"rot={data.get('rotation_euler_deg')} baked={data.get('baked')}"
+            )
+        if m == "align-vector":
+            return (
+                f"{head}: {data.get('from_dir')} -> {data.get('from_world_after')} "
+                f"angle={data.get('angle_deg')}deg rot={data.get('rotation_euler_deg')} "
+                f"baked={data.get('baked')}"
             )
         return f"{head}: rot={data.get('rotation_euler_deg')} baked={data.get('baked')}"
 
