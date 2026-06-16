@@ -234,6 +234,34 @@ command(
     required_mode=Mode.ANY,
 )
 
+# ---- 状態操作: undo / redo（実地フィードバック #3）----
+# グローバル undo スタック（ユーザーの GUI 操作も含む）を steps 段だけ戻す/進める。可逆性を「直前
+# transform の自力再構築」に頼らせない（試行錯誤の安全性向上）。実機は ed.undo()/ed.redo() を bare で
+# steps 回（研究 §E7・GUI 確認済み）。GUI 必須で --background は E_PRECONDITION 縮退（capture と同流儀）。
+command(
+    "undo",
+    "直前の操作を元に戻す（グローバル undo スタックを steps 段戻す・GUI 必須）",
+    params=(
+        p(
+            "steps", ParamType.INT, default=1, help="戻す段数（1〜100・既定 1）"
+        ),  # 上限=runtime.MAX_UNDO_STEPS
+    ),
+    mutates=True,
+    # undo はモードを跨ぐ復元になり得るため Mode.ANY（モード一致を要求しない）。
+    required_mode=Mode.ANY,
+)
+command(
+    "redo",
+    "元に戻した操作をやり直す（グローバル undo スタックを steps 段進める・GUI 必須）",
+    params=(
+        p(
+            "steps", ParamType.INT, default=1, help="進める段数（1〜100・既定 1）"
+        ),  # 上限=runtime.MAX_UNDO_STEPS
+    ),
+    mutates=True,
+    required_mode=Mode.ANY,
+)
+
 # ---- 汎用編集（オブジェクト操作 / M6 T6.1）----
 command(
     "select",

@@ -1090,3 +1090,49 @@ def test_print_repair_valid_params_reach_bpy():
     ):
         with pytest.raises(ModuleNotFoundError):
             ops.dispatch("print-repair", {"targets": "Cube", **params}, INFO)
+
+
+# ---- 実地FB #3 undo / redo（状態操作）の param 検証（bpy 不要）----
+
+
+def test_undo_redo_default_steps_reach_bpy():
+    # steps 省略（既定 1）/ 範囲内は検証を通過し、gateway の遅延 import まで到達する。
+    for method in ("undo", "redo"):
+        for params in ({}, {"steps": 1}, {"steps": 100}):
+            with pytest.raises(ModuleNotFoundError):
+                ops.dispatch(method, params, INFO)
+
+
+def test_undo_redo_steps_below_min_invalid_params():
+    # steps<1 は無音 no-op になるため USER_INPUT で弾く（bpy 到達前）。
+    for method in ("undo", "redo"):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch(method, {"steps": 0}, INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, method
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", method
+
+
+def test_undo_redo_steps_above_max_invalid_params():
+    # 暴走防止: 上限超過も bpy 到達前に弾く（runtime.MAX_UNDO_STEPS）。
+    for method in ("undo", "redo"):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch(method, {"steps": 10_000}, INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, method
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", method
+
+
+def test_undo_redo_bad_steps_type_invalid_params():
+    # steps は INT。非整数は schema 型エラーで INVALID_PARAMS（bool は int 扱いしない）。
+    for method in ("undo", "redo"):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch(method, {"steps": "x"}, INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, method
+
+
+def test_undo_redo_unknown_param_invalid_params():
+    for method in ("undo", "redo"):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch(method, {"bogus": 1}, INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, method

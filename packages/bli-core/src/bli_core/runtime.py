@@ -36,6 +36,10 @@ CAPTURE_MAX_DIM = 4096
 CAPTURE_DEFAULT_WIDTH = 1024
 CAPTURE_DEFAULT_HEIGHT = 768
 
+# undo/redo（実地FB #3）の一度に戻す/進める段数上限。巨大値での暴走を防ぐ。
+# CLI（送信前）/ ops 双方が参照する。
+MAX_UNDO_STEPS = 100
+
 
 def user_state_dir() -> Path:
     """OS 別のユーザローカル状態ディレクトリ（token/connection.json 用）。"""

@@ -76,6 +76,67 @@ def push_undo(message: str) -> None:
     bpy.ops.ed.undo_push(message=message)
 
 
+def _require_gui_for_undo(verb: str) -> None:
+    """undo/redo は GUI 前提（--background では undo スタックが不定・研究 §E7）。"""
+    if bpy.app.background:
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"{verb} には GUI が必要です（--background では undo/redo は機能しません）",
+        )
+
+
+def _step_undo_stack(op: Any, steps: int) -> int:
+    """undo/redo operator を steps 回適用し、実際に適用できた段数を返す（スタック端で頭打ち）。
+
+    bare 呼び出しで GUI では context override 不要（§E7・両版確認済み）。スタック端では `FINISHED`
+    以外（CANCELLED）になる版と RuntimeError を投げる版の両方を「これ以上進めない＝端」として
+    break で正規化し、INTERNAL 化を避ける（§6e）。
+    """
+    applied = 0
+    for _ in range(steps):
+        try:
+            result = op()
+        except RuntimeError:  # スタック端で raise する版も端として扱う（未捕捉→INTERNAL を防ぐ）
+            break
+        if "FINISHED" in result:
+            applied += 1
+        else:  # CANCELLED 等＝これ以上戻せない/進められない（スタック端）
+            break
+    return applied
+
+
+def undo_steps(steps: int) -> int:
+    """グローバル undo スタックを steps 段戻す。実際に適用できた段数を返す（GUI 必須・§E7）。"""
+    _require_gui_for_undo("undo")
+    return _step_undo_stack(bpy.ops.ed.undo, steps)
+
+
+def redo_steps(steps: int) -> int:
+    """グローバル undo スタックを steps 段進める（やり直す）。実際に適用できた段数を返す（GUI 必須）。"""
+    _require_gui_for_undo("redo")
+    return _step_undo_stack(bpy.ops.ed.redo, steps)
+
+
+def scene_state_fingerprint() -> str:
+    """シーン全体の粗いフィンガープリント（undo/redo の状態変化検証用）。
+
+    全オブジェクトの name/type と matrix_world（丸め）をハッシュする。transform/add/delete の変化は
+    捉えるが mesh データ内部の編集（bevel/merge 等）までは見ない（undo の粗い drift 指標・v1）。
+    そのため matrix を変えない undo（mesh 内部編集のみの巻き戻し）では前後で同一値になり得る。
+    読み取り前に view_layer.update() で matrix を最新化する。
+    """
+    bpy.context.view_layer.update()
+    items = [
+        {
+            "name": o.name,
+            "type": o.type,
+            "matrix": [round(v, 6) for row in o.matrix_world for v in row],
+        }
+        for o in sorted(bpy.data.objects, key=lambda x: x.name)
+    ]
+    return _digest16({"objects": items})
+
+
 # ---- オブジェクト解決・情報 ----
 
 
