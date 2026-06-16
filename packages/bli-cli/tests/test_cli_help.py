@@ -7,8 +7,8 @@ help/list-commands が SSOT から schema_hash 付きで生成されることを
 from __future__ import annotations
 
 import json
-import re
 
+from typer.main import get_command
 from typer.testing import CliRunner
 
 import bli.main as main_mod
@@ -391,12 +391,14 @@ def test_force_utf8_output_skips_streams_without_reconfigure(monkeypatch):
     main_mod._force_utf8_output()  # 例外を出さなければ OK
 
 
-def test_target_singular_alias_in_help():
-    # --targets は単数別名 --target も受け付ける（エージェントが直感で打つ foot-gun 対策）
-    res = runner.invoke(app, ["object-info", "--help"])
-    assert res.exit_code == 0
-    # `--target\b` は `--targets`（直後が単語文字 s）にはマッチせず、単数別名のみを拾う
-    assert re.search(r"--target\b", res.output)
+def test_target_singular_alias_registered():
+    # --targets は単数別名 --target も受け付ける（エージェントが直感で打つ foot-gun 対策）。
+    # help 出力のレンダリング（rich・端末幅依存）に頼らず、登録済みの click オプション名を直接検証する。
+    cmd = get_command(app)
+    object_info = cmd.commands["object-info"]  # type: ignore[attr-defined]
+    targets_param = next(p for p in object_info.params if p.name == "targets")
+    assert "--targets" in targets_param.opts
+    assert "--target" in targets_param.opts
 
 
 def test_modifier_bad_type_local_validation():
