@@ -82,6 +82,45 @@ def _write_atomic(outputs_dir: Path, output_id: str, blob: bytes) -> Path:
     return path
 
 
+def _safe_named_path(outputs_dir: Path, filename: str) -> Path:
+    """`outputs_dir` 直下の任意ファイル名のパスを返す（配下逸脱を防ぐ防御・`_safe_output_path` の汎用版）。"""
+    path = (outputs_dir / filename).resolve()
+    if outputs_dir.resolve() != path.parent:
+        raise ValueError(f"退避パスが outputs 配下ではありません: {path}")
+    return path
+
+
+def offload_file(
+    tmp_path: Path | str, schema: str, outputs_dir: Path, *, suffix: str = ".bin"
+) -> dict[str, Any]:
+    """既存の一時ファイルをコンテンツアドレス名で outputs_dir へアトミック退避し descriptor を返す。
+
+    画像など**バイナリ成果物**向け（JSON 退避の `maybe_offload` と対）。sha256 はファイルから
+    ストリーミング算出（大解像度でも省メモリ）。退避先は `outputs/<sha16><suffix>`（`_safe_named_path`
+    で配下逸脱を防ぐ）。`os.replace` で src を残さずアトミックに改名し、同一バイト列は同名へ収束する。
+    読込/改名失敗（OSError）は呼び出し側が業務エラーへ写像する（INTERNAL にしない）。
+    """
+    src = Path(tmp_path)
+    h = hashlib.sha256()
+    size = 0
+    with open(src, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            h.update(chunk)
+            size += len(chunk)
+    sha = h.hexdigest()
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+    dest = _safe_named_path(outputs_dir, f"{sha[:16]}{suffix}")
+    os.replace(src, dest)
+    return {
+        "id": sha[:16],
+        "transport": "shared-fs",
+        "path": str(dest),
+        "size": size,
+        "sha256": sha,
+        "schema": schema,
+    }
+
+
 def maybe_offload(schema: str, data: Any, outputs_dir: Path) -> tuple[Any, dict[str, Any] | None]:
     """data を inline で返すか、閾値超ならファイル退避して descriptor を返す。
 

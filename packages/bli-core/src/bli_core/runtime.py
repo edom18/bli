@@ -29,6 +29,13 @@ CLIENT_READ_TIMEOUT = 40.0
 # この単一定数を参照し、上限のマジックナンバー散在と片側欠落を防ぐ。
 MAX_DUPLICATE_COUNT = 1000
 
+# capture（実地FB #1）の出力解像度。巨大値で Blender を固めない上限と、有意な最小値。
+# 既定は省略時の viewport/render の幅・高さ。CLI（送信前）/ ops 双方が参照する。
+CAPTURE_MIN_DIM = 16
+CAPTURE_MAX_DIM = 4096
+CAPTURE_DEFAULT_WIDTH = 1024
+CAPTURE_DEFAULT_HEIGHT = 768
+
 
 def user_state_dir() -> Path:
     """OS 別のユーザローカル状態ディレクトリ（token/connection.json 用）。"""

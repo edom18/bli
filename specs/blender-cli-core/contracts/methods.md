@@ -23,6 +23,9 @@
 | `scene-info` | `--depth?` | シーン階層/オブジェクト一覧/単位（大→output_ref） | - | △ | OBJECT | s |
 | `list-objects` | `--type?` `--regex?` | フィルタ済み一覧 | - | - | OBJECT | s |
 | `object-info` | `--targets` | 寸法/頂点数/transform/bbox/材質/modifier | - | - | OBJECT | s |
+| `capture` | `--source viewport\|screen\|render` `--width?` `--height?` `--camera?`(render) | PNG パス/サイズ/sha256/解像度 | - | - | ANY | s |
+
+> **`capture`（実地フィードバック #1）**: 現在の状態を画像で取得する（エージェントの「現状確認」手段）。`viewport`=gpu offscreen で描画（UI なし・`--width/--height` 指定可・既定）/ `screen`=ビューポート領域をそのまま screenshot（領域サイズ固定で width/height 不可）/ `render`=カメラからレンダ（`--camera` 省略時 active）。読み取り専用（render 設定は save/restore で非破壊）。PNG は `outputs_dir`（git 非管理・shared-fs・コンテンツアドレス名）に書き出しパスを返す。`viewport`/`screen` は GUI 必須（`--background` では `E_PRECONDITION`）。Spike V で 5.0.1/4.4.3 両版確認。
 
 > **`dimensions` と `bbox.size` の違い**（紛らわしいので明記）: `dimensions` は **オブジェクト固有サイズ**（`obj.dimensions`・scale 反映・**回転不変**）。`bbox.size` は **world AABB**（`matrix_world @ bound_box` の軸並行境界・**回転すると変化**）。傾いた物体では両者は一致しない。`--targets` は `--target`（単数）も別名で受け付ける。
 

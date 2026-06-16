@@ -432,6 +432,42 @@ def straighten(
     _rpc("straighten", params, json_out=json_out, port=port, human=human, request_id=request_id)
 
 
+@app.command()
+def capture(
+    source: str = typer.Option(
+        "viewport", "--source", help="取得元: viewport|screen|render（既定 viewport）"
+    ),
+    width: int | None = typer.Option(
+        None, "--width", help="出力幅px（viewport/render・省略時既定）"
+    ),
+    height: int | None = typer.Option(
+        None, "--height", help="出力高px（viewport/render・省略時既定）"
+    ),
+    camera: str | None = typer.Option(
+        None, "--camera", help="render で使うカメラ名（省略時 active・render 専用）"
+    ),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """現在の状態を画像で取得する（viewport/screen/render・PNG をファイル出力しパスを返す）。"""
+    params: dict[str, Any] = {"source": source}
+    if width is not None:
+        params["width"] = width
+    if height is not None:
+        params["height"] = height
+    if camera is not None:
+        params["camera"] = camera
+
+    def human(data: dict[str, Any]) -> str:
+        cam = f" camera={data['camera']}" if data.get("camera") else ""
+        return (
+            f"capture [{data.get('source')}]{cam} {data.get('width')}x{data.get('height')} "
+            f"-> {data.get('path')} ({data.get('size')}B)"
+        )
+
+    _rpc("capture", params, json_out=json_out, port=port, human=human)
+
+
 @app.command("print-setup")
 def print_setup(
     unit: str = typer.Option("mm", "--unit", help="表示単位: mm|m（既定 mm）"),
