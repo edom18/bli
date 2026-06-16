@@ -361,6 +361,23 @@ def test_m8_capture_discoverable():
     assert schema["properties"]["width"]["type"] == "integer"
 
 
+def test_m8_undo_redo_discoverable():
+    # 実地FB #3 の undo/redo が実装済み一覧に出る + スキーマ（mutates・steps INT 既定 1）。
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    by_name = {c["name"]: c for c in data["commands"]}
+    for name in ("undo", "redo"):
+        assert name in by_name, name
+        assert by_name[name]["stability"] == "stable", name
+        assert by_name[name]["mutates"] is True, name  # 状態を変える
+        schema = json.loads(runner.invoke(app, ["help", "--command", name, "--json"]).output)[
+            "schema"
+        ]
+        assert set(schema["properties"]) == {"steps"}, name
+        assert "required" not in schema, name  # steps は default 1 で任意
+        assert schema["properties"]["steps"]["type"] == "integer", name
+        assert schema["properties"]["steps"]["default"] == 1, name
+
+
 def test_capture_bad_source_local_validation():
     # 不正な --source は送信前ローカル Pydantic 検証で exit 4
     res = runner.invoke(app, ["capture", "--source", "bogus", "--json"])

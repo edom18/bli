@@ -1075,6 +1075,43 @@ def _capture(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     return _ok("capture", data, fingerprint=descriptor["id"])
 
 
+def _do_undo_redo(
+    name: str, params: dict[str, Any], apply_fn: Callable[[Any, int], int]
+) -> dict[str, Any]:
+    """undo/redo の共通処理（steps 範囲検証 → GUI で steps 段適用 → 状態 fingerprint・実地FB #3）。
+
+    steps 上限は runtime.MAX_UNDO_STEPS（暴走防止・CLI/ops 共有）。GUI 必須は gateway 側で
+    E_PRECONDITION 縮退（--background）。応答に requested/applied と粗いシーン fingerprint を返す。
+    """
+    cmd = _command(name)
+    _validate(cmd, params)
+    from bli_core import runtime
+
+    steps = int(params.get("steps", 1))
+    _require_input(
+        1 <= steps <= runtime.MAX_UNDO_STEPS,
+        symptom=f"steps は 1〜{runtime.MAX_UNDO_STEPS} の範囲で指定してください（指定: {steps}）",
+        remediation=f"--steps を 1〜{runtime.MAX_UNDO_STEPS} にしてください",
+    )
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    applied = apply_fn(gateway, steps)
+    return _ok(
+        name,
+        {"requested": steps, "applied": applied},
+        fingerprint=gateway.scene_state_fingerprint(),
+    )
+
+
+def _undo(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    return _do_undo_redo("undo", params, lambda g, n: g.undo_steps(n))
+
+
+def _redo(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    return _do_undo_redo("redo", params, lambda g, n: g.redo_steps(n))
+
+
 _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]] = {
     "scene-info": _scene_info,
     "object-info": _object_info,
@@ -1093,6 +1130,8 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "print-check": _print_check,
     "print-repair": _print_repair,
     "capture": _capture,
+    "undo": _undo,
+    "redo": _redo,
 }
 
 

@@ -511,6 +511,64 @@ def capture(
     _rpc("capture", params, json_out=json_out, port=port, human=human)
 
 
+@app.command()
+def undo(
+    steps: int = typer.Option(1, "--steps", help="戻す段数（1〜100・既定 1）"),
+    request_id: str | None = typer.Option(
+        None, "--id", help="リクエストID(UUIDv4)。冪等リトライで同一IDを再利用する"
+    ),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """直前の操作を元に戻す（グローバル undo スタックを steps 段戻す・GUI 必須）。"""
+    from bli_core import runtime
+
+    if (
+        not 1 <= steps <= runtime.MAX_UNDO_STEPS
+    ):  # 暴走防止の上限は送信前に弾く（§6e・duplicate と同流儀）
+        _emit_error(
+            json_out,
+            ErrorCode.INVALID_PARAMS,
+            f"--steps は 1〜{runtime.MAX_UNDO_STEPS} です: {steps}",
+        )
+        raise typer.Exit(int(ExitCode.INPUT))
+    params: dict[str, Any] = {"steps": steps}
+
+    def human(data: dict[str, Any]) -> str:
+        return f"undo: requested={data.get('requested')} applied={data.get('applied')}"
+
+    _rpc("undo", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command()
+def redo(
+    steps: int = typer.Option(1, "--steps", help="進める段数（1〜100・既定 1）"),
+    request_id: str | None = typer.Option(
+        None, "--id", help="リクエストID(UUIDv4)。冪等リトライで同一IDを再利用する"
+    ),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """元に戻した操作をやり直す（グローバル undo スタックを steps 段進める・GUI 必須）。"""
+    from bli_core import runtime
+
+    if (
+        not 1 <= steps <= runtime.MAX_UNDO_STEPS
+    ):  # 暴走防止の上限は送信前に弾く（§6e・duplicate と同流儀）
+        _emit_error(
+            json_out,
+            ErrorCode.INVALID_PARAMS,
+            f"--steps は 1〜{runtime.MAX_UNDO_STEPS} です: {steps}",
+        )
+        raise typer.Exit(int(ExitCode.INPUT))
+    params: dict[str, Any] = {"steps": steps}
+
+    def human(data: dict[str, Any]) -> str:
+        return f"redo: requested={data.get('requested')} applied={data.get('applied')}"
+
+    _rpc("redo", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
 @app.command("print-setup")
 def print_setup(
     unit: str = typer.Option("mm", "--unit", help="表示単位: mm|m（既定 mm）"),

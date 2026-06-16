@@ -63,6 +63,14 @@
 >
 > op 別 params（T7.3・**heavy 候補**）: ⑥ `boolean`:`--operation UNION|DIFFERENCE|INTERSECT`（**必須**）`--with <mesh>`（**必須**・相手 mesh）→ `{operation, with_object, delta, stats}`。⑦ `decimate`:`--ratio 0..1`（**必須**）→ `{ratio, delta, stats}`。結果キー `with_object` は入力 `--with`（SSOT param `with_object`）と対称。`bmesh` に boolean/decimate 相当が無いため（スパイク §E3 で確認）、いずれも **BOOLEAN/DECIMATE モディファイアを追加して `modifier_apply` で焼き込む**（既存 `add_modifier`+`apply_modifier` を再利用・生 bpy.ops は gateway のみ・AST guard 準拠・apply 失敗時は追加 modifier を撤去）。boolean 相手の **world 位置は Blender が両者の matrix_world から解決**（手動変換不要）・相手は read-only（編集されない）・自己参照/非 mesh/相手不在は `INVALID_PARAMS(USER_INPUT)`/`E_TARGET_NOT_FOUND`。boolean/decimate は heavy 候補（同期実行・非同期 job は M10）。多ユーザ mesh への `modifier_apply` は Blender が拒否するため共有 mesh は `--make-single-user` 必須（ratio=1.0 等の実質 no-op でも mesh は焼き直される）。**注意**: boolean/decimate は対象を空/退化 mesh にし得る（INTERSECT で非重複・decimate `ratio→0`）。success は operator 完了を表し幾何的健全性は保証しない（`stats`/`delta` で確認）。対象に未適用の他 modifier がある場合、`modifier_apply` 仕様によりそれらも焼き込まれる（v1 は対象に他 modifier が無い前提）。
 
+## 状態操作: undo / redo（実地フィードバック #3）
+| method | params | result | M | Mode | St |
+|--------|--------|--------|:-:|----|:--:|
+| `undo` | `--steps?`(既定1・1〜100) | `{requested, applied}` + シーン fingerprint | ✓ | ANY | s |
+| `redo` | `--steps?`(既定1・1〜100) | `{requested, applied}` + シーン fingerprint | ✓ | ANY | s |
+
+> **`undo`/`redo`（実地フィードバック #3）**: グローバル undo スタック（ユーザーの GUI 操作も含む）を `--steps`（既定1・1〜`runtime.MAX_UNDO_STEPS`=100）段だけ戻す/進める。可逆性を「直前 transform の自力再構築」に頼らせず、試行錯誤の安全性を上げる。実機は bare `bpy.ops.ed.undo()`/`ed.redo()` を steps 回（GUI で context override 不要・**研究 §E7** で 5.0.1/4.4.3 確認）。result の `applied` は実際に適用できた段数（スタック端で頭打ち＝`requested` 未満になり得る）。**GUI 必須**で `--background` は `E_PRECONDITION` 縮退（本番は常駐 GUI Blender なので実用上問題なし・capture と同流儀）。Mode は ANY（モードを跨ぐ復元になり得るため一致を要求しない）。`steps` 範囲外は `INVALID_PARAMS(USER_INPUT)`。**v1 注記**: undo はグローバルスタックを戻すため、直前のコマンドだけでなくユーザーの手動操作も対象になり得る。返す fingerprint は名前/型/world 行列ベースの**粗い**シーン指標（mesh データ内部の編集までは見ない）。
+
 ## シナリオ1: 原点変更
 | method | params | result | M | Mode | St |
 |--------|--------|--------|:-:|----|:--:|

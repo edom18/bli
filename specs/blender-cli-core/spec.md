@@ -36,6 +36,7 @@
 - 接続・診断: `init` / `doctor` / `ping`（hello handshake）。
 - 情報取得: `scene-info` / `object-info` / `list-objects` / `capture`（画像・実地FB #1）。
 - 汎用編集: `select` / `transform` / `apply-transform` / `duplicate` / `modifier` / `material` / `delete`。
+- 状態操作: `undo` / `redo`（実地FB #3・GUI 必須）。
 - ファイルI/O: `save` / `open` / `import` / `export`。
 - シナリオ1（原点変更）: `set-origin`。
 - シナリオ2（直立補正）: `straighten`。
@@ -153,6 +154,15 @@ bli mesh --op decimate --targets <name> --ratio <f>                  # 破壊的
 - T7.2: `extrude --offset` は **world 空間**ベクトル（move/duplicate と一貫・matrix_world で world→local 変換）。`bevel --width` / `inset --thickness` はスカラ量のため **mesh ローカル単位**。extrude offset / bevel width / inset thickness は op 別に**必須**（bevel segments は任意・既定1・1〜100 で暴走防止）。選択は v1 では全 geometry（`--faces` 等の高度なセレクタは Deferred）。inset は閉じた mesh の全 face で `inset_region` が no-op のため `inset_individual` を使う。結果の `delta` は before→after の符号付き増減（decimate/boolean でも一貫）。
 - T7.3（heavy）: `boolean` / `decimate` は **bmesh に相当 op が無い**ため（スパイク確認）、BOOLEAN/DECIMATE モディファイアを追加して `modifier_apply` で焼き込む（bmesh-on-data ではなく modifier 経由・生 bpy.ops は gateway のみ）。boolean は `--operation`（UNION/DIFFERENCE/INTERSECT）と `--with`（相手 mesh）が**必須**・相手の world 位置は Blender が解決・相手は read-only・自己参照/非 mesh は弾く。decimate は `--ratio`（0..1）が**必須**（COLLAPSE）。両者 heavy 候補だが同期実行（非同期 job は M10）。
 - mesh データを直接書き換える破壊的操作のため、共有 mesh は `--make-single-user` 必須（apply 系と同じ）。非 mesh 型は `E_PRECONDITION`。
+
+### 状態操作: undo / redo（実地フィードバック #3）
+```
+bli undo [--steps N]   # 直前の操作を元に戻す（既定 1・1〜100）
+bli redo [--steps N]   # 元に戻した操作をやり直す（既定 1・1〜100）
+```
+- グローバル undo スタック（ユーザーの GUI 操作も含む）を `--steps` 段だけ戻す/進める。可逆性を「直前 transform の自力再構築」に頼らせない（試行錯誤の安全性向上）。
+- 実機は bare `bpy.ops.ed.undo()`/`ed.redo()` を steps 回（GUI で context override 不要・研究 §E7・5.0.1/4.4.3 確認）。`applied` は実適用段数（スタック端で頭打ち）。
+- **GUI 必須**で `--background` は `E_PRECONDITION` 縮退（本番は常駐 GUI Blender）。`steps` 範囲外は `INVALID_PARAMS`。上限は `runtime.MAX_UNDO_STEPS`（暴走防止）。
 
 ### シナリオ1: 原点変更
 ```
