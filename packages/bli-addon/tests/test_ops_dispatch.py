@@ -785,10 +785,133 @@ def test_straighten_valid_params_reach_bpy():
         {"method": "pca", "up_hint": "current"},  # #5: up_hint は pca で受理
         {"method": "pca", "dry_run": True},  # #2: dry-run は受理
         {"method": "floor", "bake_rotation": True, "make_single_user": True},
+        # 基準指定 method（#4）。axis は angle/reference でも受理される。
+        {"method": "angle", "axis": "X", "degrees": 5.0},
+        {"method": "angle", "axis": "Z", "degrees": -90.0, "bake_rotation": True},
+        {"method": "align-vector", "from_dir": [0.1, 0.0, 0.99]},  # to_dir 省略=up へ
+        {"method": "align-vector", "from_dir": [1.0, 0.0, 0.0], "to_dir": [0.0, 0.0, 1.0]},
+        {"method": "align-vector", "from_dir": [0.0, 0.0, 1.0], "dry_run": True},
+        {"method": "reference", "reference": "Guide"},
+        {"method": "reference", "reference": "Guide", "axis": "Z", "ref_axis": "+Y"},
     ]
     for extra in cases:
         with pytest.raises(ModuleNotFoundError):
             ops.dispatch("straighten", {"targets": "Cube", **extra}, INFO)
+
+
+# ---- 実地FB #4 基準指定 method（angle / align-vector / reference）の param 検証（bpy 不要）----
+
+
+def test_straighten_angle_requires_axis_and_degrees():
+    # angle は axis（回転軸）と degrees（角度）が必須。欠けは USER_INPUT（bpy 到達前）。
+    for extra in ({"degrees": 5.0}, {"axis": "X"}, {}):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("straighten", {"targets": "Cube", "method": "angle", **extra}, INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, extra
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", extra
+
+
+def test_straighten_degrees_on_non_angle_invalid_params():
+    # degrees は angle 専用。他 method に渡すと silent ignore せず弾く（§6e）。
+    for method in ("reset", "world-align", "pca", "floor"):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("straighten", {"targets": "Cube", "method": method, "degrees": 5.0}, INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, method
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", method
+
+
+def test_straighten_align_vector_requires_from_dir():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("straighten", {"targets": "Cube", "method": "align-vector"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_straighten_align_vector_zero_vector_invalid_params():
+    # ゼロベクトルは正規化が不定 → bpy 到達前に弾く（from_dir / to_dir 双方）。
+    for extra in (
+        {"from_dir": [0.0, 0.0, 0.0]},
+        {"from_dir": [1.0, 0.0, 0.0], "to_dir": [0.0, 0.0, 0.0]},
+    ):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("straighten", {"targets": "Cube", "method": "align-vector", **extra}, INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, extra
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", extra
+
+
+def test_straighten_from_to_dir_on_non_align_vector_invalid_params():
+    # from_dir/to_dir は align-vector 専用。他 method に渡すと弾く（§6e）。
+    for key in ("from_dir", "to_dir"):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch(
+                "straighten",
+                {"targets": "Cube", "method": "world-align", key: [1.0, 0.0, 0.0]},
+                INFO,
+            )
+        assert ei.value.code == RPC_INVALID_PARAMS, key
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", key
+
+
+def test_straighten_reference_requires_reference():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("straighten", {"targets": "Cube", "method": "reference"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_straighten_reference_params_on_non_reference_invalid_params():
+    # reference/ref_axis は reference 専用。他 method に渡すと弾く（§6e）。
+    for extra in ({"reference": "Guide"}, {"ref_axis": "+Y"}):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("straighten", {"targets": "Cube", "method": "pca", **extra}, INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, extra
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", extra
+
+
+def test_straighten_bad_ref_axis_invalid_params():
+    # ref_axis は ENUM。範囲外は schema 検証で INVALID_PARAMS。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "straighten",
+            {"targets": "Cube", "method": "reference", "reference": "Guide", "ref_axis": "W"},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_straighten_nonfinite_degrees_server_rejected():
+    # degrees(FLOAT) の nan/inf は CLI 非経由でもサーバ側（schema SSOT）で弾く（§6e）。
+    for bad in (float("inf"), float("nan"), float("-inf")):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch(
+                "straighten",
+                {"targets": "Cube", "method": "angle", "axis": "Z", "degrees": bad},
+                INFO,
+            )
+        assert ei.value.code == RPC_INVALID_PARAMS, bad
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", bad
+
+
+def test_straighten_nonfinite_from_dir_server_rejected():
+    # from_dir(VEC3) の nan/inf も同じ防御線（schema._check_type の有限性）で弾く。
+    for bad in (float("inf"), float("nan"), float("-inf")):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch(
+                "straighten",
+                {"targets": "Cube", "method": "align-vector", "from_dir": [bad, 0.0, 1.0]},
+                INFO,
+            )
+        assert ei.value.code == RPC_INVALID_PARAMS, bad
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", bad
 
 
 # ---- 実地FB #1 capture（状態キャプチャ）の param 検証（bpy 不要）----

@@ -957,11 +957,13 @@ def mesh_boolean(
 
 # ---- 直立補正（M8 T8.2 / straighten・シナリオ2）----
 #
-# 4メソッド: reset（回転を identity に）/ world-align（指定 local 軸を world up へ最小回転で
-# 合わせる）/ pca（頂点分布の最大分散軸を up へ）/ floor（up 方向の最下点を接地）。
-# reset/world-align は **object transform のみ**変更（mesh 非破壊・共有 mesh でも安全）。
-# floor は平行移動のみ。pca は mesh 頂点が必要。`--bake-rotation` の mesh 焼き込みは呼び出し側
-# （ops）が apply_transform 経路（共有ガード付き）で行う。研究 §E4 で 5.0.1/4.4.3 確認済み。
+# メソッド: reset（回転を identity に）/ world-align（指定 local 軸を world up へ最小回転で合わせる）
+# / pca（頂点分布の最大分散軸を up へ）/ floor（up 方向の最下点を接地）/ angle（world 軸まわりに
+# 指定角回転）/ align-vector（from_dir を to_dir へ最小回転）/ reference（参照 obj の軸方向へ合わせる）。
+# floor 以外は **object 回転のみ**変更（mesh 非破壊・共有 mesh でも安全）。floor は平行移動のみ。
+# pca は mesh 頂点が必要。angle/align-vector/reference は基準指定（エージェント算出の補正を安全に適用・
+# transform 迂回の解消・実地フィードバック #4）。`--bake-rotation` の mesh 焼き込みは呼び出し側（ops）が
+# apply_transform 経路（共有ガード付き）で行う。研究 §E4 で 5.0.1/4.4.3 確認済み。
 # matrix_world は読み取り前に view_layer.update() で最新化する（background での stale 対策・§E4）。
 
 _AXIS_VECTORS: dict[str, tuple[float, float, float]] = {
@@ -1164,6 +1166,62 @@ def _floor(obj: Any, up: Any) -> list[float]:
     return [round(shift.x, 6), round(shift.y, 6), round(shift.z, 6)]
 
 
+def _angle_rotate(obj: Any, axis: str, degrees: float) -> dict[str, Any]:
+    """world 軸 axis（X/Y/Z）まわりに degrees 度回転する delta を前合成する（基準指定・#4）。
+
+    エージェントが算出した補正回転を straighten 経由で安全に適用する method。符号は degrees に
+    含む（X/Y/Z は無符号）。_apply_world_rotation で原点・スケール不変・親付きでも正しく整列する。
+    """
+    from mathutils import Quaternion, Vector  # type: ignore  # lazy: bpy 依存
+
+    # X/Y/Z の単位ベクトルは world/local 共通なので _LOCAL_AXIS_UNIT を流用（ここでは world 軸）。
+    world_axis = Vector(_LOCAL_AXIS_UNIT[axis])
+    _apply_world_rotation(obj, Quaternion(world_axis, math.radians(degrees)))
+    return {"axis": axis, "degrees": round(float(degrees), 6)}
+
+
+def _align_vector(obj: Any, from_dir: Any, to_dir: Any) -> dict[str, Any]:
+    """from_dir(world) を to_dir(world) へ重ねる最小回転を前合成する（基準指定・#4 の本命）。
+
+    エージェントが計測した「現在の向き」→「目標の向き」を直接渡せる。同一メッシュ内の支柱など
+    別オブジェクト化できない基準でも、向きを数値で与えれば straighten の作法（dry-run/bake/共有
+    ガード）で安全に適用できる。anti-parallel は _rotation_to が決定化する。
+    """
+    from mathutils import Vector  # type: ignore  # lazy: bpy 依存
+
+    src = Vector(from_dir).normalized()
+    dst = Vector(to_dir).normalized()
+    delta = _rotation_to(src, dst)
+    _apply_world_rotation(obj, delta)
+    after = (delta @ src).normalized()
+    # from→to のなす角（入力ベクトル由来）。anti-parallel 決定化後の実回転量とは概念的に別だが
+    # 通常ケースでは一致する。呼び出し側が補正の妥当性を即チェックできる目安として返す。
+    angle = math.degrees(math.acos(max(-1.0, min(1.0, src.dot(dst)))))
+    return {
+        "from_dir": [round(v, 6) for v in src],
+        "to_dir": [round(v, 6) for v in dst],
+        "from_world_after": [round(v, 6) for v in after],
+        "angle_deg": round(angle, 4),
+    }
+
+
+def _reference_align(obj: Any, ref_obj: Any, ref_axis: str, axis: str | None) -> dict[str, Any]:
+    """参照 obj の ref_axis(signed local)の world 方向へ、対象の axis(local)を合わせる（#4）。
+
+    world-align の「合わせる目標」を world up から **参照オブジェクトの軸方向** へ差し替えただけ
+    （_world_align をそのまま再利用）。ガイド用の別オブジェクトの向きに揃えたい場合に使う。
+    axis 省略時は対象の最近 signed local 軸を自動選択（world-align と同じ挙動）。
+    """
+    target_dir = _local_axis_world(ref_obj, ref_axis)
+    chosen = _world_align(obj, target_dir, axis)
+    return {
+        "reference": ref_obj.name,
+        "ref_axis": ref_axis,
+        "reference_world": [round(v, 6) for v in target_dir],
+        "axis": chosen,
+    }
+
+
 def _snapshot_transform(obj: Any) -> dict[str, Any]:
     """transform チャンネルの完全スナップショット（dry-run の厳密復元用）。
 
@@ -1198,17 +1256,23 @@ def straighten_object(
     up_axis: str = "+Z",
     axis: str | None = None,
     up_hint: str = "auto",
+    degrees: float | None = None,
+    from_dir: Any = None,
+    to_dir: Any = None,
+    reference_obj: Any = None,
+    ref_axis: str | None = None,
     message: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """直立補正を実行し、補正結果（回転/接地/整列の golden 値）を返す。
 
-    reset/world-align/pca は object 回転のみ・floor は平行移動のみ変更する（mesh 非破壊）。
-    `--bake-rotation` の mesh 焼き込みは呼び出し側（ops）が apply_transform 経路で行う。
-    matrix_world は読み取り前に view_layer.update() で最新化する（§E4 の stale 対策）。
+    reset/world-align/pca/angle/align-vector/reference は object 回転のみ・floor は平行移動のみ
+    変更する（mesh 非破壊）。`--bake-rotation` の mesh 焼き込みは呼び出し側（ops）が apply_transform
+    経路で行う。matrix_world は読み取り前に view_layer.update() で最新化する（§E4 の stale 対策）。
     `dry_run=True` は適用→レポート読取→**厳密復元**で、副作用なく計画値を返す（push_undo もしない・
     実地フィードバック #2）。pca は `up_hint` で符号決定を切り替え、`tilt_from_up_deg`（up からの
-    傾き角・符号非依存の鋭角）を併せて返す（#5/#6）。
+    傾き角・符号非依存の鋭角）を併せて返す（#5/#6）。angle/align-vector/reference はエージェントが
+    算出した補正を straighten 経由で安全に適用する基準指定 method（transform 迂回の解消・#4）。
     """
     from mathutils import Vector  # type: ignore  # lazy: bpy 依存
 
@@ -1232,6 +1296,19 @@ def straighten_object(
         data["tilt_from_up_deg"] = round(
             math.degrees(math.acos(min(1.0, abs(principal.dot(up))))), 4
         )
+    elif method == "angle":
+        if axis is None or degrees is None:  # ops が必須を保証するが gateway も防御（型も絞る）
+            raise _op_error(ErrorCode.E_PRECONDITION, "angle には axis と degrees が必要です")
+        data.update(_angle_rotate(obj, axis, degrees))
+    elif method == "align-vector":
+        if from_dir is None:  # ops が必須を保証するが gateway も防御（INTERNAL 化を避ける・§6e）
+            raise _op_error(ErrorCode.E_PRECONDITION, "align-vector には from_dir が必要です")
+        # to_dir 省略時は up（「現在の向きを up へ立てる」が既定・#4）。
+        data.update(_align_vector(obj, from_dir, to_dir if to_dir is not None else tuple(up)))
+    elif method == "reference":
+        if reference_obj is None or ref_axis is None:  # 同上（ops 保証 + gateway 防御）
+            raise _op_error(ErrorCode.E_PRECONDITION, "reference には参照オブジェクトが必要です")
+        data.update(_reference_align(obj, reference_obj, ref_axis, axis))
     elif method == "floor":
         data["floor_offset"] = _floor(obj, up)
     else:  # method は ENUM 検証済みのため到達不能（新 method の分岐漏れ検出の防御）。
@@ -1240,7 +1317,8 @@ def straighten_object(
     bpy.context.view_layer.update()  # 補正後の matrix_world を確定
 
     data["rotation_euler_deg"] = _rotation_euler_deg(obj)
-    if method == "world-align":  # 合わせた軸の world 方向（≈ up・DoD の整列 golden）
+    if method in ("world-align", "reference"):
+        # 合わせた軸の world 方向（world-align は ≈ up / reference は ≈ reference_world・DoD の整列 golden）
         data["aligned_world"] = [round(v, 6) for v in _local_axis_world(obj, data["axis"])]
     if world_bbox(obj) is not None:  # up 方向の最下点（bbox があれば常時・floor 後は ≈0）
         data["min_up"] = round(_min_up_projection(obj, up), 6)

@@ -72,21 +72,32 @@ command(
     required_mode=Mode.OBJECT,
 )
 
-# ---- シナリオ2: 直立補正（M8 T8.2）----
+# ---- シナリオ2: 直立補正（M8 T8.2 / 実地フィードバック PR-4 で基準指定 method を追加）----
 command(
     "straighten",
-    "オブジェクトを直立補正する（reset/world-align/pca/floor・up-axis 既定 +Z）",
-    # method により有効/必須 param が変わる（条件付き）。axis は world-align 専用（省略時は
-    # up に最も近い local 軸を自動選択）。bake-rotation は回転を mesh データへ焼き込む破壊的操作
-    # で、共有 mesh は --make-single-user 必須（apply-transform/mesh と同じガード・§6e）。
+    "オブジェクトを直立補正する（reset/world-align/pca/floor/angle/align-vector/reference）",
+    # method により有効/必須 param が変わる（条件付き）。op 専用 param（axis/up_hint/degrees/
+    # from_dir/to_dir/reference/ref_axis）は presence-sensitive（default なし）で、別 method に
+    # 渡されたら silent ignore せず弾く（§6e）。bake-rotation は回転を mesh データへ焼き込む破壊的
+    # 操作で、共有 mesh は --make-single-user 必須（apply-transform/mesh と同じガード・§6e）。
+    # angle/align-vector/reference は「エージェントが算出した補正を straighten 経由で安全に適用」する
+    # ための基準指定 method（transform 迂回の解消・実地フィードバック #4）。いずれも object 回転のみ。
     params=(
         p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
         p(
             "method",
             ParamType.ENUM,
             required=True,
-            choices=["reset", "world-align", "pca", "floor"],
-            help="補正方法: reset|world-align|pca|floor",
+            choices=[
+                "reset",
+                "world-align",
+                "pca",
+                "floor",
+                "angle",
+                "align-vector",
+                "reference",
+            ],
+            help="補正方法: reset|world-align|pca|floor|angle|align-vector|reference",
         ),
         p(
             "up_axis",
@@ -95,8 +106,14 @@ command(
             choices=["+Z", "-Z", "+Y", "-Y", "+X", "-X"],
             help="up 方向（既定 +Z）",
         ),
-        # axis は world-align 専用・省略時は最近軸を自動選択（presence-sensitive: default なし）。
-        p("axis", ParamType.ENUM, choices=["X", "Y", "Z"], help="world-align で合わせる local 軸"),
+        # axis は world-align/reference（対象 local 軸・省略時は最近軸を自動）と angle（回転する
+        # world 軸・必須）で有効（presence-sensitive: default なし）。
+        p(
+            "axis",
+            ParamType.ENUM,
+            choices=["X", "Y", "Z"],
+            help="world-align/reference=合わせる local 軸 / angle=回転する world 軸",
+        ),
         # up_hint は pca 専用（presence-sensitive: default なし）。auto=重心方向で符号決定（既定）/
         # current=現在の up に近い側を + にする＝最小回転で上下反転を防ぐ（実地フィードバック #5）。
         p(
@@ -104,6 +121,22 @@ command(
             ParamType.ENUM,
             choices=["auto", "current"],
             help="pca の符号決定: auto(重心)|current(現在 up 寄り=反転防止)",
+        ),
+        # angle 専用（presence-sensitive）: world 軸 axis まわりの回転量（度・符号で向き）。
+        p("degrees", ParamType.FLOAT, help="angle: 回転量（度・符号で向き）"),
+        # align-vector 専用（presence-sensitive）: from_dir(world) を to_dir(world・省略時は up)へ
+        # 最小回転で合わせる。エージェントが計測した現在方向→目標方向を直接渡せる（#4 の本命）。
+        p("from_dir", ParamType.VEC3, help="align-vector: 揃えたい現在の world 方向(x,y,z)"),
+        p("to_dir", ParamType.VEC3, help="align-vector: 目標 world 方向(x,y,z・省略時は up)"),
+        # reference 専用（presence-sensitive）: 参照オブジェクトの ref_axis(signed local)の world
+        # 方向へ、対象の axis(local・省略時は最近軸)を合わせる（world-align の目標を up→参照軸に）。
+        p("reference", ParamType.STR, help="reference: 基準にする別オブジェクト名"),
+        # 選択肢は up_axis と同順（Pydantic は同一メンバの Literal を共有しparity が順序依存のため）。
+        p(
+            "ref_axis",
+            ParamType.ENUM,
+            choices=["+Z", "-Z", "+Y", "-Y", "+X", "-X"],
+            help="reference: 参照側の signed local 軸（省略時は up_axis）",
         ),
         p("bake_rotation", ParamType.BOOL, default=False, help="回転を mesh データへ焼き込む"),
         p(
