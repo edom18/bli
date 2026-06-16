@@ -70,7 +70,10 @@ errors: `E_TARGET_NOT_FOUND` / `E_PRECONDITION(shared mesh: users>=2)` / `E_MODE
 ## シナリオ2: 直立補正
 | method | params | result | M | Mode | St |
 |--------|--------|--------|:-:|----|:--:|
-| `straighten` | `--targets` `--method reset\|world-align\|pca\|floor` `--up-axis?`(既定 +Z) `--axis?` `--bake-rotation?` `--make-single-user?` | 補正後回転/整列軸/接地Z | ✓ | OBJECT | s |
+| `straighten` | `--targets` `--method reset\|world-align\|pca\|floor` `--up-axis?`(既定 +Z) `--axis?`(world-align) `--up-hint?`(pca: auto\|current) `--dry-run?` `--bake-rotation?` `--make-single-user?` | 補正後回転/整列軸/接地Z/`tilt_from_up_deg`(pca) | ✓ | OBJECT | s |
+
+> **`--up-hint`（pca 専用・実地フィードバック #5）**: PCA は主成分の符号が不定。`auto`（既定）は原点→重心方向で符号決定。`current` は**現在の up に近い側を +** にする＝最小回転で合わせ、ベースが重いスキャン物体で起きる**上下反転を防ぐ**。pca 結果は `tilt_from_up_deg`（up からの傾き角・符号非依存の鋭角）を含む。
+> **`--dry-run`（#2）**: 適用せず計画（`rotation_euler_deg` / `tilt_from_up_deg` / `principal_world*`）のみ返す。内部は適用→読取→**厳密復元**で副作用なし（push_undo もしない）。非破壊の傾き計測（#6）にも使える。
 
 > `straighten`: 対象は単一（`require_single`・set-origin と対称）。**reset** は回転を identity に / **world-align** は指定（`--axis X\|Y\|Z`）または **省略時は up に最も近い signed local 軸を自動選択**して `--up-axis`（既定 +Z）へ最小回転で合わせる / **pca** は頂点分布の最大分散軸を up へ（符号は原点→重心方向で一意化・numpy.linalg.eigh） / **floor** は up 方向の最下点を up=0 平面へ接地（平行移動のみ）。reset/world-align/pca は **object 回転のみ**・floor は **平行移動のみ**変更し mesh データは触らない（共有 mesh でも安全・ガード不要）。`--bake-rotation` のときだけ回転を mesh データへ焼き込む（apply-transform rotation 経路を再利用）破壊的操作になり、共有 mesh は `--make-single-user` 必須。`--axis` は world-align 専用（他 method では `INVALID_PARAMS`）。pca は mesh 型・floor はジオメトリ（bbox）が必要で、非対応は `E_PRECONDITION`。result: `{method, up_axis, rotation_euler_deg, baked}` + world-align は `{axis(signed), aligned_world}` / pca は `{principal_world, principal_world_after, eigenvalues}` / floor は `{floor_offset}`。`min_up`（up 方向の最下点）は **bbox を持てば全 method で常時付与**（floor 後は ≈0）。fingerprint は非 bake=object_fingerprint / bake=mesh_fingerprint（mesh へ焼き込むため・§6e）。DoD: 補正後の整列軸（world-align=aligned_world / pca=principal_world_after）が world up と一致（ゴールデン・5.0.1/4.4.3 同値）。**v1 未保証**: 親付き対象・非一様/シアスケール下の整列精度（matrix_world の回転成分で近似）・中心対称 mesh の pca 符号（正準 tie-break で決定化）・複合 tilt の up 周り yaw 残留（最小回転のため向きは不保証）。
 
