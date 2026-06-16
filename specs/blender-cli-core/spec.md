@@ -34,7 +34,7 @@
 ### v1でやること
 - 常駐アドオン（TCPサーバ）＋ Python製CLIクライアント（`bli`）。
 - 接続・診断: `init` / `doctor` / `ping`（hello handshake）。
-- 情報取得: `scene-info` / `object-info` / `list-objects`。
+- 情報取得: `scene-info` / `object-info` / `list-objects` / `capture`（画像・実地FB #1）。
 - 汎用編集: `select` / `transform` / `apply-transform` / `duplicate` / `modifier` / `material` / `delete`。
 - ファイルI/O: `save` / `open` / `import` / `export`。
 - シナリオ1（原点変更）: `set-origin`。
@@ -118,6 +118,9 @@ bli <command> [--targets <name|regex>] [options] [--json] [--id <uuid>] [--dry-r
 | `bli scene-info [--depth N]` | シーン階層・オブジェクト一覧・単位設定。大きい場合は退避 |
 | `bli list-objects [--type MESH\|...] [--regex <pat>]` | 条件フィルタで一覧 |
 | `bli object-info --targets <name>` | 寸法・頂点数・トランスフォーム・bbox・材質・モディファイア |
+| `bli capture [--source viewport\|screen\|render] [--width N] [--height N] [--camera <name>]` | 現在の状態を画像取得（PNG をファイル出力しパスを返す・実地FB #1） |
+
+> **`capture`（実地フィードバック #1）**: エージェントが現状を視覚確認する手段。`viewport`（gpu offscreen・UI なし・解像度指定可・既定）/ `screen`（ビューポート領域そのまま）/ `render`（カメラ）。読み取り専用（render 設定は save/restore で非破壊）。PNG は `outputs_dir`（git 非管理）へ。`viewport`/`screen` は GUI 必須。
 
 ### 汎用編集
 | コマンド | 概要 |
