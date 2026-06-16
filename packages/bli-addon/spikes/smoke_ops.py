@@ -1581,6 +1581,23 @@ def run_calls():
         rpa["data"]["after"]["is_printable"],
     )
 
+    # capture（実地FB #1）: --background では GUI（window/area）が無いため viewport/screen は
+    # E_PRECONDITION で graceful に縮退する（INTERNAL にしない）。実機 viewport/screen/render の
+    # 機能検証は GUI の capture_spike.py（両版確認済み）が担う。
+    for src in ("viewport", "screen"):
+        try:
+            call_retry("capture", {"source": src})
+            raise AssertionError(f"capture {src} は --background で E_PRECONDITION のはず")
+        except client.RpcRemoteError as e:
+            assert e.error.get("message") == "E_PRECONDITION", e.error
+    # render の不正カメラはレンダ到達前に E_TARGET_NOT_FOUND（GPU 不要・background でも検証可）。
+    try:
+        call_retry("capture", {"source": "render", "camera": "NoSuchCamera"})
+        raise AssertionError("存在しないカメラは E_TARGET_NOT_FOUND のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "E_TARGET_NOT_FOUND", e.error
+    print("capture_background_graceful_ok")
+
 
 def main():
     print("=== BLI_OPS_SMOKE_BEGIN ===")

@@ -171,6 +171,36 @@ command(
     required_mode=Mode.OBJECT,
 )
 
+# ---- 状態キャプチャ（実地フィードバック #1）----
+command(
+    "capture",
+    "現在の状態を画像で取得する（viewport/screen/render・PNG をファイル出力しパスを返す）",
+    # source=viewport: offscreen draw_view3d（UI なし・解像度指定可・既定）/ screen: ビューポート領域
+    # をそのまま screenshot（領域サイズ固定）/ render: カメラからレンダ。読み取り専用（mutates=False）。
+    # width/height は viewport/render 用（screen は領域サイズ固定で不可）・camera は render 専用。
+    # 出力は outputs_dir（git 非管理・shared-fs）に PNG を書き、パス/サイズ/sha256 を返す。
+    params=(
+        p(
+            "source",
+            ParamType.ENUM,
+            default="viewport",
+            choices=["viewport", "screen", "render"],
+            help="取得元: viewport(offscreen)|screen(領域)|render(カメラ)（既定 viewport）",
+        ),
+        p("width", ParamType.INT, help="出力幅px（viewport/render・省略時 既定値）"),
+        p("height", ParamType.INT, help="出力高px（viewport/render・省略時 既定値）"),
+        p(
+            "camera",
+            ParamType.STR,
+            help="render で使うカメラ名（省略時 active camera・render 専用）",
+        ),
+    ),
+    mutates=False,
+    # 「現状を見る」手段なので EDIT/SCULPT 等どのモードでも使える（Mode.ANY）。viewport/screen/render は
+    # オブジェクトモードに依存しない（敵対的レビュー P2-1）。他 info 系（OBJECT 固定）とは目的が異なる。
+    required_mode=Mode.ANY,
+)
+
 # ---- 汎用編集（オブジェクト操作 / M6 T6.1）----
 command(
     "select",

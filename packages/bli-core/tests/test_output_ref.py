@@ -105,3 +105,46 @@ def test_safe_output_path_rejects_escape(tmp_path):
     # id にパス区切りを混ぜても outputs 配下を逸脱しない
     with pytest.raises(ValueError):
         outref._safe_output_path(tmp_path, "../escape")
+
+
+# ---- offload_file（バイナリ成果物・capture/実地FB #1 で使用）----
+
+
+def test_offload_file_content_addressed(tmp_path):
+    # 一時ファイルをコンテンツアドレス名で退避（src は消え、<sha16>.png へ収束・descriptor 整合）。
+    src = tmp_path / "capture_tmp.png"
+    blob = b"\x89PNG\r\n\x1a\n" + b"binary-image-bytes" * 10
+    src.write_bytes(blob)
+    out = tmp_path / "outputs"
+    out.mkdir()
+    desc = outref.offload_file(src, "capture/v1", out, suffix=".png")
+    assert not src.exists()  # アトミック改名で src は残らない
+    assert desc["sha256"] == outref.sha256_of(blob)
+    assert desc["id"] == desc["sha256"][:16]
+    assert desc["size"] == len(blob)
+    assert desc["transport"] == "shared-fs"
+    assert desc["schema"] == "capture/v1"
+    final = out / f"{desc['id']}.png"
+    assert final.read_bytes() == blob and desc["path"] == str(final)
+
+
+def test_offload_file_dedups_identical_bytes(tmp_path):
+    # 同一バイト列は同一 id/パスへ収束する（content-address）。
+    out = tmp_path / "outputs"
+    out.mkdir()
+    blob = b"same-bytes" * 50
+    s1 = tmp_path / "a.png"
+    s1.write_bytes(blob)
+    d1 = outref.offload_file(s1, "capture/v1", out, suffix=".png")
+    s2 = tmp_path / "b.png"
+    s2.write_bytes(blob)
+    d2 = outref.offload_file(s2, "capture/v1", out, suffix=".png")
+    assert d1["id"] == d2["id"] and d1["path"] == d2["path"]
+
+
+def test_offload_file_missing_src_raises_oserror(tmp_path):
+    # 存在しない src は OSError（呼び出し側が業務エラーへ写像する前提）。
+    out = tmp_path / "outputs"
+    out.mkdir()
+    with pytest.raises(OSError):
+        outref.offload_file(tmp_path / "nope.png", "capture/v1", out, suffix=".png")

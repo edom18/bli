@@ -791,6 +791,58 @@ def test_straighten_valid_params_reach_bpy():
             ops.dispatch("straighten", {"targets": "Cube", **extra}, INFO)
 
 
+# ---- 実地FB #1 capture（状態キャプチャ）の param 検証（bpy 不要）----
+
+
+def test_capture_bad_source_invalid_params():
+    # source は ENUM(viewport|screen|render)。範囲外は schema 検証で INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("capture", {"source": "bogus"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_capture_camera_on_non_render_invalid_params():
+    # camera は render 専用。viewport/screen に渡すと silent ignore せず弾く（bpy 到達前・USER_INPUT）。
+    for source in ("viewport", "screen"):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("capture", {"source": source, "camera": "Camera"}, INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, source
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", source
+
+
+def test_capture_dims_on_screen_invalid_params():
+    # width/height は screen では領域サイズ固定のため不可（bpy 到達前に弾く）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("capture", {"source": "screen", "width": 640}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_capture_dim_out_of_range_invalid_params():
+    # 解像度は暴走防止の範囲を bpy 到達前に弾く（上限超・下限割れ・0 いずれも USER_INPUT）。
+    for bad in (99999, 0, 8, -1):  # CAPTURE_MAX_DIM 超 / 0 / CAPTURE_MIN_DIM 未満 / 負値
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("capture", {"source": "viewport", "width": bad}, INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, bad
+        assert ei.value.data is not None
+        assert ei.value.data.category == "USER_INPUT", bad
+
+
+def test_capture_valid_params_reach_bpy():
+    # 妥当な params は USER_INPUT で弾かれず検証を通過し bpy の遅延 import まで到達する（退行ガード）。
+    cases = [
+        {"source": "viewport"},
+        {"source": "viewport", "width": 320, "height": 240},
+        {"source": "screen"},
+        {"source": "render", "camera": "Camera"},
+    ]
+    for params in cases:
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("capture", params, INFO)
+
+
 # ---- M8 T8.3 print-setup（単位設定）の param 検証（bpy 不要）----
 
 

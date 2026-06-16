@@ -326,6 +326,30 @@ def test_m8_print_check_repair_discoverable():
     assert rep["properties"]["make_single_user"]["default"] is False
 
 
+def test_m8_capture_discoverable():
+    # 実地FB #1 の capture が実装済み一覧に出る + スキーマ（read-only・source ENUM 既定 viewport）
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    by_name = {c["name"]: c for c in data["commands"]}
+    assert "capture" in by_name
+    assert by_name["capture"]["stability"] == "stable"
+    assert by_name["capture"]["mutates"] is False  # 読み取り専用（save/restore で非破壊）
+    schema = json.loads(runner.invoke(app, ["help", "--command", "capture", "--json"]).output)[
+        "schema"
+    ]
+    assert set(schema["properties"]) == {"source", "width", "height", "camera"}
+    assert "required" not in schema  # source は default あり・他は任意
+    assert schema["properties"]["source"]["enum"] == ["viewport", "screen", "render"]
+    assert schema["properties"]["source"]["default"] == "viewport"
+    assert schema["properties"]["width"]["type"] == "integer"
+
+
+def test_capture_bad_source_local_validation():
+    # 不正な --source は送信前ローカル Pydantic 検証で exit 4
+    res = runner.invoke(app, ["capture", "--source", "bogus", "--json"])
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
 def test_straighten_bad_method_local_validation():
     # 不正な --method は送信前ローカル Pydantic 検証で exit 4
     res = runner.invoke(app, ["straighten", "--targets", "Cube", "--method", "bogus", "--json"])
