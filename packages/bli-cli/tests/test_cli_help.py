@@ -344,6 +344,41 @@ def test_m8_print_check_repair_discoverable():
     assert rep["properties"]["make_single_user"]["default"] is False
 
 
+def test_m8_print_export_discoverable():
+    # M8 T8.5 の print-export が実装済み一覧に出る + スキーマ（read-only・format ENUM・scale 既定 1.0）
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    by_name = {c["name"]: c for c in data["commands"]}
+    assert "print-export" in by_name
+    assert by_name["print-export"]["stability"] == "stable"  # 3シナリオは全 stable（DoD）
+    assert by_name["print-export"]["mutates"] is False  # ファイルを書くだけ（シーンは変えない）
+    schema = json.loads(runner.invoke(app, ["help", "--command", "print-export", "--json"]).output)[
+        "schema"
+    ]
+    assert set(schema["properties"]) == {
+        "targets",
+        "format",
+        "path",
+        "ascii",
+        "scale",
+        "apply_modifiers",
+    }
+    assert set(schema["required"]) == {"targets", "format", "path"}
+    assert schema["properties"]["format"]["enum"] == ["stl", "3mf"]
+    # scale/ascii/apply_modifiers は通常の既定値を持つ（presence-sensitive ではない）。
+    assert schema["properties"]["scale"]["default"] == 1.0
+    assert schema["properties"]["ascii"]["default"] is False
+    assert schema["properties"]["apply_modifiers"]["default"] is True
+
+
+def test_print_export_bad_format_local_validation():
+    # 不正な --format（obj 等）は送信前ローカル Pydantic 検証で exit 4
+    res = runner.invoke(
+        app, ["print-export", "--targets", "Cube", "--format", "obj", "--path", "out.stl", "--json"]
+    )
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
 def test_m8_capture_discoverable():
     # 実地FB #1 の capture が実装済み一覧に出る + スキーマ（read-only・source ENUM 既定 viewport）
     data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)

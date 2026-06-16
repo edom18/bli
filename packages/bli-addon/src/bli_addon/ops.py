@@ -966,6 +966,133 @@ def _print_repair(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     )
 
 
+def _file_sha256_size(path: str) -> tuple[str, int]:
+    """ファイルの sha256（16進）とサイズをストリーミング算出する（大きい出力でも省メモリ）。"""
+    import hashlib
+
+    h = hashlib.sha256()
+    size = 0
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            h.update(chunk)
+            size += len(chunk)
+    return h.hexdigest(), size
+
+
+def _stl_triangle_count(path: str, ascii_format: bool) -> int | None:
+    """STL の三角形数を読む（binary=header の uint32 / ascii=facet 行数）。検証用の golden 指標。"""
+    if not ascii_format:
+        import struct
+
+        with open(path, "rb") as f:
+            head = f.read(84)
+        if len(head) < 84:
+            return None
+        return int(struct.unpack("<I", head[80:84])[0])
+    count = 0
+    with open(path, "rb") as f:
+        for line in f:
+            if line.lstrip().startswith(b"facet"):
+                count += 1
+    return count
+
+
+def _print_export(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("print-export")
+    _validate(cmd, params)
+    fmt = str(params["format"])
+    path = str(params["path"])
+    _require_input(
+        path.strip() != "",
+        symptom="--path が空です",
+        remediation="出力ファイルパスを指定してください",
+    )
+
+    import os
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(params["targets"]))
+    gateway.require_mesh(obj)  # STL は mesh のみ
+
+    if fmt != "stl":
+        # 3mf は両版とも export operator が実体なし（§E8）。黙って STL に差し替えず、明示的に
+        # CAPABILITY_UNAVAILABLE で縮退して STL フォールバックを hint する（要求と異なる形式を書かない）。
+        raise JsonRpcError(
+            RPC_BUSINESS_ERROR,
+            ErrorCode.CAPABILITY_UNAVAILABLE,
+            make_error(
+                ErrorCode.CAPABILITY_UNAVAILABLE,
+                category=ErrorCategory.ENVIRONMENT,
+                retryable=False,
+                symptom=f"{fmt} 形式の出力はこの環境では利用できません（3MF export operator が未導入）",
+                remediation="--format stl を使ってください（大半のスライサは STL を受容します）",
+            ),
+        )
+    # stl: operator 実在を確認（5.0/4.4 は wm.stl_export 実在・§E8。万一の非対応環境を縮退で弾く）。
+    if gateway.resolve_export_operator("stl") is None:
+        raise JsonRpcError(
+            RPC_BUSINESS_ERROR,
+            ErrorCode.CAPABILITY_UNAVAILABLE,
+            make_error(
+                ErrorCode.CAPABILITY_UNAVAILABLE,
+                category=ErrorCategory.ENVIRONMENT,
+                retryable=False,
+                symptom="STL export operator（wm.stl_export）が利用できません",
+                remediation="Blender のバージョン/構成を確認してください",
+            ),
+        )
+    # 出力先ディレクトリの不在は operator の生 RuntimeError（INTERNAL 化）になり得るため bpy 到達前に弾く
+    # （path は addon プロセス側＝Blender の CWD 基準で解決される）。
+    parent = os.path.dirname(os.path.abspath(path)) or "."
+    _require_input(
+        os.path.isdir(parent),
+        symptom=f"出力先ディレクトリがありません: {parent}",
+        remediation="存在するディレクトリのパスを指定してください",
+    )
+
+    ascii_format = bool(params.get("ascii", False))
+    scale = float(params.get("scale", 1.0))
+    apply_modifiers = bool(params.get("apply_modifiers", True))
+    meta = gateway.export_stl(
+        obj,
+        path,
+        ascii_format=ascii_format,
+        global_scale=scale,
+        apply_modifiers=apply_modifiers,
+    )
+    # 実際に書かれた成果物のファイル統計（検証材料）。export 後にファイルから算出する。
+    try:
+        sha, size = _file_sha256_size(path)
+        triangles = _stl_triangle_count(path, ascii_format)
+    except (
+        OSError
+    ) as e:  # 書き出し後の読み取り失敗は INTERNAL でなく業務エラーへ（capture と同流儀）。
+        raise JsonRpcError(
+            RPC_BUSINESS_ERROR,
+            ErrorCode.E_OPERATOR,
+            make_error(
+                ErrorCode.E_OPERATOR,
+                category=ErrorCategory.ENVIRONMENT,
+                retryable=False,
+                symptom=f"出力ファイルの読み取りに失敗しました: {e}",
+                remediation="ディスク容量/権限/パスを確認してください",
+            ),
+        ) from e
+    data = {
+        "name": obj.name,
+        "path": os.path.abspath(path),
+        "size": size,
+        "sha256": sha,
+        "triangles": triangles,
+        **meta,
+    }
+    # 読み取り専用（シーンは変えない）。fingerprint は成果物の content-address（sha 先頭16桁）＝
+    # 出力アーティファクトの drift 指標（capture と同流儀・binary STL は決定的・§E8）。
+    return _ok("print-export", data, fingerprint=sha[:16])
+
+
 def _png_dimensions(path: str) -> tuple[int, int] | None:
     """PNG の IHDR から実出力解像度 (width, height) を読む。
 
@@ -1129,6 +1256,7 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "print-setup": _print_setup,
     "print-check": _print_check,
     "print-repair": _print_repair,
+    "print-export": _print_export,
     "capture": _capture,
     "undo": _undo,
     "redo": _redo,

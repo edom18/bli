@@ -687,6 +687,45 @@ def print_repair(
     _rpc("print-repair", params, json_out=json_out, port=port, human=human, request_id=request_id)
 
 
+@app.command("print-export")
+def print_export(
+    targets: str = typer.Option(
+        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+    ),
+    fmt: str = typer.Option(
+        "stl", "--format", help="出力形式: stl|3mf（3mf 未導入時は STL を hint）"
+    ),
+    path: str = typer.Option(..., "--path", help="出力ファイルパス"),
+    ascii_format: bool = typer.Option(False, "--ascii", help="STL を ASCII で出力（既定 binary）"),
+    scale: float = typer.Option(1.0, "--scale", help="出力スケール（global_scale・既定 1.0）"),
+    apply_modifiers: bool = typer.Option(
+        True,
+        "--apply-modifiers/--no-apply-modifiers",
+        help="モディファイア適用後の最終形を出力（既定 on）",
+    ),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """3Dプリント向けに mesh を STL で書き出す（3MF は未導入のため STL を hint）。"""
+    params: dict[str, Any] = {
+        "targets": targets,
+        "format": fmt,
+        "path": path,
+        "ascii": ascii_format,
+        "scale": scale,
+        "apply_modifiers": apply_modifiers,
+    }
+
+    def human(data: dict[str, Any]) -> str:
+        return (
+            f"exported {data.get('name')} [{data.get('format')}] -> {data.get('path')} "
+            f"({data.get('size')}B, {data.get('triangles')} tris, scale={data.get('global_scale')})"
+        )
+
+    _rpc("print-export", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
 @app.command()
 def select(
     targets: str = typer.Option(
