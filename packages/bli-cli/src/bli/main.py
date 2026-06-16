@@ -381,6 +381,10 @@ def straighten(
     axis: str | None = typer.Option(
         None, "--axis", help="world-align で合わせる local 軸: X|Y|Z（省略時は最近軸を自動）"
     ),
+    up_hint: str | None = typer.Option(
+        None, "--up-hint", help="pca の符号: auto|current（current=現在 up 寄り・反転防止）"
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="適用せず計画（回転/傾き角）のみ返す"),
     bake_rotation: bool = typer.Option(
         False, "--bake-rotation", help="回転を mesh データへ焼き込む"
     ),
@@ -397,6 +401,10 @@ def straighten(
     params: dict[str, Any] = {"targets": targets, "method": method, "up_axis": up_axis}
     if axis is not None:
         params["axis"] = axis
+    if up_hint is not None:
+        params["up_hint"] = up_hint
+    if dry_run:
+        params["dry_run"] = True
     if bake_rotation:
         params["bake_rotation"] = True
     if make_single_user:
@@ -404,7 +412,8 @@ def straighten(
 
     def human(data: dict[str, Any]) -> str:
         m = data.get("method")
-        head = f"straighten {data.get('name')} [{m}] up={data.get('up_axis')}"
+        prefix = "[dry-run] " if data.get("dry_run") else ""
+        head = f"{prefix}straighten {data.get('name')} [{m}] up={data.get('up_axis')}"
         if m == "floor":
             return f"{head}: grounded min_up={data.get('min_up')} offset={data.get('floor_offset')}"
         if m == "world-align":
@@ -414,7 +423,8 @@ def straighten(
             )
         if m == "pca":
             return (
-                f"{head}: principal -> {data.get('principal_world_after')} "
+                f"{head}: tilt={data.get('tilt_from_up_deg')}deg "
+                f"principal -> {data.get('principal_world_after')} "
                 f"rot={data.get('rotation_euler_deg')}"
             )
         return f"{head}: rot={data.get('rotation_euler_deg')} baked={data.get('baked')}"

@@ -239,6 +239,8 @@ def test_m8_straighten_discoverable():
         "method",
         "up_axis",
         "axis",
+        "up_hint",
+        "dry_run",
         "bake_rotation",
         "make_single_user",
     }
@@ -250,6 +252,11 @@ def test_m8_straighten_discoverable():
     assert "default" not in schema["properties"]["axis"]
     # up_axis は既定 +Z を持つ（非 presence-sensitive・spec『既定 +Z』）。
     assert schema["properties"]["up_axis"]["default"] == "+Z"
+    # up_hint は pca 専用・presence-sensitive（default なし）・ENUM auto|current（実地フィードバック #5）。
+    assert schema["properties"]["up_hint"]["enum"] == ["auto", "current"]
+    assert "default" not in schema["properties"]["up_hint"]
+    # dry_run は通常モードフラグ（default False・実地フィードバック #2）。
+    assert schema["properties"]["dry_run"]["default"] is False
 
 
 def test_m8_print_setup_discoverable():

@@ -710,6 +710,22 @@ def _straighten(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             symptom="--axis は world-align のときのみ有効です",
             remediation="world-align で使うか --axis を外してください",
         )
+    # up_hint は pca 専用（符号決定の切替）。他 method で渡されたら silent ignore せず弾く（§6e）。
+    if "up_hint" in params:
+        _require_input(
+            method == "pca",
+            symptom="--up-hint は pca のときのみ有効です",
+            remediation="pca で使うか --up-hint を外してください",
+        )
+    dry = bool(params.get("dry_run", False))
+    bake = bool(params.get("bake_rotation", False))
+    # dry-run（何も書き込まない）と bake（mesh 焼き込み）は矛盾。silent ignore せず弾く（§6e・
+    # axis/up_hint と同流儀）。以降 bake が真なら dry は偽が保証される。
+    _require_input(
+        not (dry and bake),
+        symptom="--dry-run と --bake-rotation は同時指定できません",
+        remediation="計画確認は --dry-run のみ、焼き込みは --bake-rotation のみで実行してください",
+    )
 
     from . import gateway  # lazy: bpy 依存
 
@@ -721,8 +737,7 @@ def _straighten(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     elif method == "floor":
         gateway.require_geometry(obj)  # bbox が必要
 
-    bake = bool(params.get("bake_rotation", False))
-    if bake:
+    if bake:  # dry と排他済み（上で弾く）→ bake は常に実適用
         # bake は回転を mesh データへ焼き込む破壊的操作。焼き込み先（mesh）と共有 mesh ガードを
         # **補正（obj 回転）より前**に検証する（失敗時に obj を回転させたまま残さない・§6e）。
         gateway.require_mesh(obj)
@@ -733,7 +748,10 @@ def _straighten(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         method=method,
         up_axis=str(params.get("up_axis", "+Z")),
         axis=str(params["axis"]) if "axis" in params else None,
-        message=None if bake else f"straighten {method}",
+        up_hint=str(params.get("up_hint", "auto")),
+        # dry-run は push_undo しない・bake も apply の undo に委ねるため、どちらも message なし。
+        message=None if (bake or dry) else f"straighten {method}",
+        dry_run=dry,
     )
     if bake:
         # 回転を mesh へ焼き込む（apply-transform rotation 経路を再利用）。焼き込み後は object
@@ -747,8 +765,8 @@ def _straighten(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         data["baked"] = False
     # fingerprint は操作の本質に合わせる（§6e）。bake は回転を mesh データへ焼き込む（頂点座標が
     # 変わる）→ 法線込みの mesh_fingerprint で頂点数不変でも幾何変化を検出する（mesh 編集系と一貫・
-    # require_mesh 通過後で MESH 限定が保証される）。非 bake は object transform のみ → bbox 込みの
-    # object_fingerprint（set-origin/transform と同流儀）。
+    # require_mesh 通過後で MESH 限定が保証される）。非 bake / dry-run は object transform のみ
+    # （dry-run は復元済みで不変）→ bbox 込みの object_fingerprint（set-origin/transform と同流儀）。
     fp = gateway.mesh_fingerprint(obj) if bake else gateway.object_fingerprint(obj)
     return _ok("straighten", data, fingerprint=fp)
 

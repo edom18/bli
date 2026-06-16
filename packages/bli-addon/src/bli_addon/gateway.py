@@ -1089,12 +1089,15 @@ def _world_align(obj: Any, up: Any, axis: str | None) -> str:
     return chosen
 
 
-def _principal_axis(obj: Any) -> tuple[Any, list[float]]:
+def _principal_axis(obj: Any, *, up: Any = None, up_hint: str = "auto") -> tuple[Any, list[float]]:
     """world 空間頂点分布の最大分散軸（principal）と固有値（昇順）を返す。
 
     共分散（対称 3x3）を numpy.linalg.eigh で分解し最大固有値の固有ベクトルを主成分とする
-    （numpy は Blender 同梱・§E4）。PCA は符号不定なので **原点→重心 方向**に揃える
-    （重心が偏る側を + に・決定的）。分散が無い（点が一致/退化）場合は E_PRECONDITION。
+    （numpy は Blender 同梱・§E4）。PCA は符号不定なので符号を一意化する:
+    - `up_hint="auto"`（既定）: **原点→重心 方向**に揃える（重心が偏る側を + に・決定的）。
+    - `up_hint="current"`: 主成分のうち **up に近い向き**を + にする（principal·up>=0）。ベースが重い
+      スキャン物体で重心が下に寄り「下」を + と誤判定→上下反転する問題を防ぐ（実地フィードバック #5）。
+    分散が無い（点が一致/退化）場合は E_PRECONDITION。
     """
     import numpy as np  # type: ignore  # lazy: Blender 同梱（§E4）
     from mathutils import Vector  # type: ignore
@@ -1127,17 +1130,28 @@ def _principal_axis(obj: Any) -> tuple[Any, list[float]]:
             "頂点分布に広がりが無く主成分を決定できません（pca には立体的な mesh が必要）",
         )
     principal = Vector((float(eigvecs[0, 2]), float(eigvecs[1, 2]), float(eigvecs[2, 2])))
-    # 符号一意化: 原点→重心 方向に揃える（重心が偏る側を +）。重心が原点に一致（中心対称・
-    # 射影 ≈ 0）の退化時は符号が不定になるため、主成分の最大成分を正にする正準符号で tie-break
-    # する（決定的・5.0/4.4 同値を保つ）。
-    offset = (Vector((cx, cy, cz)) - mw.translation).dot(principal)
-    if offset < -_PCA_SIGN_EPS:
-        principal = -principal
-    elif abs(offset) <= _PCA_SIGN_EPS:
-        comps = (principal.x, principal.y, principal.z)
-        dominant = max(range(3), key=lambda i: abs(comps[i]))
-        if comps[dominant] < 0.0:
+    if up_hint == "current" and up is not None:
+        # 現在の up に近い向きを + にする（principal·up>=0）→ up へ最小回転で合わせ反転を防ぐ。
+        # principal⊥up（傾き≈90°）の退化は重心方向で tie-break して決定性を保つ。ここでの d は
+        # 正規化ベクトル同士の内積（射影距離ではない）。_PCA_SIGN_EPS(1e-9) 流用は「ほぼ真の直交
+        # （≈90°）」だけを退化扱いにする閾値として機能する（値域は異なるが両者とも ≈0 判定）。
+        d = principal.dot(up)
+        near_perp = abs(d) <= _PCA_SIGN_EPS
+        centroid_below = (Vector((cx, cy, cz)) - mw.translation).dot(principal) < 0.0
+        if d < -_PCA_SIGN_EPS or (near_perp and centroid_below):
             principal = -principal
+    else:
+        # auto: 原点→重心 方向に揃える（重心が偏る側を +）。重心が原点に一致（中心対称・射影 ≈ 0）
+        # の退化時は符号が不定になるため、主成分の最大成分を正にする正準符号で tie-break する
+        # （決定的・5.0/4.4 同値を保つ）。
+        offset = (Vector((cx, cy, cz)) - mw.translation).dot(principal)
+        if offset < -_PCA_SIGN_EPS:
+            principal = -principal
+        elif abs(offset) <= _PCA_SIGN_EPS:
+            comps = (principal.x, principal.y, principal.z)
+            dominant = max(range(3), key=lambda i: abs(comps[i]))
+            if comps[dominant] < 0.0:
+                principal = -principal
     return principal.normalized(), [round(float(x), 8) for x in eigvals]
 
 
@@ -1150,51 +1164,95 @@ def _floor(obj: Any, up: Any) -> list[float]:
     return [round(shift.x, 6), round(shift.y, 6), round(shift.z, 6)]
 
 
+def _snapshot_transform(obj: Any) -> dict[str, Any]:
+    """transform チャンネルの完全スナップショット（dry-run の厳密復元用）。
+
+    補正は matrix_world / 回転チャンネル経由で loc/rot/scale を書き換える。全表現（euler/
+    quaternion/axis_angle）と mode/loc/scale を raw 値で控え、restore で厳密に戻す（matrix_world
+    の再代入だと decompose の微小ドリフトが乗るため raw チャンネルを使う）。
+    """
+    return {
+        "mode": obj.rotation_mode,
+        "location": tuple(obj.location),
+        "rotation_euler": tuple(obj.rotation_euler),
+        "rotation_quaternion": tuple(obj.rotation_quaternion),
+        "rotation_axis_angle": tuple(obj.rotation_axis_angle),
+        "scale": tuple(obj.scale),
+    }
+
+
+def _restore_transform(obj: Any, snap: dict[str, Any]) -> None:
+    """_snapshot_transform の状態へ厳密に戻す（全チャンネルを raw 値で復元）。"""
+    obj.location = snap["location"]
+    obj.rotation_euler = snap["rotation_euler"]
+    obj.rotation_quaternion = snap["rotation_quaternion"]
+    obj.rotation_axis_angle = snap["rotation_axis_angle"]
+    obj.scale = snap["scale"]
+    obj.rotation_mode = snap["mode"]
+
+
 def straighten_object(
     obj: Any,
     *,
     method: str,
     up_axis: str = "+Z",
     axis: str | None = None,
+    up_hint: str = "auto",
     message: str | None = None,
+    dry_run: bool = False,
 ) -> dict[str, Any]:
     """直立補正を実行し、補正結果（回転/接地/整列の golden 値）を返す。
 
     reset/world-align/pca は object 回転のみ・floor は平行移動のみ変更する（mesh 非破壊）。
     `--bake-rotation` の mesh 焼き込みは呼び出し側（ops）が apply_transform 経路で行う。
     matrix_world は読み取り前に view_layer.update() で最新化する（§E4 の stale 対策）。
+    `dry_run=True` は適用→レポート読取→**厳密復元**で、副作用なく計画値を返す（push_undo もしない・
+    実地フィードバック #2）。pca は `up_hint` で符号決定を切り替え、`tilt_from_up_deg`（up からの
+    傾き角・符号非依存の鋭角）を併せて返す（#5/#6）。
     """
     from mathutils import Vector  # type: ignore  # lazy: bpy 依存
 
     bpy.context.view_layer.update()  # §E4: rotation 直接設定後の stale を避ける
     up = Vector(_AXIS_VECTORS[up_axis])
     data: dict[str, Any] = {"name": obj.name, "method": method, "up_axis": up_axis}
+    snap = _snapshot_transform(obj) if dry_run else None
 
     if method == "reset":
         _reset_rotation(obj)
     elif method == "world-align":
         data["axis"] = _world_align(obj, up, axis)
     elif method == "pca":
-        principal, eigvals = _principal_axis(obj)
+        principal, eigvals = _principal_axis(obj, up=up, up_hint=up_hint)
         delta = _rotation_to(principal, up)
         _apply_world_rotation(obj, delta)
         data["eigenvalues"] = eigvals
         data["principal_world"] = [round(v, 6) for v in principal]
         data["principal_world_after"] = [round(v, 6) for v in (delta @ principal).normalized()]
+        # up からの傾き角（鋭角・符号非依存）。呼び出し側が補正の妥当性を即チェックできる。
+        data["tilt_from_up_deg"] = round(
+            math.degrees(math.acos(min(1.0, abs(principal.dot(up))))), 4
+        )
     elif method == "floor":
         data["floor_offset"] = _floor(obj, up)
     else:  # method は ENUM 検証済みのため到達不能（新 method の分岐漏れ検出の防御）。
         raise _op_error(ErrorCode.E_PRECONDITION, f"未対応の straighten method: {method}")
 
     bpy.context.view_layer.update()  # 補正後の matrix_world を確定
-    if message:
-        push_undo(message)
 
     data["rotation_euler_deg"] = _rotation_euler_deg(obj)
     if method == "world-align":  # 合わせた軸の world 方向（≈ up・DoD の整列 golden）
         data["aligned_world"] = [round(v, 6) for v in _local_axis_world(obj, data["axis"])]
     if world_bbox(obj) is not None:  # up 方向の最下点（bbox があれば常時・floor 後は ≈0）
         data["min_up"] = round(_min_up_projection(obj, up), 6)
+    data["dry_run"] = dry_run
+
+    if (
+        snap is not None
+    ):  # dry_run のときのみ snapshot を取る → 厳密復元（副作用なし・push_undo もしない）
+        _restore_transform(obj, snap)
+        bpy.context.view_layer.update()
+    elif message:
+        push_undo(message)
     return data
 
 
