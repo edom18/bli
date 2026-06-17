@@ -1206,6 +1206,63 @@ def _export(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     return _ok("export", data, fingerprint=sha[:16])
 
 
+def _import(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    """多形式 import（M9 T9.2・obj/fbx/gltf/stl・3mf は CAPABILITY）。前後 diff で取込特定（§E9）。"""
+    cmd = _command("import")
+    _validate(cmd, params)
+    fmt = str(params["format"])
+    path = str(params["path"])
+    _require_input(
+        path.strip() != "",
+        symptom="--path が空です",
+        remediation="入力ファイルパスを指定してください",
+    )
+
+    import os
+
+    # 相対パスは Python CWD（os.path.isfile）と Blender importer の filepath 解決基準が食い違い得るため、
+    # 先に絶対パス化して両者を一致させる（isfile も operator も同じ絶対パスを見る・export と同流儀）。
+    path = os.path.abspath(path)
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+
+    # 形式の import operator を能力検出で解決する（対象に依存しないので先・export と同順）。
+    # 3mf は両版とも operator が実体なし（§E8）→ 黙って縮退せず CAPABILITY_UNAVAILABLE。
+    operator = gateway.resolve_import_operator(fmt)
+    if operator is None:
+        hint = (
+            "--format stl/obj/gltf/fbx を使ってください（3mf は標準では未導入・§E8）"
+            if fmt == "3mf"
+            else "Blender のバージョン/構成を確認してください"
+        )
+        raise _capability_unavailable(
+            f"{fmt} 形式の import operator がこの環境では利用できません", hint
+        )
+
+    # 入力ファイルの不在は operator の生 RuntimeError（"Cannot open file"）になり得るため、より正確な
+    # USER_INPUT として bpy 到達前に弾く（絶対パスで判定＝operator と同じファイルを見る）。
+    _require_input(
+        os.path.isfile(path),
+        symptom=f"入力ファイルがありません: {path}",
+        remediation="存在するファイルパスを指定してください",
+    )
+
+    imported = gateway.import_generic(fmt, operator, path)
+    data = {
+        "format": fmt,
+        "operator": operator,
+        "path": path,
+        "imported": imported,
+        "count": len(imported),
+    }
+    # import はシーンを変える（mutates=True）。fingerprint は取込オブジェクト名集合の決定的ハッシュ
+    # （drift 指標・duplicate と同流儀）。大量取込は output_ref 退避（scene-info と同じ _ok_offload）。
+    fp = gateway.names_fingerprint([o["name"] for o in imported])
+    return _ok_offload("import", data, "import/v1", fingerprint=fp)
+
+
 def _png_dimensions(path: str) -> tuple[int, int] | None:
     """PNG の IHDR から実出力解像度 (width, height) を読む。
 
@@ -1371,6 +1428,7 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "print-repair": _print_repair,
     "print-export": _print_export,
     "export": _export,
+    "import": _import,
     "capture": _capture,
     "undo": _undo,
     "redo": _redo,

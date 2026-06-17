@@ -1981,6 +1981,54 @@ def run_calls():
         assert e.error.get("message") == "INVALID_PARAMS", e.error
     print("export_multiformat_ok", "glb=", os.path.getsize(gx_glb), "fbx=", os.path.getsize(gx_fbx))
 
+    # import（M9 T9.2・多形式 import）: 上で書き出した gen_dir/exp.* を取り込み、前後 diff の取込特定と
+    # 往復 bbox（object-info 経由）を裏付ける。worker から bpy 直呼び不可なので検証は dispatch コマンド
+    # （import→object-info→delete）で行う。ExpCube は world(5,0,0)・size2 で export 時に world 焼き →
+    # 取り込んだ mesh の world bbox は x∈[4,6]（往復一致）。検証後は delete で取込物を消し scene を安定化。
+    for fmt, src in (("stl", gx_stl), ("obj", gx_obj), ("gltf", gx_glb), ("fbx", gx_fbx)):
+        imp, _ = call_retry("import", {"format": fmt, "path": src})
+        assert imp["data"]["format"] == fmt, imp["data"]
+        # operator は能力解決された実在 operator 名（非空）。正しさは往復 bbox が裏付ける。
+        assert imp["data"]["operator"], imp["data"]
+        items = imp["data"]["imported"]
+        assert imp["data"]["count"] == len(items), imp["data"]
+        meshes = [o for o in items if o["type"] == "MESH"]
+        assert len(meshes) >= 1, (fmt, imp["data"])  # mesh が1つ以上取り込まれる
+        # 取り込んだ mesh の world bbox = x∈[4,6]（往復一致・object-info で検証）。
+        oi, _ = call_retry("object-info", {"targets": meshes[0]["name"]})
+        bb = oi["data"]["bbox"]
+        assert approx(bb["min"], (4.0, -1.0, -1.0)) and approx(bb["max"], (6.0, 1.0, 1.0)), (
+            fmt,
+            bb,
+        )
+        # cleanup: 取り込んだ全オブジェクトを削除（次形式の .001 リネーム汚染回避・再実行安定）。
+        for o in items:
+            call_retry("delete", {"targets": o["name"]})
+
+    # 3mf import は両版とも operator が実体なし（§E8）→ CAPABILITY_UNAVAILABLE。
+    try:
+        call_retry("import", {"format": "3mf", "path": gx_stl})  # path は何でもよい（能力解決が先）
+        raise AssertionError("3mf import は CAPABILITY_UNAVAILABLE のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "CAPABILITY_UNAVAILABLE", e.error
+    # 入力ファイル不在は bpy 到達前に USER_INPUT（INVALID_PARAMS）。
+    try:
+        call_retry("import", {"format": "stl", "path": os.path.join(gen_dir, "no_such_file.stl")})
+        raise AssertionError("入力ファイル不在は INVALID_PARAMS のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "INVALID_PARAMS", e.error
+    # 壊れたファイル（拡張子は合うが中身が不正）は INTERNAL でなく E_OPERATOR に写像する（glTF importer は
+    # Python 実装で RuntimeError 以外を投げ得る・import_generic の except Exception 防御の裏付け）。
+    bad_glb = os.path.join(gen_dir, "corrupt.glb")
+    with open(bad_glb, "wb") as _bf:
+        _bf.write(b"this is not a valid glb file" * 4)
+    try:
+        call_retry("import", {"format": "gltf", "path": bad_glb})
+        raise AssertionError("壊れた gltf は E_OPERATOR のはず（INTERNAL にしない）")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "E_OPERATOR", e.error
+    print("import_multiformat_ok")
+
     # capture（実地FB #1）: --background では GUI（window/area）が無いため viewport/screen は
     # E_PRECONDITION で graceful に縮退する（INTERNAL にしない）。実機 viewport/screen/render の
     # 機能検証は GUI の capture_spike.py（両版確認済み）が担う。

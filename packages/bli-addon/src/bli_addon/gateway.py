@@ -1503,6 +1503,12 @@ def print3d_available() -> bool:
 # （ops）が CAPABILITY_UNAVAILABLE + STL hint へ縮退する（黙って STL に差し替えない）。
 
 
+def _resolve_op(operator_path: str) -> Any:
+    """'ns.name' 文字列を bpy.ops の operator callable へ解決する（export/import 共用・dotロジック単一化）。"""
+    ns, _, name = operator_path.partition(".")
+    return getattr(getattr(bpy.ops, ns), name)
+
+
 def resolve_export_operator(fmt: str) -> str | None:
     """`export.<fmt>` の実在 export operator を能力検出で解決する（無ければ None）。
 
@@ -1513,6 +1519,44 @@ def resolve_export_operator(fmt: str) -> str | None:
     from . import capability  # lazy: bpy 依存
 
     return capability.CapabilityRegistry().resolve(f"export.{fmt}")
+
+
+def resolve_import_operator(fmt: str) -> str | None:
+    """`import.<fmt>` の実在 import operator を能力検出で解決する（無ければ None）。
+
+    export と対称に `CapabilityRegistry.resolve`（RESOLVERS 候補表）へ委譲する。FBX import の唯一の
+    版差（5.0=`wm.fbx_import` / 4.4=`import_scene.fbx`）は RESOLVERS の候補優先順で吸収する（§E9）。
+    3mf は候補 `import_mesh.3mf` が両版とも stub のため None（§E8）。
+    """
+    from . import capability  # lazy: bpy 依存
+
+    return capability.CapabilityRegistry().resolve(f"import.{fmt}")
+
+
+def import_generic(fmt: str, operator_path: str, path: str) -> list[dict[str, str]]:
+    """多形式 import（前後 diff で取込特定・§E9）。取込オブジェクトの {name, type} 要約を返す。
+
+    import 前後の `bpy.data.objects` 名集合の差分で取り込んだオブジェクトを特定する（名前衝突時に
+    Blender が `.001` 等へリネームするため、集合差が唯一信頼できる方式）。生 operator は run_operator
+    経由（AST guard 緑）。シーンを変える破壊的操作なので message を渡して undo 境界を作る。
+    """
+    before = {o.name for o in bpy.data.objects}
+    op = _resolve_op(operator_path)
+    try:
+        run_operator(op, filepath=path, message=f"import-{fmt}")
+    except JsonRpcError:
+        raise  # run_operator が既に業務エラー（E_OPERATOR/E_PRECONDITION）へ写像済み＝そのまま伝播
+    except Exception as e:
+        # glTF importer 等は Python 実装で、壊れた入力に RuntimeError 以外（KeyError/struct.error/
+        # JSONDecodeError 等）を投げ得る。run_operator の RuntimeError 限定 catch を漏れて INTERNAL
+        # 化するのを防ぎ、入力起因のエラーとして E_OPERATOR に写像する（§6e: USER 起因を INTERNAL に
+        # しない）。run_operator 由来の JsonRpcError は上で再送出済みなので、ここは operator 内部例外のみ。
+        raise _op_error(
+            ErrorCode.E_OPERATOR,
+            f"import に失敗しました（ファイル内容/形式を確認してください）: {type(e).__name__}: {e}",
+        ) from e
+    imported = [o for o in bpy.data.objects if o.name not in before]
+    return [{"name": o.name, "type": o.type} for o in sorted(imported, key=lambda x: x.name)]
 
 
 def _select_only(obj: Any) -> tuple[list[Any], Any]:
@@ -1647,8 +1691,7 @@ def export_generic(
     GLTF_EMBEDDED は存在しない・実機確認済み。SEPARATE は .bin 分離で sha256/size が崩れるため不採用）。
     .glb 拡張子の要求は ops 側で bpy 到達前に検証する。
     """
-    ns, _, name = operator_path.partition(".")
-    op = getattr(getattr(bpy.ops, ns), name)
+    op = _resolve_op(operator_path)
     sel_param = _EXPORT_SELECTION_PARAM[fmt]
     kwargs: dict[str, Any] = {"filepath": path, "check_existing": False}
     if fmt == "gltf":

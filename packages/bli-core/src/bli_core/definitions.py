@@ -499,6 +499,29 @@ command(
     mutates=False,
     required_mode=Mode.OBJECT,
 )
+command(
+    "import",
+    "多形式ファイルをシーンに取り込む（obj/fbx/gltf/stl・3mf は未導入で CAPABILITY）",
+    # operator を能力検出で解決（import.<fmt>・RESOLVERS）→不在は CAPABILITY_UNAVAILABLE。取込
+    # オブジェクトは **import 前後の bpy.data.objects 差分**で特定する（名前衝突時 Blender が .001 等へ
+    # リネームするため集合差が唯一信頼できる方式・研究 §E9）。scale 引数は渡さず operator 既定（=1.0 相当）
+    # に委ねる（export と対称・取込後の単位補正は transform で行う）。FBX import の版差（5.0=wm.fbx_import
+    # / 4.4=import_scene.fbx）は
+    # RESOLVERS 優先順で吸収。3mf は両版とも import operator 不在（§E8）→ CAPABILITY_UNAVAILABLE。
+    # シーンにオブジェクトを足す破壊的操作（mutates=True）。大量取込は output_ref 退避（_ok_offload）。
+    params=(
+        p(
+            "format",
+            ParamType.ENUM,
+            required=True,
+            choices=["obj", "fbx", "gltf", "stl", "3mf"],
+            help="入力形式",
+        ),
+        p("path", ParamType.PATH, required=True, help="入力ファイルパス"),
+    ),
+    mutates=True,
+    required_mode=Mode.OBJECT,
+)
 
 # ---- 逃げ道（既定 off / path 型確認用 / 実装は M11）----
 command(

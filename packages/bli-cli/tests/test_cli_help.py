@@ -411,6 +411,28 @@ def test_export_whole_scene_no_targets_local_ok():
     assert res.exit_code != 4  # INVALID_PARAMS では落ちない（接続不能 exit 3 等になる）
 
 
+def test_m9_import_discoverable():
+    # M9 T9.2 の import が実装済み一覧に出る + スキーマ（mutates・format ENUM 多形式・format/path 必須）
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    by_name = {c["name"]: c for c in data["commands"]}
+    assert "import" in by_name
+    assert by_name["import"]["stability"] == "stable"
+    assert by_name["import"]["mutates"] is True  # シーンにオブジェクトを足す
+    schema = json.loads(runner.invoke(app, ["help", "--command", "import", "--json"]).output)[
+        "schema"
+    ]
+    assert set(schema["properties"]) == {"format", "path"}
+    assert set(schema["required"]) == {"format", "path"}
+    assert schema["properties"]["format"]["enum"] == ["obj", "fbx", "gltf", "stl", "3mf"]
+
+
+def test_import_bad_format_local_validation():
+    # 不正な --format（ply 等）は送信前ローカル Pydantic 検証で exit 4
+    res = runner.invoke(app, ["import", "--format", "ply", "--path", "in.ply", "--json"])
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
 def test_m8_capture_discoverable():
     # 実地FB #1 の capture が実装済み一覧に出る + スキーマ（read-only・source ENUM 既定 viewport）
     data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
