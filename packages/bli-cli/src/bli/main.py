@@ -761,6 +761,24 @@ def export(
     _rpc("export", params, json_out=json_out, port=port, human=human, request_id=request_id)
 
 
+@app.command("import")
+def import_(
+    fmt: str = typer.Option(..., "--format", help="入力形式: obj|fbx|gltf|stl|3mf"),
+    path: str = typer.Option(..., "--path", help="入力ファイルパス"),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """多形式ファイルをシーンに取り込む（obj/fbx/gltf/stl・3mf は未導入で CAPABILITY）。"""
+    params: dict[str, Any] = {"format": fmt, "path": path}
+
+    def human(data: dict[str, Any]) -> str:
+        names = [o.get("name") for o in (data.get("imported") or [])]
+        return f"imported [{data.get('format')}] {data.get('count')}: {names}"
+
+    _rpc("import", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
 @app.command()
 def select(
     targets: str = typer.Option(
