@@ -1559,6 +1559,30 @@ def import_generic(fmt: str, operator_path: str, path: str) -> list[dict[str, st
     return [{"name": o.name, "type": o.type} for o in sorted(imported, key=lambda x: x.name)]
 
 
+def current_filepath() -> str:
+    """現在開いている .blend のパス（未保存は空文字・save の --path 省略時の解決に使う）。"""
+    return bpy.data.filepath
+
+
+def save_blend(path: str, *, backup: bool) -> None:
+    """現在のシーンを .blend に保存する（wm.save_as_mainfile・研究 §E10）。
+
+    backup=True なら上書き時に `<name>.blend1` を残す。Blender の native backup は preferences
+    `save_version`（既定 1）依存のため、決定的に制御するよう **`save_version` を一時上書き
+    （1 if backup else 0）→ try/finally で restore** する（preference 非汚染・backup naming は
+    Blender 標準の `<name>.blend1`）。check_existing=False で既存上書き可。message なし＝undo 不要。
+    注: save_version はプロセスグローバル設定。この一時上書きはサーバがリクエストを逐次処理する
+    （save と他コマンドが同時に走らない＝同時接続は SESSION_BUSY で fail-fast）前提で安全。
+    """
+    prefs = bpy.context.preferences.filepaths
+    saved_version = prefs.save_version
+    try:
+        prefs.save_version = 1 if backup else 0
+        run_operator(bpy.ops.wm.save_as_mainfile, filepath=path, check_existing=False)
+    finally:
+        prefs.save_version = saved_version
+
+
 def _select_only(obj: Any) -> tuple[list[Any], Any]:
     """obj だけを選択し active にする（単体専用・`_select_set([obj])` への薄い委譲）。
 

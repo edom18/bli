@@ -433,6 +433,27 @@ def test_import_bad_format_local_validation():
     assert "INVALID_PARAMS" in res.output
 
 
+def test_m9_save_discoverable():
+    # M9 T9.3 の save が実装済み一覧に出る + スキーマ（mutates・path 任意・backup 既定 True）
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    by_name = {c["name"]: c for c in data["commands"]}
+    assert "save" in by_name
+    assert by_name["save"]["stability"] == "stable"
+    assert by_name["save"]["mutates"] is True  # ファイル/セッション状態を変える副作用
+    schema = json.loads(runner.invoke(app, ["help", "--command", "save", "--json"]).output)[
+        "schema"
+    ]
+    assert set(schema["properties"]) == {"path", "backup"}
+    assert "required" not in schema  # path/backup とも任意（backup は既定あり）
+    assert schema["properties"]["backup"]["default"] is True
+
+
+def test_save_no_args_local_ok():
+    # path 省略（現在ファイルへ保存）はローカル検証を通過する（接続段で落ちる＝検証は通る）。
+    res = runner.invoke(app, ["save", "--json"])
+    assert res.exit_code != 4  # INVALID_PARAMS では落ちない（接続不能 exit 3 等になる）
+
+
 def test_m8_capture_discoverable():
     # 実地FB #1 の capture が実装済み一覧に出る + スキーマ（read-only・source ENUM 既定 viewport）
     data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)

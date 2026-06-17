@@ -522,6 +522,26 @@ command(
     mutates=True,
     required_mode=Mode.OBJECT,
 )
+command(
+    "save",
+    ".blend ファイルに保存する（上書きは既定でバックアップ .blend1 を残す）",
+    # target = --path（abspath・.blend 必須）/ 省略時は現在の .blend（bpy.data.filepath・未保存=空なら
+    # USER_INPUT）。backup（既定 on・spec『上書きは既定でバックアップ』）は preferences save_version を
+    # 一時上書き（1 if backup else 0）して native .blend1 機構を決定的に制御し restore する（研究 §E10・
+    # preference 非汚染）。save はシーンを変えないがファイル/セッション状態を変える副作用（mutates=True）・
+    # モード非依存（Mode.ANY）。result `{path, size, backed_up, backup_path}`。
+    params=(
+        p("path", ParamType.PATH, help="保存先 .blend（省略時は現在のファイル・未保存なら要指定）"),
+        p(
+            "backup",
+            ParamType.BOOL,
+            default=True,
+            help="上書き時に .blend1 backup を残す（既定 on）",
+        ),
+    ),
+    mutates=True,
+    required_mode=Mode.ANY,
+)
 
 # ---- 逃げ道（既定 off / path 型確認用 / 実装は M11）----
 command(
