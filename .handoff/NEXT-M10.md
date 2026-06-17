@@ -15,11 +15,18 @@
 | T10.1 | heavy コマンドの job 化（job_id 採番・`accepted` 即返・`job-status`/`job-wait`） | ⬜ 最重要 |
 | T10.2 | render busy 拒否（`render_init`/`render_complete` handler・`BUSY_RENDERING` 即拒否） | ⬜ |
 | T10.3 | heartbeat watchdog（`MAIN_THREAD_UNRESPONSIVE` 検知・通知） | ⬜ |
-| T10.4 | `--dry-run` 一般化（現状 straighten のみ→対象拡張） | ⬜ 独立性高（最後 or 繰越） |
+| ~~T10.4~~ | ~~`--dry-run` 一般化~~ | **M13 へ繰越（M10 スコープ外・確定）** |
 - **DoD（plan）**: 重量 import 中も接続が塞がらない（L3 で検証）。
 
-## 2. キックオフ判断（**要確認・推奨を併記**）
-非同期は設計の肝。実装前に確定する。
+## 2. キックオフ判断（**✅ 確定 2026-06-18**）
+非同期は設計の肝。以下で確定（ユーザー確認済み）。**いずれも下記「推奨」で確定**:
+- **D-A** ✅ job_id = 既存 `request_id`/`RequestRegistry` を再利用（新 JobRegistry は作らない）。
+- **D-B** ✅ **(1) sync 見え既定 + `--async` オプトイン**＝heavy コマンドは既定で CLI が内部 job 化→`accepted`→`job-wait` で最終結果まで自動待機して返す（エージェントには同期に見える）/ `--async` で `{status:accepted, job_id}` を即返（fire-and-forget）。
+- **D-C** ✅ heavy 対象 = `import`/`export`/`mesh --op boolean|decimate`/`print-check`/`print-repair`（`Command.heavy` フラグを SSOT に追加）。
+- **D-D** ✅ サブPR分割 T10.1 → T10.2 → T10.3。
+- **D-E** ✅ `--dry-run` 一般化は **M13 へ繰越**（M10 は job/watchdog に集中）。T10.4 は M10 スコープ外。
+
+（以下は確定理由の控え）
 
 - **D-A. job_id は既存 request_id（rid）/ `RequestRegistry` を再利用するか** → 推奨: **再利用（Yes）**。registry は既に PENDING/RUNNING/DONE/FAILED を持ち request-status で決着回収できる。`job-status` は実質 request-status の job 文脈版（state + accepted_at + 経過）/ `job-wait` は「DONE/FAILED まで `--timeout` 付きで待つ」ポーリング。新 JobRegistry は作らない（M4 機構の二重化回避）。
 - **D-B. 非同期コマンドの UX（エージェント体験の肝・最重要）** → 推奨: **(1) 既定は「sync 見え」＝CLI が `accepted`→`job-wait` で最終結果まで自動待機して返す / `--async`（fire-and-forget）で job_id を即返**。
