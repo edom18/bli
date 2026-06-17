@@ -1,9 +1,9 @@
 # bli (Blender CLI) — 引き継ぎ資料 (HANDOFF)
 
-最終更新: 2026-06-17 / 状態: **PR #1–#23 マージ済み（origin/main）。M0–M8 完了。M9 ファイルI/O は T9.1 export（#21）/ T9.2 import（#22）/ T9.3 save（#23）完了。残るは T9.4 open（M9 最後・最高リスク）のみ＝着手書 `.handoff/NEXT-M9.md`。M9 確定要約は §6i・グラウンドトゥルースは research.md §E9（export/import）/§E10（save）。俯瞰 `.handoff/ROADMAP.md`**。
+最終更新: 2026-06-18 / 状態: **PR #1–#26 マージ済み（origin/main）。M0–M8 完了。M9 ファイルI/O 完了＝T9.1 export（#21）/ T9.2 import（#22）/ T9.3 save（#23）/ T9.4 open（#25）。README に Claude Code 連携手順を追記（#26）。M9 確定要約は §6i・グラウンドトゥルースは research.md §E9（export/import）/§E10（save）/§E11（open）。**次は M10（非同期job & フリーズ対策）**。俯瞰 `.handoff/ROADMAP.md`**。
 
 > 新規セッションはこの1枚を読めば再開できる。詳細は `specs/blender-cli-core/` を参照。
-> **全体俯瞰は `.handoff/ROADMAP.md`。次の作業（M9 残り T9.4 open）は `.handoff/NEXT-M9.md`**（このファイルは全体史 + 規約・§6h=実地FB確定要約・§6i=M9 T9.1〜T9.3 確定要約）。
+> **全体俯瞰は `.handoff/ROADMAP.md`。M9 は完了。次の作業（M10）の着手書は未作成（M10 キックオフ時に `.handoff/NEXT-M10.md` を作る）**（このファイルは全体史 + 規約・§6h=実地FB確定要約・§6i=M9 確定要約）。
 
 ---
 
@@ -64,10 +64,11 @@
 | **M6 汎用編集**（select/transform/apply-transform・duplicate/delete・material・modifier） | ✅ main（PR #6 で M6 完了） | pytest 151 + 5.0/4.4 実機 smoke OK |
 | **M7 メッシュ編集**（mesh --op: bmesh一次 + heavy modifier 経由） | ✅ main（PR #9 で T7.1–7.3 完了＝**M7 完了**） | pytest 184 + 5.0/4.4 実機 smoke OK |
 | **M8 3シナリオ中核価値**（set-origin / straighten / print-*）+ 実地フィードバック対応 | ✅ **完了**（PR #10–#18, #20）: T8.1–T8.5 + 実地FB PR-1〜5 | pytest + 5.0/4.4 実機 smoke OK |
-| **M9** ファイルI/O（export/import/save/open） | 🔶 進行中（§6i）: T9.1 export ✅（#21）/ T9.2 import ✅（#22）/ T9.3 save ✅（#23）/ **T9.4 open ⬜ 次はここ（最高リスク・`.handoff/NEXT-M9.md`）** | pytest 284 + 5.0/4.4 実機 smoke OK |
-| M10–M14 | 未着手 | — |
+| **M9** ファイルI/O（export/import/save/open） | ✅ **完了**（§6i）: T9.1 export（#21）/ T9.2 import（#22）/ T9.3 save（#23）/ T9.4 open（#25） | pytest 303 + 5.0/4.4 実機 smoke OK |
+| M10 | 非同期job & フリーズ対策（job-status/job-wait・--dry-run 一般化・watchdog） | ⬜ **次はここ**（settle/RUNNING 機構は M4 で土台済み） |
+| M11–M14 | 未着手 | — |
 
-**状態（main・T9.3 まで）: `uv run pytest` = 284 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright 新規 0（既存: `bli/main.py:123` narrowing のみ・実行時安全）。Blender 5.0.1/4.4.3 両版 background smoke OPS SMOKE OK（export/import/save golden 含む両版同値）。**
+**状態（main・M9 完了）: `uv run pytest` = 303 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright 新規 0（既存3件: `bli/main.py:123` narrowing / `gateway.py:257` materials / `ops.py:394` name・いずれも実行時安全）。Blender 5.0.1/4.4.3 両版 background smoke OPS SMOKE OK（export/import/save/open golden 含む両版同値）。**
 
 > PR #1 の Codex レビュー対応で M4 を追補（§6b 参照）: ①request-status のロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（settle）③発見系を implemented 済みに限定 ④サーバ/クライアントのタイムアウト整合（DISPATCH_TIMEOUT < CLIENT_READ_TIMEOUT）⑤TIMEOUT 時に request id を提示。
 
@@ -257,8 +258,8 @@ M8 はサブPR分割（NEXT-M8.md）。順序: T8.2 straighten → T8.3 print-se
 - ops `_do_undo_redo` 共通ヘルパ（steps 範囲を bpy 前検証・上限 runtime 集約）。CLI も送信前に弾く（duplicate と同流儀）。
 - **着手前 GUI スパイク `spikes/undo_spike.py`（GUI モード実行・研究 §E7）**: 5.0.1/4.4.3 両版で実巻き戻し/redo/複数段/undo 直後の matrix_world 確定を確認。**重要発見**: スタック端は両版とも `RuntimeError('poll() failed, context is incorrect')` を投げる（CANCELLED ではない）→ `_step_undo_stack` の try/except で頑健化。background smoke は E_PRECONDITION 縮退・steps 範囲外 INVALID_PARAMS。
 
-## 6i. M9 ファイルI/O（進行中・T9.1〜T9.3 完了・残り T9.4 open）
-M9 はサブPR分割。順序 T9.1 export → T9.2 import → T9.3 save → T9.4 open。各 PR は独立3視点セルフレビュー済み。**次は T9.4 open（M9 最後・最高リスク）= `.handoff/NEXT-M9.md`**。グラウンドトゥルース: research.md **§E9**（export/import）/ **§E10**（save）。
+## 6i. M9 ファイルI/O（✅ 完了・T9.1〜T9.4）
+M9 はサブPR分割。順序 T9.1 export → T9.2 import → T9.3 save → T9.4 open（**全完了**）。各 PR は独立3視点セルフレビュー済み。グラウンドトゥルース: research.md **§E9**（export/import）/ **§E10**（save）/ **§E11**（open）。**次は M10（非同期job）。**
 
 ### M9 共通基盤（T9.4 でも踏襲）
 - `capability.RESOLVERS` に import/export 全形式の確定 operator（obj/gltf/fbx/stl ✅・3mf 両版 stub）。`gateway.resolve_export_operator`/`resolve_import_operator` が `CapabilityRegistry.resolve("export.<fmt>"/"import.<fmt>")` へ委譲。`gateway._resolve_op("ns.name")` で operator callable に解決（export/import 共用）。
@@ -281,11 +282,15 @@ M9 はサブPR分割。順序 T9.1 export → T9.2 import → T9.3 save → T9.4
 - result `{path,size,backed_up,backup_path}`（**backed_up は保存後に `.blend1` 実在確認してから報告**＝偽報告防止）・fingerprint=metadata digest（path|size・.blend 全体 sha は大容量/非決定的のため不採用）。**保存 .blend の magic 版差: 4.4=非圧縮 `BLENDER` / 5.0=zstd 圧縮**（compress 既定でも 5.0 zstd）。
 - セルフレビュー: P1 解消（.blend1 実在確認）+P2（methods.md save 注記/save_version 逐次前提 docstring）。
 
-### T9.4 open ⬜（次・最高リスク）
-`wm.open_mainfile` はシーン全体置換。**常駐 GUI の `bpy.app.timers`（Dispatcher pump）/ 非 persistent handler が file load で外れる懸念**→ GUI 残留スパイク `open_spike.py` で検証し、外れるなら `load_post(persistent=True)` で timer/server 再登録。詳細・キックオフ判断は `.handoff/NEXT-M9.md §2–§4`。
+### T9.4 open ✅（PR #25）— .blend を開く（最高リスク解消）【M9 完了】
+`open --path <.blend> [--force]`（mutates=True・Mode.ANY）。シーン全体を置換（§E11）。
+- **最高リスク解消**: 当初懸念（常駐 GUI で open がディスパッチ機構を壊すか）を **GUI 実機スパイクで確定**（`open_spike.py`/`open_job_spike.py`・両版）: Dispatcher の **persistent pump タイマ + "bli-accept" TCP スレッドは `open_mainfile` を跨いで生存**し、open を含む **1 ジョブ内で結果構築→return も成立**＝**再登録不要**（当初想定の `load_post` 再登録は不要だった）。
+- **未保存ガード**（ユーザー選択=`--force`）: `bpy.data.is_dirty` は dispatch（pump タイマ）文脈で **save 後に reset せず**・background 常時 True で**信頼不可**（`dirty_probe_gui.py` 実測）→ **自前 `session_state`**（純Python）で「bli が最後の save/open 以降に mutate したか」を追跡。**mutating コマンドの実行 *前* に pessimistic に modified**（partial mutation で例外を投げても安全側＝silent data loss 回避）/ save・open 成功で clean（dispatch で一元遷移）。未保存 かつ `--force` なしは `E_PRECONDITION`。v1 は静的 `mutates` 判定で保守的（select/undo・検証失敗も modified 扱い）。
+- `gateway.open_blend` は **`run_operator` を使わず素の `open_mainfile`**（temp_override は scene 置換で teardown 破損・load は undo 不要）・`except Exception`→E_OPERATOR（RuntimeError 以外＝OSError 等も・INTERNAL 化回避）。検証は全て bpy 到達前（空/`.blend`/ファイル実在=USER_INPUT・未保存ガード=session_state）。result `{path, scene, object_count, forced, discarded_unsaved}`・fingerprint=`scene_state_fingerprint`。
+- セルフレビュー（独立3視点）: **P1**（実行後フック→pre-mark 化＝partial mutation の silent data loss 回避）+**P2**（open_blend の例外を OSError 等まで写像）+**P3**（object_count 命名統一・spec 監査ログ open 追記）解消。pytest 303・両版 smoke OPS SMOKE OK（open 往復+未保存ガード golden）。
 
-### M9 繰越（M9 完了後 or 別途）
-- NUL バイト等の病的 path で `os.path.abspath`/`isdir` が `ValueError` 未捕捉→INTERNAL 化の恐れ（export/import/save 共通・信頼境界）。大量取込時の count inline 表示。GLTF_SEPARATE 対応。複数オブジェクト1ファイル（export は選択集合まとめ可・OK）。
+### M9 繰越（別途・M10 以降）
+- NUL バイト等の病的 path で `os.path.abspath`/`isdir` が `ValueError` 未捕捉→INTERNAL 化の恐れ（export/import/save/open 共通・信頼境界）。大量取込時の count inline 表示。GLTF_SEPARATE 対応。複数オブジェクト1ファイル（export は選択集合まとめ可・OK）。open の未保存追跡を per-invocation な dirtied 信号へ精緻化（現状は select/undo・検証失敗も保守的に modified 扱い＝--force 要求）。
 
 ## 6e. M6 で確立した再利用パターン（T6.2 以降で踏襲）
 - **破壊的 mesh 操作は共有ガード**: `ops._guard_shared_mesh(gateway, obj, params)` を呼ぶ（delete も対象になり得る）。`--make-single-user` 無しで users>=2 は `E_PRECONDITION`。
@@ -349,6 +354,6 @@ packages/{bli-core, bli-cli, bli-addon}（uv workspace）。
 - M7: T7.1–7.3 全完了（T7.3 boolean/decimate は PR マージ待ち＝M7 完了）。次は M8。`_mesh` の op 別検証テーブル化（設計 P3）は 8 op 目を足す時に検討。boolean/decimate の「対象に他 modifier がある場合は焼き込まれる」前提は v1 未保証（methods.md 注記済み）。
 - M6 編集系の**孤児データブロック**（delete の sole-user mesh / material create-and-assign の置換で外れた material）の purge は後続（save/cleanup 系）で対応。即時 GC しない bpy 仕様どおりで設計上は意図的（レビューで P2 記録）。
 - M8: **実装完了**（T8.1–T8.5 + 実地FB PR-1〜5）。T8.5 print-export は STL のみ・3mf は CAPABILITY+STL hint（§E8）・global_scale 一本化。実地FB 繰越: 部分ジオメトリ PCA（straighten・別 PR）/ straighten・mesh の op 別検証テーブル化（非緊急）/ undo の fingerprint は粗い（mesh 内部編集は捉えない）/ redo スタックは新規操作で消える（v1 許容）。print-export 繰越: 複数オブジェクト1 STL（v1 単一）/ 3mf export writer（addon 導入時）。
-- M9: **T9.1 export / T9.2 import / T9.3 save 完了（#21/#22/#23）。残り T9.4 open（最高リスク）= `.handoff/NEXT-M9.md`・確定要約 §6i・GT research §E9/§E10**。M9 繰越: NUL バイト等病的 path の `ValueError` 未捕捉（export/import/save 共通・信頼境界）/ 大量取込の count inline 表示 / GLTF_SEPARATE 対応。
+- M9: **完了**（T9.1 export #21 / T9.2 import #22 / T9.3 save #23 / T9.4 open #25・確定要約 §6i・GT research §E9/§E10/§E11）。M9 繰越: NUL バイト等病的 path の `ValueError` 未捕捉（export/import/save/open 共通・信頼境界）/ 大量取込の count inline 表示 / GLTF_SEPARATE 対応 / open の未保存追跡の精緻化（per-invocation dirtied 信号）。**次は M10**。
 - M10: `job-status`/`job-wait`（非同期job）+ `--dry-run`。settle/RUNNING 機構は M4 で土台済み。
 - M12: Claude Code Skill 同梱（`.claude/skills/bli/`）+ `help --json` 自動生成 + `schema_hash` 同期。
