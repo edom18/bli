@@ -1583,6 +1583,34 @@ def save_blend(path: str, *, backup: bool) -> None:
         prefs.save_version = saved_version
 
 
+def open_blend(path: str) -> dict[str, Any]:
+    """指定 .blend を開く（wm.open_mainfile・シーン全体を置換・研究 §E11）。開いた要約を返す。
+
+    `run_operator` は使わない: ①open はシーン全体を差し替えるため `temp_override` 下で実行すると
+    override 対象（active/selected）が無効化され `with` の teardown で壊れ得る ②load は undo 境界
+    （push_undo）も不要。実機スパイク（open_spike）でも素の `open_mainfile` を採用している。
+    常駐サーバの **persistent pump タイマ / "bli-accept" TCP スレッドは open を跨いで生存する**ため
+    再登録は不要（§E11 で両版実機確定）。壊れ/ロック .blend は RuntimeError 以外（OSError 等）も投げ得る
+    ため **`except Exception` で E_OPERATOR に写像**し INTERNAL 化しない（§6e・import_generic と同流儀・
+    存在チェックは ops 側が bpy 到達前に済ませている）。
+    """
+    try:
+        result = bpy.ops.wm.open_mainfile(filepath=path)
+    except Exception as e:  # RuntimeError/OSError/MemoryError 等いずれも入力起因 → E_OPERATOR
+        raise _op_error(
+            ErrorCode.E_OPERATOR,
+            f".blend を開けませんでした（ファイル内容を確認してください）: {type(e).__name__}: {e}",
+        ) from e
+    if "FINISHED" not in result:
+        raise _op_error(ErrorCode.E_OPERATOR, f"open が完了しませんでした: {sorted(result)}")
+    scene = bpy.context.scene
+    return {
+        "filepath": bpy.data.filepath,
+        "scene": scene.name if scene is not None else None,
+        "object_count": len(bpy.data.objects),
+    }
+
+
 def _select_only(obj: Any) -> tuple[list[Any], Any]:
     """obj だけを選択し active にする（単体専用・`_select_set([obj])` への薄い委譲）。
 

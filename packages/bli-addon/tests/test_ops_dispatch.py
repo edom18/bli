@@ -10,9 +10,14 @@ from __future__ import annotations
 
 import pytest
 
-from bli_addon import ops
+from bli_addon import ops, session_state
 from bli_addon.handlers import ServerInfo
-from bli_core.errors import RPC_INVALID_PARAMS, RPC_METHOD_NOT_FOUND, ErrorCode
+from bli_core.errors import (
+    RPC_BUSINESS_ERROR,
+    RPC_INVALID_PARAMS,
+    RPC_METHOD_NOT_FOUND,
+    ErrorCode,
+)
 from bli_core.protocol import JsonRpcError
 
 INFO = ServerInfo("5.0.1-test", "deadbeef", ["wm.stl_export"])
@@ -1419,3 +1424,92 @@ def test_save_valid_params_reach_bpy():
     ):
         with pytest.raises(ModuleNotFoundError):
             ops.dispatch("save", extra, INFO)
+
+
+# ---- M9 T9.4 open（.blend を開く）の param 検証 + 未保存ガード（bpy 不要）----
+
+
+def test_open_missing_path_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("open", {}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_open_empty_path_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("open", {"path": "   "}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_open_non_blend_extension_invalid_params():
+    # --path は .blend 必須（save と対称）。.txt 等は bpy 到達前に USER_INPUT。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("open", {"path": "scene.txt"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_open_bad_force_type_invalid_params():
+    # force は BOOL。非真偽値は型エラーで INVALID_PARAMS。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("open", {"path": "scene.blend", "force": "yes"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_open_unknown_param_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("open", {"path": "scene.blend", "bogus": 1}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_open_missing_file_invalid_params(tmp_path):
+    # 実在しない .blend は bpy 到達前に USER_INPUT（abspath 後に isfile 判定）。
+    session_state.reset()
+    missing = str(tmp_path / "nope.blend")
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("open", {"path": missing}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_open_unsaved_changes_precondition(tmp_path):
+    # 未保存変更あり + --force なし → bpy 到達前に E_PRECONDITION（シーン破壊を防ぐ・§E11）。
+    f = tmp_path / "scene.blend"
+    f.write_bytes(b"BLENDER-dummy")  # 実在すればよい（中身検証は bpy・smoke）
+    session_state.reset()
+    session_state.mark_modified()
+    try:
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("open", {"path": str(f)}, INFO)
+        assert ei.value.code == RPC_BUSINESS_ERROR
+        assert ei.value.message == ErrorCode.E_PRECONDITION
+        assert ei.value.data is not None
+        assert ei.value.data.category == "PRECONDITION"
+    finally:
+        session_state.reset()
+
+
+def test_open_unsaved_changes_force_reaches_bpy(tmp_path):
+    # 未保存変更あり + --force → ガードを通過し gateway（bpy）まで到達する。
+    f = tmp_path / "scene.blend"
+    f.write_bytes(b"BLENDER-dummy")
+    session_state.reset()
+    session_state.mark_modified()
+    try:
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("open", {"path": str(f), "force": True}, INFO)
+    finally:
+        session_state.reset()
+
+
+def test_open_clean_reaches_bpy(tmp_path):
+    # 変更なし（clean）+ 実在ファイル → ガードなしで gateway（bpy）まで到達する。
+    f = tmp_path / "scene.blend"
+    f.write_bytes(b"BLENDER-dummy")
+    session_state.reset()
+    with pytest.raises(ModuleNotFoundError):
+        ops.dispatch("open", {"path": str(f)}, INFO)

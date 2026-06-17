@@ -803,6 +803,27 @@ def save(
     _rpc("save", params, json_out=json_out, port=port, human=human, request_id=request_id)
 
 
+@app.command("open")
+def open_(
+    path: str = typer.Option(..., "--path", help="開く .blend ファイル"),
+    force: bool = typer.Option(False, "--force", help="未保存変更を破棄して開く（既定 off）"),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """.blend ファイルを開く（シーン全体を置換・未保存変更があれば --force 必須）。"""
+    params: dict[str, Any] = {"path": path, "force": force}
+
+    def human(data: dict[str, Any]) -> str:
+        disc = " (discarded unsaved)" if data.get("discarded_unsaved") else ""
+        return (
+            f"opened -> {data.get('path')} scene={data.get('scene')} "
+            f"objects={data.get('object_count')}{disc}"
+        )
+
+    _rpc("open", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
 @app.command()
 def select(
     targets: str = typer.Option(

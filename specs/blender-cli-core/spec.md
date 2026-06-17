@@ -202,7 +202,7 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 | コマンド | 概要 |
 |----------|------|
 | `bli save [--path <file.blend>] [--backup]` | 保存（上書きは既定でバックアップ） |
-| `bli open --path <file.blend>` | ファイルを開く |
+| `bli open --path <file.blend> [--force]` | ファイルを開く（シーン全体を置換・未保存の bli 変更があれば `--force` 必須） |
 | `bli import --format obj\|fbx\|gltf\|stl\|3mf --path <file>` | インポート |
 | `bli export --format obj\|fbx\|gltf\|stl\|3mf --path <file> [--use-selection]` | エクスポート |
 
@@ -279,7 +279,7 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 
 ### 監査・ロギング
 - メインスレッドの単一実行口を通る全Python文字列を `audit/` に記録（防止でなく検知・追跡）。
-- `save` / `export` / `import` は対象パスを明示ログ。`.blend` 上書きは既定でバックアップ強制。
+- `save` / `open` / `export` / `import` は対象パスを明示ログ。`.blend` 上書きは既定でバックアップ強制。`open` はシーン全体を置換するため、未保存の bli 変更があれば `--force` を要求（誤って未保存作業を破棄しない）。
 
 ### 設定・トークンの配置（ハイブリッド）
 | 種別 | 配置 | git |
