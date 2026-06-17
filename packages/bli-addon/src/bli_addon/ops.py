@@ -966,6 +966,21 @@ def _print_repair(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     )
 
 
+def _capability_unavailable(symptom: str, remediation: str) -> JsonRpcError:
+    """能力欠如（CAPABILITY_UNAVAILABLE・category=ENVIRONMENT）の業務エラーを組み立てる。"""
+    return JsonRpcError(
+        RPC_BUSINESS_ERROR,
+        ErrorCode.CAPABILITY_UNAVAILABLE,
+        make_error(
+            ErrorCode.CAPABILITY_UNAVAILABLE,
+            category=ErrorCategory.ENVIRONMENT,
+            retryable=False,
+            symptom=symptom,
+            remediation=remediation,
+        ),
+    )
+
+
 def _file_sha256_size(path: str) -> tuple[str, int]:
     """ファイルの sha256（16進）とサイズをストリーミング算出する（大きい出力でも省メモリ）。"""
     import hashlib
@@ -1007,43 +1022,49 @@ def _print_export(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         symptom="--path が空です",
         remediation="出力ファイルパスを指定してください",
     )
+    # scale は global_scale 一本化の knob。0 は退化（全座標が原点に潰れる）・負値は反転（法線が
+    # 裏返り 3D プリント不可）になるため、無音で壊れた STL を出さないよう bpy 到達前に正値を要求する
+    # （nan/inf は schema が拒否済み・duplicate の count 範囲ガードと同流儀・§6e）。
+    scale = float(params.get("scale", 1.0))
+    _require_input(
+        scale > 0.0,
+        symptom=f"--scale は正の値で指定してください（指定: {scale}）",
+        remediation="0 は退化、負値は法線反転で 3D プリントに使えません",
+    )
+    ascii_format = bool(params.get("ascii", False))
+    apply_modifiers = bool(params.get("apply_modifiers", True))
 
     import os
 
     from . import gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
+
+    # 形式の export operator を能力検出で解決する（capability RESOLVERS 経由・§9 OperatorResolver）。
+    # これは対象に依存しない判定なので require_single/require_mesh より前に行う（3mf を要求した場合は
+    # 対象の型エラーより先に「形式が使えない」を返す）。3mf は両版とも operator が実体なし（§E8）→ None。
+    operator = gateway.resolve_export_operator(fmt)
+    if operator is None:
+        # 黙って別形式に差し替えず、明示的に CAPABILITY_UNAVAILABLE で縮退する（要求と異なる形式を書かない）。
+        hint = (
+            "--format stl を使ってください（大半のスライサは STL を受容します）"
+            if fmt == "3mf"
+            else "Blender のバージョン/構成を確認してください（wm.stl_export が必要）"
+        )
+        raise _capability_unavailable(
+            f"{fmt} 形式の export operator がこの環境では利用できません", hint
+        )
+    if fmt != "stl":
+        # operator は実在するが v1 は STL 書き出しのみ実装（5.0/4.4 では 3mf operator 不在のため
+        # ここには到達しない防御。将来 3mf exporter を配線する際にこの分岐を実装へ差し替える）。
+        raise _capability_unavailable(
+            f"v1 は {fmt} 出力に未対応です",
+            "--format stl を使ってください（大半のスライサは STL を受容します）",
+        )
+
     obj = gateway.require_single(str(params["targets"]))
     gateway.require_mesh(obj)  # STL は mesh のみ
-
-    if fmt != "stl":
-        # 3mf は両版とも export operator が実体なし（§E8）。黙って STL に差し替えず、明示的に
-        # CAPABILITY_UNAVAILABLE で縮退して STL フォールバックを hint する（要求と異なる形式を書かない）。
-        raise JsonRpcError(
-            RPC_BUSINESS_ERROR,
-            ErrorCode.CAPABILITY_UNAVAILABLE,
-            make_error(
-                ErrorCode.CAPABILITY_UNAVAILABLE,
-                category=ErrorCategory.ENVIRONMENT,
-                retryable=False,
-                symptom=f"{fmt} 形式の出力はこの環境では利用できません（3MF export operator が未導入）",
-                remediation="--format stl を使ってください（大半のスライサは STL を受容します）",
-            ),
-        )
-    # stl: operator 実在を確認（5.0/4.4 は wm.stl_export 実在・§E8。万一の非対応環境を縮退で弾く）。
-    if gateway.resolve_export_operator("stl") is None:
-        raise JsonRpcError(
-            RPC_BUSINESS_ERROR,
-            ErrorCode.CAPABILITY_UNAVAILABLE,
-            make_error(
-                ErrorCode.CAPABILITY_UNAVAILABLE,
-                category=ErrorCategory.ENVIRONMENT,
-                retryable=False,
-                symptom="STL export operator（wm.stl_export）が利用できません",
-                remediation="Blender のバージョン/構成を確認してください",
-            ),
-        )
-    # 出力先ディレクトリの不在は operator の生 RuntimeError（INTERNAL 化）になり得るため bpy 到達前に弾く
+    # 出力先ディレクトリの不在は operator の生 RuntimeError（INTERNAL 化）になり得るため弾く
     # （path は addon プロセス側＝Blender の CWD 基準で解決される）。
     parent = os.path.dirname(os.path.abspath(path)) or "."
     _require_input(
@@ -1052,9 +1073,6 @@ def _print_export(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         remediation="存在するディレクトリのパスを指定してください",
     )
 
-    ascii_format = bool(params.get("ascii", False))
-    scale = float(params.get("scale", 1.0))
-    apply_modifiers = bool(params.get("apply_modifiers", True))
     meta = gateway.export_stl(
         obj,
         path,

@@ -1202,6 +1202,16 @@ def test_print_export_nonfinite_scale_server_rejected():
         assert ei.value.code == RPC_INVALID_PARAMS, bad
 
 
+def test_print_export_non_positive_scale_invalid_params():
+    # scale<=0 は退化（0＝原点に潰れる）/ 反転（負＝法線裏返り）で壊れた STL になるため bpy 到達前に弾く。
+    for bad in (0.0, -1.0, -0.5):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("print-export", _export_params(scale=bad), INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, bad
+        assert ei.value.data is not None, bad
+        assert ei.value.data.category == "USER_INPUT", bad
+
+
 def test_print_export_bad_bool_type_invalid_params():
     # ascii / apply_modifiers は BOOL。非真偽値は型エラーで INVALID_PARAMS
     for key in ("ascii", "apply_modifiers"):

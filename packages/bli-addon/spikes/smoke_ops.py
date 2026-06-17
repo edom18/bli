@@ -1811,6 +1811,31 @@ def run_calls():
     assert eo0["fingerprint"] == eo1["fingerprint"], (eo0["fingerprint"], eo1["fingerprint"])
     print("print_export_nondestructive_ok")
 
+    # apply_modifiers トグルの実効: SUBSURF を一時付与 → True（既定）=焼き込みで三角形が増える /
+    # False=素の cube（12三角形）。フラグが実際に出力ジオメトリを変えることを裏付ける。
+    call_retry("modifier", {"action": "add", "targets": "ExpCube", "type": "SUBSURF", "levels": 1})
+    am_on_path = os.path.join(export_dir, "expcube_modon.stl")
+    am_on, _ = call_retry(
+        "print-export", {"targets": "ExpCube", "format": "stl", "path": am_on_path}
+    )
+    am_off_path = os.path.join(export_dir, "expcube_modoff.stl")
+    am_off, _ = call_retry(
+        "print-export",
+        {"targets": "ExpCube", "format": "stl", "path": am_off_path, "apply_modifiers": False},
+    )
+    assert am_on["data"]["triangles"] > 12, am_on["data"]  # SUBSURF 焼き込みで三角形が増える
+    assert am_off["data"]["triangles"] == 12, am_off["data"]  # 素の cube（12三角形）
+    call_retry(
+        "modifier", {"action": "remove", "targets": "ExpCube", "name": "Subsurf"}
+    )  # 後片付け
+    print(
+        "print_export_apply_modifiers_ok",
+        "on=",
+        am_on["data"]["triangles"],
+        "off=",
+        am_off["data"]["triangles"],
+    )
+
     # 3mf は両版とも export operator が実体なし（§E8）→ CAPABILITY_UNAVAILABLE + STL hint。
     try:
         call_retry(

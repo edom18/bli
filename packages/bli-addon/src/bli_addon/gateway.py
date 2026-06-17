@@ -1504,25 +1504,26 @@ def print3d_available() -> bool:
 
 
 def resolve_export_operator(fmt: str) -> str | None:
-    """`export.<fmt>` の実在 export operator を RESOLVERS（候補表）から解決する（無ければ None）。
+    """`export.<fmt>` の実在 export operator を能力検出で解決する（無ければ None）。
 
-    capability.py の RESOLVERS（M0.5 確定の候補表・spec §9 OperatorResolver）と operator_real
-    （get_rna_type 判定）を再利用する。stl は `wm.stl_export`、3mf は候補 `export_mesh.3mf` が
-    両版とも stub のため None（§E8）。
+    解決ロジックは `CapabilityRegistry.resolve`（RESOLVERS 候補表＝spec §9 OperatorResolver の単一窓口・
+    M0.5 確定）へ委譲する（候補ループを二重実装しない）。stl は `wm.stl_export`、3mf は候補
+    `export_mesh.3mf` が両版とも stub のため None（§E8）。
     """
     from . import capability  # lazy: bpy 依存
 
-    for cand in capability.RESOLVERS.get(f"export.{fmt}", []):
-        if capability.operator_real(cand):
-            return cand
-    return None
+    return capability.CapabilityRegistry().resolve(f"export.{fmt}")
 
 
 def _select_only(obj: Any) -> tuple[list[Any], Any]:
     """obj だけを選択し active にする。元の (selected, active) を返す（restore 用）。
 
-    export_selected_objects=True は context の選択集合を見るため、対象だけを選択する。対象が
-    アクティブ view layer に無ければ select_set が失敗するので E_PRECONDITION で弾く（INTERNAL 回避）。
+    `wm.stl_export(export_selected_objects=True)` は **永続化された view layer の選択フラグ**を見るため、
+    run_operator の `temp_override(selected_objects=[obj])` だけでは対象を絞れない（§E8 のスパイクは
+    select_set で対象を絞って確認済み・override は context 読みの operator にしか効かない）。そこで実選択を
+    一時的に対象1個へ書き換え、`_restore_selection` で厳密に戻す（mutates=False を保つ）。この「override
+    ではなく実選択を使う」理由は非自明なので、安易な簡素化で壊さないよう明記する。対象がアクティブ
+    view layer に無ければ select_set が失敗するので E_PRECONDITION で弾く（INTERNAL 回避）。
     """
     view_layer = bpy.context.view_layer
     if obj.name not in {o.name for o in view_layer.objects}:
