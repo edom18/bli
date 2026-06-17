@@ -203,6 +203,31 @@ command(
     mutates=True,
     required_mode=Mode.OBJECT,
 )
+command(
+    "print-export",
+    "3Dプリント向けに mesh を STL で書き出す（3MF は未導入のため STL を hint）",
+    # 対象は単一（require_single・set-origin/straighten/print-check と対称）。STL は対象 mesh を
+    # world 空間で焼いて出力する（wm.stl_export は常に world 焼き・研究 §E8）。scale は global_scale
+    # 一本化（use_scene_unit=False 固定で scale_length を出力へ反映させない・1000倍ずれ防止）。
+    # 3mf は両版とも export operator が実体なし（§E8）→ CAPABILITY_UNAVAILABLE + STL hint。
+    # ファイルを書くだけでシーンは変えない（mutates=False・選択は save/restore で非破壊）。
+    params=(
+        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("format", ParamType.ENUM, required=True, choices=["stl", "3mf"], help="出力形式"),
+        p("path", ParamType.PATH, required=True, help="出力ファイルパス"),
+        p("ascii", ParamType.BOOL, default=False, help="STL を ASCII で出力（既定 binary）"),
+        # global_scale 一本化（既定 1.0＝Blender 単位を STL に 1:1）。scale_length は検証専用で結果に報告。
+        p("scale", ParamType.FLOAT, default=1.0, help="出力スケール（global_scale・既定 1.0）"),
+        p(
+            "apply_modifiers",
+            ParamType.BOOL,
+            default=True,
+            help="モディファイア適用後の最終形を出力（既定 on）",
+        ),
+    ),
+    mutates=False,
+    required_mode=Mode.OBJECT,
+)
 
 # ---- 状態キャプチャ（実地フィードバック #1）----
 command(

@@ -1,6 +1,6 @@
 # 次の作業 — M8「3シナリオ（中核価値）」
 
-> **⚠️ 2026-06-16 更新**: T8.1–T8.4 完了（PR #10–#12）+ **実地フィードバック対応ワークストリーム PR-1〜5 完了**（PR #13/#14/#15/#17/#18・経緯は `.handoff/NEXT-M8-feedback.md`）。**残るは T8.5 print-export のみ＝これで M8 完了**。**次に着手すべきは T8.5（このファイルの §1 表 T8.5 行 + §2 スパイク3「print-export 3mf」+ §3 kickoff）**。全体俯瞰は `.handoff/ROADMAP.md`。
+> **✅ 2026-06-17 更新: M8 実装完了**。T8.1–T8.5 完了 + 実地フィードバック PR-1〜5 完了。T8.5 print-export = **PR #20**（STL 出力・global_scale 一本化・3mf は CAPABILITY+STL hint・研究 §E8）。**次は M9 ファイルI/O = `.handoff/NEXT-M9.md`**。全体俯瞰は `.handoff/ROADMAP.md`。このファイルは M8 の経緯資料として保持。
 
 最終更新: 2026-06-15 / 前提: **M0–M7 完了**（M7 T7.3 boolean/decimate は PR マージ待ち＝マージで M7 完了）。**M8 = このプロダクトの中核価値**（spec の3シナリオ: 原点変更 / 直立補正 / 3Dプリンタ対応）。
 > まず `.handoff/HANDOFF.md`（全体史 + 規約 + §6e 再利用パターン + §6f M7 確定事項）を読む。出典: `plan.md §4 M8` / `spec.md §シナリオ1–3 + §10 受け入れ基準` / `contracts/methods.md §シナリオ1–3`。
@@ -27,7 +27,7 @@ PYTHONUTF8=1 uv run python scripts/check_no_raw_bpy_ops.py packages/bli-addon/sr
 | T8.2 | `straighten` | reset / world-align / pca / floor・up-axis・bake-rotation | s | **✅ 完了**（PR #10 main マージ済み / research §E4 / HANDOFF §6g）|
 | T8.3 | `print-setup` | unit=mm/m（表示単位のみ・非破壊）・global_scale は T8.5 で一本化 | s | **✅ 完了**（PR #11 main マージ済み / research §E5 / HANDOFF §6g）|
 | T8.4 | `print-check` / `print-repair` | bmesh 自前 manifold/normals/degenerate・thin/intersect は CAPABILITY_UNAVAILABLE 縮退 | s | **✅ 完了**（feature/m8-print-check・PR 待ち / 3視点セルフレビュー済み / **print3d 再スパイク消化＝両版実体なし確定 §E6** / HANDOFF §6g）|
-| T8.5 | `print-export` | stl / 3mf（3mf 不可→stl hint） | s | **← 次はここ**（未着手・M8 完了で M9 へ）|
+| T8.5 | `print-export` | stl（3mf 不可→CAPABILITY+stl hint）・global_scale 一本化 | s | **✅ 完了**（PR #20 マージ待ち / 研究 §E8 / HANDOFF §6g）|
 
 - **DoD（plan.md）**: spec §10 受け入れ基準を **golden 数値**で満たす。3シナリオ経路は**全 stable**。
 - **サブPR分割**（M6/M7 と同様・小さく緑に）推奨: T8.2 straighten → T8.3 print-setup → T8.4 print-check/repair → T8.5 print-export。

@@ -1493,6 +1493,106 @@ def print3d_available() -> bool:
     return False
 
 
+# ---- 3Dプリンタ出力（M8 T8.5 / print-export・シナリオ3 / 研究 §E8）----
+#
+# STL は `wm.stl_export`（M0.5/§E8 確定・両版同一引数）。対象1個だけを選択して
+# export_selected_objects=True で対象限定し、world 空間でジオメトリを焼いて出力する。
+# スケールは `global_scale` 一本化（use_scene_unit=False 固定で scale_length を出力へ反映させない
+# ＝1000倍ずれ防止）。選択/active は save→restore で非破壊（print-export は mutates=False）。
+# 3MF は両版とも export operator が実体なし（§E8）→ resolve_export_operator が None を返し、呼び出し側
+# （ops）が CAPABILITY_UNAVAILABLE + STL hint へ縮退する（黙って STL に差し替えない）。
+
+
+def resolve_export_operator(fmt: str) -> str | None:
+    """`export.<fmt>` の実在 export operator を能力検出で解決する（無ければ None）。
+
+    解決ロジックは `CapabilityRegistry.resolve`（RESOLVERS 候補表＝spec §9 OperatorResolver の単一窓口・
+    M0.5 確定）へ委譲する（候補ループを二重実装しない）。stl は `wm.stl_export`、3mf は候補
+    `export_mesh.3mf` が両版とも stub のため None（§E8）。
+    """
+    from . import capability  # lazy: bpy 依存
+
+    return capability.CapabilityRegistry().resolve(f"export.{fmt}")
+
+
+def _select_only(obj: Any) -> tuple[list[Any], Any]:
+    """obj だけを選択し active にする。元の (selected, active) を返す（restore 用）。
+
+    `wm.stl_export(export_selected_objects=True)` は **永続化された view layer の選択フラグ**を見るため、
+    run_operator の `temp_override(selected_objects=[obj])` だけでは対象を絞れない（§E8 のスパイクは
+    select_set で対象を絞って確認済み・override は context 読みの operator にしか効かない）。そこで実選択を
+    一時的に対象1個へ書き換え、`_restore_selection` で厳密に戻す（mutates=False を保つ）。この「override
+    ではなく実選択を使う」理由は非自明なので、安易な簡素化で壊さないよう明記する。対象がアクティブ
+    view layer に無ければ select_set が失敗するので E_PRECONDITION で弾く（INTERNAL 回避）。
+    """
+    view_layer = bpy.context.view_layer
+    if obj.name not in {o.name for o in view_layer.objects}:
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"対象がアクティブ view layer にありません（export 不可）: {obj.name}",
+        )
+    saved_selected = [o for o in view_layer.objects if o.select_get()]
+    saved_active = view_layer.objects.active
+    for o in view_layer.objects:
+        o.select_set(False)
+    obj.select_set(True)
+    view_layer.objects.active = obj
+    return saved_selected, saved_active
+
+
+def _restore_selection(saved_selected: list[Any], saved_active: Any) -> None:
+    """_select_only で退避した選択/active を厳密に復元する（非破壊）。"""
+    view_layer = bpy.context.view_layer
+    for o in view_layer.objects:
+        o.select_set(False)
+    for o in saved_selected:
+        try:
+            o.select_set(True)
+        except RuntimeError:  # 復元中に view layer から消えた等は無視（best-effort 復元）
+            pass
+    view_layer.objects.active = saved_active
+
+
+def export_stl(
+    obj: Any,
+    path: str,
+    *,
+    ascii_format: bool = False,
+    global_scale: float = 1.0,
+    apply_modifiers: bool = True,
+) -> dict[str, Any]:
+    """対象 obj 1個を STL で書き出す（wm.stl_export・world 焼き・global_scale 一本化）。
+
+    対象だけを選択して export_selected_objects=True で対象限定し、選択は save→restore で非破壊に
+    戻す。use_scene_unit=False 固定で scale_length を出力へ反映させず、スケールは global_scale のみで
+    支配する（§E8・1000倍ずれ防止）。check_existing=False で既存ファイルを上書き可能にする。
+    返すのは export パラメータ + 検証用の scale_length（ファイル統計は呼び出し側 ops が付与）。
+    """
+    saved_selected, saved_active = _select_only(obj)
+    try:
+        run_operator(
+            bpy.ops.wm.stl_export,
+            obj,
+            filepath=path,
+            export_selected_objects=True,
+            ascii_format=ascii_format,
+            global_scale=global_scale,
+            use_scene_unit=False,
+            apply_modifiers=apply_modifiers,
+            check_existing=False,
+        )
+    finally:
+        _restore_selection(saved_selected, saved_active)
+    return {
+        "format": "stl",
+        "ascii": ascii_format,
+        "global_scale": round(float(global_scale), 8),
+        "apply_modifiers": apply_modifiers,
+        # scale_length は検証専用（出力には use_scene_unit=False で未反映）。1000倍ずれ設定の検知材料。
+        "scale_length": round(bpy.context.scene.unit_settings.scale_length, 8),
+    }
+
+
 # ---- 状態キャプチャ（実地フィードバック #1 / Spike V で両版確認）----
 #
 # viewport = gpu offscreen draw_view3d（UI なし・解像度指定可）/ screen = screenshot_area で

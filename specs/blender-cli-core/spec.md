@@ -195,7 +195,7 @@ bli print-check  --targets <name> [--manifold] [--normals] [--thin --min-thickne
                    [--intersect] [--degenerate] [--save-to <path>]
 bli print-repair --targets <name> [--make-manifold] [--recalc-normals] [--remove-degenerate]
 bli print-setup  [--unit mm|m] [--scene]
-bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--apply-transform]
+bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--scale <f>] [--no-apply-modifiers]
 ```
 
 ### ファイルI/O
@@ -430,7 +430,8 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--ap
   - **v1 実装注記（T8.4）**: 非多様体・反転法線・退化面は **bmesh 自前計算で常時提供**（print3d 非依存）。薄壁（`--thin`）・自己交差（`--intersect`）は **print3d Toolbox 依存**で、未導入環境（M0.5/§E6 で 5.0.1・4.4.3 とも実体なし）では要求時に **`CAPABILITY_UNAVAILABLE`** を返す（黙って件数 0 にせず能力欠如を明示）。print3d が Extensions で導入されれば自動的に有効化される設計。
 - `print-repair`: bmesh 自前で可能な範囲を修復し（make-manifold=穴埋め/重複マージ/loose 除去・recalc-normals・remove-degenerate）、修復前後の差分を報告。**完全修復は保証しない**旨を明記（穴形状により埋めきれない）。
 - `print-setup --unit mm`: 単位がmmに設定される。
-- `print-export --format stl`: STL（または3MF）が出力され、ファイルが生成される。
+- `print-export --format stl`: STL が出力され、ファイルが生成される（パス/サイズ/sha256/三角形数を返す）。
+  - **v1 実装注記（T8.5）**: 対象1個の mesh を `wm.stl_export`（両版同一・研究 §E8）で world 焼き出力。スケールは `global_scale` 一本化（`--scale` 既定 1.0・`use_scene_unit=False` 固定で `scale_length` を出力へ反映させない＝1000倍ずれ防止・`scale_length` は結果に報告して検証可能に）。`--ascii` で ASCII STL。`--apply-modifiers`（既定 on）。**`--format 3mf` は両版とも実体なし（§E8）→ `CAPABILITY_UNAVAILABLE` + STL フォールバック hint**（黙って STL に差し替えない）。読み取り専用（選択は save/restore で非破壊）。
 - 完了条件: `print-check` の致命カテゴリ（非多様体）件数が repair 後に減少し、export ファイルが存在。
 
 ---

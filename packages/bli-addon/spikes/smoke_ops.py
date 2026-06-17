@@ -85,6 +85,25 @@ def approx(a, b, tol=1e-4):
     return all(abs(x - y) <= tol for x, y in zip(a, b, strict=False))
 
 
+def stl_binary_bbox(path):
+    """binary STL の全頂点から world AABB (min, max) を読む（print-export の world 焼き/scale 検証用）。"""
+    import struct
+
+    with open(path, "rb") as f:
+        f.read(80)  # header
+        (ntri,) = struct.unpack("<I", f.read(4))
+        xs, ys, zs = [], [], []
+        for _ in range(ntri):
+            f.read(12)  # 面法線
+            for _v in range(3):
+                x, y, z = struct.unpack("<fff", f.read(12))
+                xs.append(x)
+                ys.append(y)
+                zs.append(z)
+            f.read(2)  # attribute byte count
+    return (min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs))
+
+
 def ensure_cube():
     cube = bpy.data.objects.get("Cube")
     if cube is None:
@@ -416,6 +435,18 @@ def ensure_print_check_fixtures():
         pcb.data.update()
 
 
+def ensure_export_fixture():
+    """print-export 検証用 cube（world (5,0,0) に平行移動）。STL の world 焼きを bbox で裏付ける。"""
+    o = bpy.data.objects.get("ExpCube")
+    if o is None:
+        bpy.ops.mesh.primitive_cube_add(size=2.0)  # spike のみ（AST guard 対象外）
+        o = bpy.context.active_object
+        o.name = "ExpCube"
+    o.location = (5.0, 0.0, 0.0)
+    bpy.context.view_layer.update()  # matrix_world を確定（export は world 座標を焼く）
+    return o
+
+
 def call_retry(method, params=None, request_id=None, attempts=40):
     """SESSION_BUSY（接続クローズ直後のロック解放待ち）を少し待って再試行する。"""
     last = None
@@ -541,8 +572,9 @@ def run_calls():
         "PCShA",
         "PCShB",
         "PCBroken",
+        "ExpCube",  # M8 T8.5 print-export 検証用（world (5,0,0) cube）
     }, lo_names
-    assert lo["data"]["count"] == 44, lo["data"]
+    assert lo["data"]["count"] == 45, lo["data"]
     lo2, _ = call_retry("list-objects", {"regex": "^Cu"})
     assert [o["name"] for o in lo2["data"]["objects"]] == ["Cube"], lo2["data"]
     print("list_objects_ok mesh=", sorted(lo_names))
@@ -1725,6 +1757,118 @@ def run_calls():
         rpa["data"]["after"]["is_printable"],
     )
 
+    # print-export（M8 T8.5・シナリオ3）: STL 書き出し（wm.stl_export・world 焼き・global_scale 一本化・§E8）。
+    import hashlib as _hashlib
+
+    export_dir = tempfile.mkdtemp(prefix="bli-export-smoke-")
+    bin_path = os.path.join(export_dir, "expcube.stl")
+    ex1, _ = call_retry("print-export", {"targets": "ExpCube", "format": "stl", "path": bin_path})
+    assert ex1["data"]["format"] == "stl", ex1["data"]
+    assert ex1["data"]["triangles"] == 12, ex1["data"]  # cube=6面→12三角形
+    assert ex1["data"]["size"] == 684, ex1["data"]  # binary cube は format 固定 684B（84+12*50）
+    assert ex1["data"]["ascii"] is False, ex1["data"]
+    assert ex1["data"]["global_scale"] == 1.0, ex1["data"]
+    assert ex1["data"]["apply_modifiers"] is True, ex1["data"]
+    assert "scale_length" in ex1["data"], ex1["data"]  # 検証用に scale_length を報告
+    assert os.path.exists(ex1["data"]["path"]), ex1["data"]  # 実ファイル生成
+    with open(ex1["data"]["path"], "rb") as _ef:
+        file_sha = _hashlib.sha256(_ef.read()).hexdigest()
+    assert ex1["data"]["sha256"] == file_sha, ex1["data"]  # 報告 sha == 実ファイル sha
+    assert ex1["fingerprint"] == file_sha[:16], (
+        ex1["fingerprint"],
+        file_sha,
+    )  # fingerprint=content-address
+    # world 焼き: ExpCube は world (5,0,0)・size 2 → 出力 bbox x∈[4,6] y,z∈[-1,1]（transform 適用の裏付け）。
+    bmin, bmax = stl_binary_bbox(ex1["data"]["path"])
+    assert approx(bmin, (4.0, -1.0, -1.0)) and approx(bmax, (6.0, 1.0, 1.0)), (bmin, bmax)
+    print("print_export_binary_ok", ex1["data"]["triangles"], ex1["data"]["size"])
+
+    # global_scale=2: 全座標が2倍（world 位置も含む）→ bbox x∈[8,12] y,z∈[-2,2]（§E8・決定的 golden）。
+    s2_path = os.path.join(export_dir, "expcube_s2.stl")
+    ex2, _ = call_retry(
+        "print-export", {"targets": "ExpCube", "format": "stl", "path": s2_path, "scale": 2.0}
+    )
+    assert ex2["data"]["global_scale"] == 2.0, ex2["data"]
+    bmin2, bmax2 = stl_binary_bbox(ex2["data"]["path"])
+    assert approx(bmin2, (8.0, -2.0, -2.0)) and approx(bmax2, (12.0, 2.0, 2.0)), (bmin2, bmax2)
+    print("print_export_scale_ok", bmin2, bmax2)
+
+    # ascii STL: 先頭が "solid"（binary と別形式）・triangles は facet 行から数える。
+    ascii_path = os.path.join(export_dir, "expcube_ascii.stl")
+    exa, _ = call_retry(
+        "print-export", {"targets": "ExpCube", "format": "stl", "path": ascii_path, "ascii": True}
+    )
+    assert exa["data"]["ascii"] is True, exa["data"]
+    assert exa["data"]["triangles"] == 12, exa["data"]
+    with open(exa["data"]["path"], "rb") as _f:
+        assert _f.read(5) == b"solid", "ascii STL は solid で始まる"
+    print("print_export_ascii_ok")
+
+    # 非破壊（mutates=False）: export はシーンを変えない。ExpCube の object_fingerprint が export 前後で不変。
+    eo0, _ = call_retry("object-info", {"targets": "ExpCube"})
+    call_retry("print-export", {"targets": "ExpCube", "format": "stl", "path": bin_path})
+    eo1, _ = call_retry("object-info", {"targets": "ExpCube"})
+    assert eo0["fingerprint"] == eo1["fingerprint"], (eo0["fingerprint"], eo1["fingerprint"])
+    print("print_export_nondestructive_ok")
+
+    # apply_modifiers トグルの実効: SUBSURF を一時付与 → True（既定）=焼き込みで三角形が増える /
+    # False=素の cube（12三角形）。フラグが実際に出力ジオメトリを変えることを裏付ける。
+    call_retry("modifier", {"action": "add", "targets": "ExpCube", "type": "SUBSURF", "levels": 1})
+    am_on_path = os.path.join(export_dir, "expcube_modon.stl")
+    am_on, _ = call_retry(
+        "print-export", {"targets": "ExpCube", "format": "stl", "path": am_on_path}
+    )
+    am_off_path = os.path.join(export_dir, "expcube_modoff.stl")
+    am_off, _ = call_retry(
+        "print-export",
+        {"targets": "ExpCube", "format": "stl", "path": am_off_path, "apply_modifiers": False},
+    )
+    assert am_on["data"]["triangles"] > 12, am_on["data"]  # SUBSURF 焼き込みで三角形が増える
+    assert am_off["data"]["triangles"] == 12, am_off["data"]  # 素の cube（12三角形）
+    call_retry(
+        "modifier", {"action": "remove", "targets": "ExpCube", "name": "Subsurf"}
+    )  # 後片付け
+    print(
+        "print_export_apply_modifiers_ok",
+        "on=",
+        am_on["data"]["triangles"],
+        "off=",
+        am_off["data"]["triangles"],
+    )
+
+    # 3mf は両版とも export operator が実体なし（§E8）→ CAPABILITY_UNAVAILABLE + STL hint。
+    try:
+        call_retry(
+            "print-export",
+            {"targets": "ExpCube", "format": "3mf", "path": os.path.join(export_dir, "x.3mf")},
+        )
+        raise AssertionError("3mf は CAPABILITY_UNAVAILABLE のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "CAPABILITY_UNAVAILABLE", e.error
+    # 非 mesh（EMPTY 等）は E_PRECONDITION（require_mesh）。
+    try:
+        call_retry(
+            "print-export",
+            {"targets": "QRot", "format": "stl", "path": os.path.join(export_dir, "q.stl")},
+        )
+        raise AssertionError("非 mesh の export は E_PRECONDITION のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "E_PRECONDITION", e.error
+    # 出力先ディレクトリ不在は USER_INPUT（bpy 到達前）。
+    try:
+        call_retry(
+            "print-export",
+            {
+                "targets": "ExpCube",
+                "format": "stl",
+                "path": os.path.join(export_dir, "no_such_subdir", "x.stl"),
+            },
+        )
+        raise AssertionError("不在ディレクトリは INVALID_PARAMS のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "INVALID_PARAMS", e.error
+    print("print_export_guards_ok")
+
     # capture（実地FB #1）: --background では GUI（window/area）が無いため viewport/screen は
     # E_PRECONDITION で graceful に縮退する（INTERNAL にしない）。実機 viewport/screen/render の
     # 機能検証は GUI の capture_spike.py（両版確認済み）が担う。
@@ -1771,6 +1915,7 @@ def main():
     ensure_mesh_fixtures()  # M7 mesh 編集（flip/double/共有）検証用（メインスレッドで生成）
     ensure_straighten_fixtures()  # M8 straighten（直立補正）検証用（メインスレッドで生成）
     ensure_print_check_fixtures()  # M8 print-check/repair（破損 mesh 含む）検証用（メインスレッドで生成）
+    ensure_export_fixture()  # M8 T8.5 print-export（world (5,0,0) cube）検証用（メインスレッドで生成）
 
     dispatcher = Dispatcher()  # background では timer を使わず手動 pump
 

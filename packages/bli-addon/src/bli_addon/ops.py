@@ -966,6 +966,151 @@ def _print_repair(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     )
 
 
+def _capability_unavailable(symptom: str, remediation: str) -> JsonRpcError:
+    """能力欠如（CAPABILITY_UNAVAILABLE・category=ENVIRONMENT）の業務エラーを組み立てる。"""
+    return JsonRpcError(
+        RPC_BUSINESS_ERROR,
+        ErrorCode.CAPABILITY_UNAVAILABLE,
+        make_error(
+            ErrorCode.CAPABILITY_UNAVAILABLE,
+            category=ErrorCategory.ENVIRONMENT,
+            retryable=False,
+            symptom=symptom,
+            remediation=remediation,
+        ),
+    )
+
+
+def _file_sha256_size(path: str) -> tuple[str, int]:
+    """ファイルの sha256（16進）とサイズをストリーミング算出する（大きい出力でも省メモリ）。"""
+    import hashlib
+
+    h = hashlib.sha256()
+    size = 0
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            h.update(chunk)
+            size += len(chunk)
+    return h.hexdigest(), size
+
+
+def _stl_triangle_count(path: str, ascii_format: bool) -> int | None:
+    """STL の三角形数を読む（binary=header の uint32 / ascii=facet 行数）。検証用の golden 指標。"""
+    if not ascii_format:
+        import struct
+
+        with open(path, "rb") as f:
+            head = f.read(84)
+        if len(head) < 84:
+            return None
+        return int(struct.unpack("<I", head[80:84])[0])
+    count = 0
+    with open(path, "rb") as f:
+        for line in f:
+            if line.lstrip().startswith(b"facet"):
+                count += 1
+    return count
+
+
+def _print_export(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("print-export")
+    _validate(cmd, params)
+    fmt = str(params["format"])
+    path = str(params["path"])
+    _require_input(
+        path.strip() != "",
+        symptom="--path が空です",
+        remediation="出力ファイルパスを指定してください",
+    )
+    # scale は global_scale 一本化の knob。0 は退化（全座標が原点に潰れる）・負値は反転（法線が
+    # 裏返り 3D プリント不可）になるため、無音で壊れた STL を出さないよう bpy 到達前に正値を要求する
+    # （nan/inf は schema が拒否済み・duplicate の count 範囲ガードと同流儀・§6e）。
+    scale = float(params.get("scale", 1.0))
+    _require_input(
+        scale > 0.0,
+        symptom=f"--scale は正の値で指定してください（指定: {scale}）",
+        remediation="0 は退化、負値は法線反転で 3D プリントに使えません",
+    )
+    ascii_format = bool(params.get("ascii", False))
+    apply_modifiers = bool(params.get("apply_modifiers", True))
+
+    import os
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+
+    # 形式の export operator を能力検出で解決する（capability RESOLVERS 経由・§9 OperatorResolver）。
+    # これは対象に依存しない判定なので require_single/require_mesh より前に行う（3mf を要求した場合は
+    # 対象の型エラーより先に「形式が使えない」を返す）。3mf は両版とも operator が実体なし（§E8）→ None。
+    operator = gateway.resolve_export_operator(fmt)
+    if operator is None:
+        # 黙って別形式に差し替えず、明示的に CAPABILITY_UNAVAILABLE で縮退する（要求と異なる形式を書かない）。
+        hint = (
+            "--format stl を使ってください（大半のスライサは STL を受容します）"
+            if fmt == "3mf"
+            else "Blender のバージョン/構成を確認してください（wm.stl_export が必要）"
+        )
+        raise _capability_unavailable(
+            f"{fmt} 形式の export operator がこの環境では利用できません", hint
+        )
+    if fmt != "stl":
+        # operator は実在するが v1 は STL 書き出しのみ実装（5.0/4.4 では 3mf operator 不在のため
+        # ここには到達しない防御。将来 3mf exporter を配線する際にこの分岐を実装へ差し替える）。
+        raise _capability_unavailable(
+            f"v1 は {fmt} 出力に未対応です",
+            "--format stl を使ってください（大半のスライサは STL を受容します）",
+        )
+
+    obj = gateway.require_single(str(params["targets"]))
+    gateway.require_mesh(obj)  # STL は mesh のみ
+    # 出力先ディレクトリの不在は operator の生 RuntimeError（INTERNAL 化）になり得るため弾く
+    # （path は addon プロセス側＝Blender の CWD 基準で解決される）。
+    parent = os.path.dirname(os.path.abspath(path)) or "."
+    _require_input(
+        os.path.isdir(parent),
+        symptom=f"出力先ディレクトリがありません: {parent}",
+        remediation="存在するディレクトリのパスを指定してください",
+    )
+
+    meta = gateway.export_stl(
+        obj,
+        path,
+        ascii_format=ascii_format,
+        global_scale=scale,
+        apply_modifiers=apply_modifiers,
+    )
+    # 実際に書かれた成果物のファイル統計（検証材料）。export 後にファイルから算出する。
+    try:
+        sha, size = _file_sha256_size(path)
+        triangles = _stl_triangle_count(path, ascii_format)
+    except (
+        OSError
+    ) as e:  # 書き出し後の読み取り失敗は INTERNAL でなく業務エラーへ（capture と同流儀）。
+        raise JsonRpcError(
+            RPC_BUSINESS_ERROR,
+            ErrorCode.E_OPERATOR,
+            make_error(
+                ErrorCode.E_OPERATOR,
+                category=ErrorCategory.ENVIRONMENT,
+                retryable=False,
+                symptom=f"出力ファイルの読み取りに失敗しました: {e}",
+                remediation="ディスク容量/権限/パスを確認してください",
+            ),
+        ) from e
+    data = {
+        "name": obj.name,
+        "path": os.path.abspath(path),
+        "size": size,
+        "sha256": sha,
+        "triangles": triangles,
+        **meta,
+    }
+    # 読み取り専用（シーンは変えない）。fingerprint は成果物の content-address（sha 先頭16桁）＝
+    # 出力アーティファクトの drift 指標（capture と同流儀・binary STL は決定的・§E8）。
+    return _ok("print-export", data, fingerprint=sha[:16])
+
+
 def _png_dimensions(path: str) -> tuple[int, int] | None:
     """PNG の IHDR から実出力解像度 (width, height) を読む。
 
@@ -1129,6 +1274,7 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "print-setup": _print_setup,
     "print-check": _print_check,
     "print-repair": _print_repair,
+    "print-export": _print_export,
     "capture": _capture,
     "undo": _undo,
     "redo": _redo,

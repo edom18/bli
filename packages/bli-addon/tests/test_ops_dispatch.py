@@ -1136,3 +1136,99 @@ def test_undo_redo_unknown_param_invalid_params():
         with pytest.raises(JsonRpcError) as ei:
             ops.dispatch(method, {"bogus": 1}, INFO)
         assert ei.value.code == RPC_INVALID_PARAMS, method
+
+
+# ---- M8 T8.5 print-export（STL 出力）の param 検証（bpy 不要）----
+
+
+def _export_params(**extra: object) -> dict[str, object]:
+    base: dict[str, object] = {"targets": "Cube", "format": "stl", "path": "out.stl"}
+    base.update(extra)
+    return base
+
+
+def test_print_export_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-export", {"format": "stl", "path": "out.stl"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_export_missing_format_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-export", {"targets": "Cube", "path": "out.stl"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_export_missing_path_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-export", {"targets": "Cube", "format": "stl"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_export_bad_format_invalid_params():
+    # format は ENUM(stl|3mf)。範囲外（obj 等）は schema 検証で INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-export", _export_params(format="obj"), INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_export_empty_path_invalid_params():
+    # 空/空白のみの path は無音失敗を避けるため bpy 到達前に USER_INPUT で弾く。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-export", _export_params(path="   "), INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_print_export_unknown_param_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-export", _export_params(bogus=1), INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_export_bad_scale_type_invalid_params():
+    # scale は FLOAT。文字列は型エラーで INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("print-export", _export_params(scale="x"), INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_print_export_nonfinite_scale_server_rejected():
+    # FLOAT（scale）の nan/inf もサーバ側（schema SSOT）で弾く（CLI 非経由 RPC 防御）。
+    for bad in (float("inf"), float("nan"), float("-inf")):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("print-export", _export_params(scale=bad), INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, bad
+
+
+def test_print_export_non_positive_scale_invalid_params():
+    # scale<=0 は退化（0＝原点に潰れる）/ 反転（負＝法線裏返り）で壊れた STL になるため bpy 到達前に弾く。
+    for bad in (0.0, -1.0, -0.5):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("print-export", _export_params(scale=bad), INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, bad
+        assert ei.value.data is not None, bad
+        assert ei.value.data.category == "USER_INPUT", bad
+
+
+def test_print_export_bad_bool_type_invalid_params():
+    # ascii / apply_modifiers は BOOL。非真偽値は型エラーで INVALID_PARAMS
+    for key in ("ascii", "apply_modifiers"):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("print-export", _export_params(**{key: "yes"}), INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, key
+
+
+def test_print_export_valid_params_reach_bpy():
+    # 妥当な params（stl/3mf・ascii・scale・apply_modifiers）は検証を通過し gateway の遅延 import まで
+    # 到達する（3mf の CAPABILITY 判定・実出力は bpy 必須＝smoke で検証）。退行ガード。
+    for extra in (
+        {},
+        {"format": "3mf"},
+        {"ascii": True},
+        {"scale": 1000.0},
+        {"apply_modifiers": False},
+    ):
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("print-export", _export_params(**extra), INFO)

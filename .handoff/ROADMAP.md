@@ -1,6 +1,6 @@
 # bli (Blender CLI) — ロードマップ俯瞰（ROADMAP）
 
-最終更新: 2026-06-16 / このファイルは**全体像を1枚で見渡す**ための索引。詳細は各リンク先へ。
+最終更新: 2026-06-17 / このファイルは**全体像を1枚で見渡す**ための索引。詳細は各リンク先へ。
 
 - **プロダクト**: AIエージェントが **CLI 経由で Blender を自律操作**するツール（`bli`）。常駐 GUI Blender + アドオン TCP ソケット ← Python/Typer 製 CLI。MCP のトークン非効率を CLI で解消。
 - **真実の情報源（SSOT）**: `specs/blender-cli-core/`（`spec.md` / `plan.md` / `research.md` / `contracts/methods.md` / `data-model.md`）。
@@ -22,8 +22,8 @@
 | M5 | 情報取得（list-objects / object-info bbox / scene-info の output_ref 退避） | ✅ | PR #2 |
 | M6 | 汎用編集（select/transform/apply-transform・duplicate/delete・material・modifier） | ✅ | PR #3–#6 |
 | M7 | メッシュ編集（mesh --op: bmesh 一次 + heavy は modifier 経由） | ✅ | PR #7–#9 |
-| **M8** | **3シナリオ中核価値（set-origin / straighten / print-*）+ 実地フィードバック対応** | 🔶 **進行中** | 下記 §M8 |
-| M9 | ファイルI/O（save / open / import / export・3mf 不可→STL hint） | ⬜ 未着手 | RESOLVERS は capability.py に確定値 |
+| **M8** | **3シナリオ中核価値（set-origin / straighten / print-*）+ 実地フィードバック対応** | ✅ **実装完了**（T8.5=PR #20 マージ待ち） | 下記 §M8 |
+| **M9** | ファイルI/O（save / open / import / export・3mf 不可→STL hint） | 🔶 **次はここ** | `.handoff/NEXT-M9.md` / RESOLVERS は capability.py に確定値・export は T8.5 print-export を踏襲 |
 | M10 | 非同期job & フリーズ対策（job-status/job-wait・--dry-run 一般化・watchdog） | ⬜ 未着手 | settle/RUNNING 機構は M4 で土台済み |
 | M11 | exec-python（既定 off・audited/trusted は設定昇格） | ⬜ 未着手 | |
 | M12 | Skill 同梱 & スキーマ同期（`.claude/skills/bli/` + help --json 生成 + schema_hash） | ⬜ 未着手 | D12 |
@@ -45,7 +45,7 @@
 | T8.2 | `straighten`（reset/world-align/pca/floor） | ✅ PR #10 |
 | T8.3 | `print-setup`（単位 mm/m・非破壊） | ✅ PR #11 |
 | T8.4 | `print-check` / `print-repair`（bmesh 自前 + print3d 縮退） | ✅ PR #12 |
-| **T8.5** | **`print-export`（stl / 3mf→STL hint）** | ⬜ **次はここ＝これで M8 完了**（着手書 `.handoff/NEXT-M8.md`） |
+| **T8.5** | **`print-export`（stl / 3mf→CAPABILITY+STL hint）** | ✅ PR #20（マージ待ち）＝**M8 実装完了**・研究 §E8 |
 
 ### 実地フィードバック対応ワークストリーム（T8.5 の前に差し込み・feedback-first）✅ **完了（PR-1〜5）**
 エージェントに `straighten` 傾き補正を実地で使わせた検証で「単体では完遂不可」と判明 → 全7項目に対応。
@@ -59,7 +59,7 @@
 | PR-4 | 基準指定整列（#4 straighten に angle/align-vector/reference 追加・支柱問題） | ✅ PR #17 |
 | PR-5 | undo/redo 公開（#3 `bli undo`/`redo`・GUI 必須・スタック端 RuntimeError 頑健化） | ✅ PR #18 |
 
-→ **実地フィードバック PR-1〜5 完了。残るは T8.5 print-export → M8 完了 → M9（`.handoff/NEXT-M9.md` 要作成）**。
+→ **実地フィードバック PR-1〜5 完了 + T8.5 print-export（PR #20）完了＝M8 実装完了。次は M9 ファイルI/O（`.handoff/NEXT-M9.md`）**。
 ※ FB #4 の「部分ジオメトリ PCA（頂点サブセット基準）」は部分指定方法の決定が要るため別 PR 繰越（PR-4 では angle/align-vector/reference で支柱問題に実用解を提供済み）。
 
 ---
