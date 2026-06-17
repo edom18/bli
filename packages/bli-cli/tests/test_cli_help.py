@@ -379,6 +379,38 @@ def test_print_export_bad_format_local_validation():
     assert "INVALID_PARAMS" in res.output
 
 
+def test_m9_export_discoverable():
+    # M9 T9.1 の export が実装済み一覧に出る + スキーマ（read-only・format ENUM 多形式・targets 任意）
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    by_name = {c["name"]: c for c in data["commands"]}
+    assert "export" in by_name
+    assert by_name["export"]["stability"] == "stable"
+    assert (
+        by_name["export"]["mutates"] is False
+    )  # ファイルを書くだけ（選択は save/restore で非破壊）
+    schema = json.loads(runner.invoke(app, ["help", "--command", "export", "--json"]).output)[
+        "schema"
+    ]
+    assert set(schema["properties"]) == {"format", "path", "targets", "use_selection"}
+    # targets は任意（--targets/--use-selection/シーン全体の3択）。required は format/path のみ。
+    assert set(schema["required"]) == {"format", "path"}
+    assert schema["properties"]["format"]["enum"] == ["obj", "fbx", "gltf", "stl", "3mf"]
+    assert schema["properties"]["use_selection"]["default"] is False
+
+
+def test_export_bad_format_local_validation():
+    # 不正な --format（ply 等）は送信前ローカル Pydantic 検証で exit 4
+    res = runner.invoke(app, ["export", "--format", "ply", "--path", "out.ply", "--json"])
+    assert res.exit_code == 4
+    assert "INVALID_PARAMS" in res.output
+
+
+def test_export_whole_scene_no_targets_local_ok():
+    # targets/use-selection 省略（シーン全体）はローカル検証を通過する（接続段で落ちる＝検証は通る）。
+    res = runner.invoke(app, ["export", "--format", "stl", "--path", "out.stl", "--json"])
+    assert res.exit_code != 4  # INVALID_PARAMS では落ちない（接続不能 exit 3 等になる）
+
+
 def test_m8_capture_discoverable():
     # 実地FB #1 の capture が実装済み一覧に出る + スキーマ（read-only・source ENUM 既定 viewport）
     data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)

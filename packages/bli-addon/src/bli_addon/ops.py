@@ -1111,6 +1111,101 @@ def _print_export(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     return _ok("print-export", data, fingerprint=sha[:16])
 
 
+def _export(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    """多形式 export（M9 T9.1・obj/fbx/gltf/stl・3mf は CAPABILITY）。print-export の一般化（§E9）。"""
+    cmd = _command("export")
+    _validate(cmd, params)
+    fmt = str(params["format"])
+    path = str(params["path"])
+    _require_input(
+        path.strip() != "",
+        symptom="--path が空です",
+        remediation="出力ファイルパスを指定してください",
+    )
+    # glTF は GLB 単一固定（export_format 有効値は両版とも GLB/GLTF_SEPARATE のみ・GLTF_EMBEDDED は
+    # 存在しない＝実機確認済み。SEPARATE は .bin 分離で sha256/size が崩れるため不採用・§E9）。.glb 以外の
+    # 拡張子は無効 enum→TypeError→INTERNAL を避け、bpy 到達前に USER_INPUT で弾く（黙って中身と名前を
+    # 食い違わせない）。stl/obj/fbx の拡張子は呼び出し側責任（exporter は filepath をそのまま使う）。
+    if fmt == "gltf":
+        _require_input(
+            path.lower().endswith(".glb"),
+            symptom="glTF は単一ファイルの .glb のみ対応です（v1）",
+            remediation="--path の拡張子を .glb にしてください（.gltf 分離形式は未対応）",
+        )
+    targets = params.get("targets")
+    use_selection = bool(params.get("use_selection", False))
+    # 空/空白のみの --targets は空 regex で全マッチ＝シーン全体に化けるため弾く（path と同流儀）。
+    if targets is not None:
+        _require_input(
+            str(targets).strip() != "",
+            symptom="--targets が空です",
+            remediation="対象名/regex を指定するか、--targets 自体を省略してください（省略でシーン全体）",
+        )
+
+    import os
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+
+    # 形式の export operator を能力検出で解決する（対象に依存しないので対象解決より前・print-export と同順）。
+    # 3mf は両版とも operator が実体なし（§E8）→ 黙って別形式に差し替えず CAPABILITY_UNAVAILABLE で縮退。
+    operator = gateway.resolve_export_operator(fmt)
+    if operator is None:
+        hint = (
+            "--format stl/obj/gltf/fbx を使ってください（3mf は標準では未導入・§E8）"
+            if fmt == "3mf"
+            else "Blender のバージョン/構成を確認してください"
+        )
+        raise _capability_unavailable(
+            f"{fmt} 形式の export operator がこの環境では利用できません", hint
+        )
+
+    # セレクタ解決: --targets 指定=その集合 / --use-selection=現在の選択集合 / どちらも省略=シーン全体（None）。
+    if targets is not None:
+        select_objs = gateway.require_targets(str(targets))
+    elif use_selection:
+        select_objs = gateway.current_selection()
+        _require_input(
+            len(select_objs) > 0,
+            symptom="現在の選択集合が空です（--use-selection 指定）",
+            remediation="select で対象を選ぶか、--targets で対象を指定してください",
+        )
+    else:
+        select_objs = None  # シーン全体
+
+    # 出力先ディレクトリの不在は operator の生 RuntimeError（INTERNAL 化）になり得るため弾く（print-export と同流儀）。
+    parent = os.path.dirname(os.path.abspath(path)) or "."
+    _require_input(
+        os.path.isdir(parent),
+        symptom=f"出力先ディレクトリがありません: {parent}",
+        remediation="存在するディレクトリのパスを指定してください",
+    )
+
+    meta = gateway.export_generic(fmt, operator, path, select_objs=select_objs)
+    try:
+        sha, size = _file_sha256_size(path)
+    except (
+        OSError
+    ) as e:  # 書き出し後の読み取り失敗は INTERNAL でなく業務エラーへ（print-export と同流儀）。
+        raise JsonRpcError(
+            RPC_BUSINESS_ERROR,
+            ErrorCode.E_OPERATOR,
+            make_error(
+                ErrorCode.E_OPERATOR,
+                category=ErrorCategory.ENVIRONMENT,
+                retryable=False,
+                symptom=f"出力ファイルの読み取りに失敗しました: {e}",
+                remediation="ディスク容量/権限/パスを確認してください",
+            ),
+        ) from e
+    data = {"path": os.path.abspath(path), "size": size, "sha256": sha, **meta}
+    # 読み取り専用（選択は save/restore で非破壊）。fingerprint は成果物の content-address（capture/print-export
+    # と同流儀）。STL は決定的だが gltf/fbx はメタ情報で版/実行ごとに変わり得るため、版間 golden は
+    # 往復 bbox（smoke）で検証し sha は「この成果物の id」として扱う。
+    return _ok("export", data, fingerprint=sha[:16])
+
+
 def _png_dimensions(path: str) -> tuple[int, int] | None:
     """PNG の IHDR から実出力解像度 (width, height) を読む。
 
@@ -1275,6 +1370,7 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "print-check": _print_check,
     "print-repair": _print_repair,
     "print-export": _print_export,
+    "export": _export,
     "capture": _capture,
     "undo": _undo,
     "redo": _redo,

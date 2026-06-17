@@ -104,6 +104,25 @@ def stl_binary_bbox(path):
     return (min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs))
 
 
+def obj_text_bbox(path):
+    """OBJ テキストの `v` 行から world AABB (min,max) と頂点数を読む（export の world 焼き/選択検証用）。
+
+    export は world 焼き（matrix_world 適用）するため `v` 行は world 座標。worker スレッドから
+    bpy.ops を呼べない（dispatch はメイン直列）ため、再 import せずファイルを直接パースする。
+    """
+    xs, ys, zs = [], [], []
+    with open(path, encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            if line.startswith("v "):
+                _, sx, sy, sz = line.split()[:4]
+                xs.append(float(sx))
+                ys.append(float(sy))
+                zs.append(float(sz))
+    if not xs:
+        return None, None, 0
+    return (min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs)), len(xs)
+
+
 def ensure_cube():
     cube = bpy.data.objects.get("Cube")
     if cube is None:
@@ -1868,6 +1887,99 @@ def run_calls():
     except client.RpcRemoteError as e:
         assert e.error.get("message") == "INVALID_PARAMS", e.error
     print("print_export_guards_ok")
+
+    # export（M9 T9.1・多形式 export）: print-export の作法を obj/fbx/gltf/stl へ一般化（§E9）。
+    # 検証は worker スレッドから bpy.ops を呼べない（dispatch メイン直列）ため、出力ファイルを直接
+    # パースして world 焼き/選択を裏付ける。往復 bbox 全形式一致は fileio_spike.py（両版）が担う。
+    gen_dir = tempfile.mkdtemp(prefix="bli-gen-export-smoke-")
+
+    # --targets でターゲットのみ出力（STL）: ExpCube は world (5,0,0)・size 2 → bbox x∈[4,6]。
+    # もし選択が効かず全シーンを出すと原点 Cube（x∈[-1,1]）を含み min x が -1 になる＝選択 param の裏付け。
+    gx_stl = os.path.join(gen_dir, "exp.stl")
+    gx1, _ = call_retry("export", {"format": "stl", "path": gx_stl, "targets": "ExpCube"})
+    assert gx1["data"]["format"] == "stl", gx1["data"]
+    assert gx1["data"]["use_selection"] is True, gx1["data"]
+    assert gx1["data"]["exported_objects"] == ["ExpCube"], gx1["data"]
+    assert gx1["data"]["operator"] == "wm.stl_export", gx1["data"]
+    bmn, bmx = stl_binary_bbox(gx1["data"]["path"])
+    assert approx(bmn, (4.0, -1.0, -1.0)) and approx(bmx, (6.0, 1.0, 1.0)), (bmn, bmx)
+    with open(gx1["data"]["path"], "rb") as _f:
+        assert gx1["data"]["sha256"] == _hashlib.sha256(_f.read()).hexdigest(), gx1["data"]
+    assert gx1["fingerprint"] == gx1["data"]["sha256"][:16], gx1
+
+    # --targets で OBJ 出力: world 焼きの v 行 bbox = x∈[4,6]・頂点数8（選択が効いている裏付け）。
+    gx_obj = os.path.join(gen_dir, "exp.obj")
+    gx2, _ = call_retry("export", {"format": "obj", "path": gx_obj, "targets": "ExpCube"})
+    assert gx2["data"]["operator"] == "wm.obj_export", gx2["data"]
+    omn, omx, overts = obj_text_bbox(gx2["data"]["path"])
+    assert approx(omn, (4.0, -1.0, -1.0)) and approx(omx, (6.0, 1.0, 1.0)), (omn, omx)
+    assert overts == 8, overts  # cube=8頂点（OBJ は法線/UV で頂点分割しない）
+
+    # シーン全体（targets/use_selection 省略）の OBJ: 原点 Cube（x -1）と ExpCube（x 6）を含み bbox が広がる。
+    gx_all = os.path.join(gen_dir, "scene.obj")
+    gx3, _ = call_retry("export", {"format": "obj", "path": gx_all})
+    assert gx3["data"]["use_selection"] is False, gx3["data"]
+    assert gx3["data"]["exported_objects"] is None, gx3["data"]  # 全シーンは列挙しない
+    amn, amx, averts = obj_text_bbox(gx3["data"]["path"])
+    assert amn[0] <= -1.0 + 1e-4 and amx[0] >= 6.0 - 1e-4, (amn, amx)  # 原点 Cube〜ExpCube を内包
+    assert averts > 8, averts  # 複数オブジェクト分の頂点
+
+    # --use-selection: select で ExpCube を選び、現在の選択集合のみ出力（targets 省略）。
+    call_retry("select", {"targets": "ExpCube"})
+    gx_sel = os.path.join(gen_dir, "sel.obj")
+    gx4, _ = call_retry("export", {"format": "obj", "path": gx_sel, "use_selection": True})
+    assert gx4["data"]["use_selection"] is True, gx4["data"]
+    assert gx4["data"]["exported_objects"] == ["ExpCube"], gx4["data"]
+    smn, smx, _sverts = obj_text_bbox(gx4["data"]["path"])
+    assert approx(smn, (4.0, -1.0, -1.0)) and approx(smx, (6.0, 1.0, 1.0)), (smn, smx)
+
+    # glTF（.glb=GLB 単一バイナリ）/ FBX: 単一ファイルが生成され metadata が整う（往復 bbox は spike が担保）。
+    gx_glb = os.path.join(gen_dir, "exp.glb")
+    gx5, _ = call_retry("export", {"format": "gltf", "path": gx_glb, "targets": "ExpCube"})
+    assert gx5["data"]["operator"] == "export_scene.gltf", gx5["data"]
+    assert os.path.getsize(gx5["data"]["path"]) > 0, gx5["data"]
+    with open(gx5["data"]["path"], "rb") as _f:
+        assert _f.read(4) == b"glTF", "GLB は magic 'glTF' で始まる"  # 単一バイナリ確認
+    gx_fbx = os.path.join(gen_dir, "exp.fbx")
+    gx6, _ = call_retry("export", {"format": "fbx", "path": gx_fbx, "targets": "ExpCube"})
+    assert gx6["data"]["operator"] == "export_scene.fbx", gx6["data"]
+    assert os.path.getsize(gx6["data"]["path"]) > 0, gx6["data"]
+    with open(gx6["data"]["path"], "rb") as _f:
+        assert _f.read(20).startswith(b"Kaydara FBX Binary"), "binary FBX は Kaydara magic で始まる"
+
+    # glTF は GLB 単一固定（.glb 必須）: .gltf 等は bpy 到達前に USER_INPUT で弾く（INVALID_PARAMS）。
+    try:
+        call_retry("export", {"format": "gltf", "path": os.path.join(gen_dir, "x.gltf")})
+        raise AssertionError("gltf の非 .glb 拡張子は INVALID_PARAMS のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "INVALID_PARAMS", e.error
+
+    # 3mf は両版とも export operator が実体なし（§E8）→ CAPABILITY_UNAVAILABLE。
+    try:
+        call_retry("export", {"format": "3mf", "path": os.path.join(gen_dir, "x.3mf")})
+        raise AssertionError("3mf export は CAPABILITY_UNAVAILABLE のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "CAPABILITY_UNAVAILABLE", e.error
+    # 存在しない targets は E_TARGET_NOT_FOUND（USER_INPUT）。
+    try:
+        call_retry("export", {"format": "stl", "path": gx_stl, "targets": "NoSuchObj_xyz"})
+        raise AssertionError("存在しない targets は E_TARGET_NOT_FOUND のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "E_TARGET_NOT_FOUND", e.error
+    # 出力先ディレクトリ不在は USER_INPUT（bpy 到達前）。
+    try:
+        call_retry(
+            "export",
+            {
+                "format": "stl",
+                "path": os.path.join(gen_dir, "no_such", "x.stl"),
+                "targets": "ExpCube",
+            },
+        )
+        raise AssertionError("不在ディレクトリは INVALID_PARAMS のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "INVALID_PARAMS", e.error
+    print("export_multiformat_ok", "glb=", os.path.getsize(gx_glb), "fbx=", os.path.getsize(gx_fbx))
 
     # capture（実地FB #1）: --background では GUI（window/area）が無いため viewport/screen は
     # E_PRECONDITION で graceful に縮退する（INTERNAL にしない）。実機 viewport/screen/render の

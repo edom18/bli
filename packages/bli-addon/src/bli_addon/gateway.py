@@ -1516,32 +1516,18 @@ def resolve_export_operator(fmt: str) -> str | None:
 
 
 def _select_only(obj: Any) -> tuple[list[Any], Any]:
-    """obj だけを選択し active にする。元の (selected, active) を返す（restore 用）。
+    """obj だけを選択し active にする（単体専用・`_select_set([obj])` への薄い委譲）。
 
     `wm.stl_export(export_selected_objects=True)` は **永続化された view layer の選択フラグ**を見るため、
-    run_operator の `temp_override(selected_objects=[obj])` だけでは対象を絞れない（§E8 のスパイクは
-    select_set で対象を絞って確認済み・override は context 読みの operator にしか効かない）。そこで実選択を
-    一時的に対象1個へ書き換え、`_restore_selection` で厳密に戻す（mutates=False を保つ）。この「override
-    ではなく実選択を使う」理由は非自明なので、安易な簡素化で壊さないよう明記する。対象がアクティブ
-    view layer に無ければ select_set が失敗するので E_PRECONDITION で弾く（INTERNAL 回避）。
+    run_operator の `temp_override(selected_objects=[obj])` だけでは対象を絞れない（§E8）。実選択を
+    一時的に書き換え `_restore_selection` で厳密に戻す（mutates=False を保つ）。選択ロジックの真実は
+    `_select_set` に一本化し、print-export(単体) と export(多形式) で二重実装が drift しないようにする。
     """
-    view_layer = bpy.context.view_layer
-    if obj.name not in {o.name for o in view_layer.objects}:
-        raise _op_error(
-            ErrorCode.E_PRECONDITION,
-            f"対象がアクティブ view layer にありません（export 不可）: {obj.name}",
-        )
-    saved_selected = [o for o in view_layer.objects if o.select_get()]
-    saved_active = view_layer.objects.active
-    for o in view_layer.objects:
-        o.select_set(False)
-    obj.select_set(True)
-    view_layer.objects.active = obj
-    return saved_selected, saved_active
+    return _select_set([obj])
 
 
 def _restore_selection(saved_selected: list[Any], saved_active: Any) -> None:
-    """_select_only で退避した選択/active を厳密に復元する（非破壊）。"""
+    """_select_only/_select_set で退避した選択/active を厳密に復元する（非破壊）。"""
     view_layer = bpy.context.view_layer
     for o in view_layer.objects:
         o.select_set(False)
@@ -1590,6 +1576,107 @@ def export_stl(
         "apply_modifiers": apply_modifiers,
         # scale_length は検証専用（出力には use_scene_unit=False で未反映）。1000倍ずれ設定の検知材料。
         "scale_length": round(bpy.context.scene.unit_settings.scale_length, 8),
+    }
+
+
+# ---- 多形式 export（M9 T9.1・print-export の STL 限定を一般化・研究 §E9）----
+#
+# 形式 -> selection 制御 param 名（§E9 実機確定・5.0/4.4 同一）。stl/obj は export_selected_objects、
+# gltf/fbx は use_selection。これが「print-export(STL 単体)を多形式へ広げる」核（形式別引数マップ）。
+_EXPORT_SELECTION_PARAM: dict[str, str] = {
+    "stl": "export_selected_objects",
+    "obj": "export_selected_objects",
+    "gltf": "use_selection",
+    "fbx": "use_selection",
+}
+
+
+def require_targets(selector: str, *, regex: bool = False) -> list[Any]:
+    """対象を1つ以上に解決する。0件はエラー（複数は許容＝export 等の集合操作向け・require_single の緩和版）。"""
+    found = resolve_targets(selector, regex=regex)
+    if not found:
+        raise _op_error(
+            ErrorCode.E_TARGET_NOT_FOUND,
+            f"対象が見つかりません: {selector}",
+            category=ErrorCategory.USER_INPUT,
+        )
+    return found
+
+
+def current_selection() -> list[Any]:
+    """アクティブ view layer で現在選択されているオブジェクト群（export --use-selection 用）。"""
+    return [o for o in bpy.context.view_layer.objects if o.select_get()]
+
+
+def _select_set(objs: list[Any]) -> tuple[list[Any], Any]:
+    """objs 群だけを選択し先頭を active にする。元の (selected, active) を返す（restore 用）。
+
+    export_selected_objects/use_selection は永続化された view layer の選択フラグを見るため
+    temp_override では絞れない（§E8・_select_only と同理由）。これは _select_only の複数対象版。
+    対象がアクティブ view layer に無ければ E_PRECONDITION（INTERNAL 回避）。
+    """
+    view_layer = bpy.context.view_layer
+    vl_names = {o.name for o in view_layer.objects}
+    missing = [o.name for o in objs if o.name not in vl_names]
+    if missing:
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"対象がアクティブ view layer にありません（export 不可）: {', '.join(missing[:5])}",
+        )
+    saved_selected = [o for o in view_layer.objects if o.select_get()]
+    saved_active = view_layer.objects.active
+    for o in view_layer.objects:
+        o.select_set(False)
+    for o in objs:
+        o.select_set(True)
+    view_layer.objects.active = objs[0]
+    return saved_selected, saved_active
+
+
+def export_generic(
+    fmt: str, operator_path: str, path: str, *, select_objs: list[Any] | None
+) -> dict[str, Any]:
+    """多形式 export（print-export の STL 限定を一般化・§E9）。
+
+    select_objs=None はシーン全体（selection param=False）/ list は対象のみ（対象を選択して param=True・
+    選択は save→restore で非破壊に戻す）。生 operator は run_operator 経由（AST guard 緑）。scale は
+    素通し（global_scale 等は渡さない＝既定 1.0・print-export が 3D プリント用 scale 窓口・gltf は
+    scale param 自体が無い）。選択は context override にも全集合を載せる（stl/obj は永続選択を、
+    gltf/fbx が override を読む場合も全対象が渡るよう belt-and-suspenders）。
+    glTF は **GLB 単一固定**（`export_format` の有効値は両版とも ('GLB','GLTF_SEPARATE') のみ＝
+    GLTF_EMBEDDED は存在しない・実機確認済み。SEPARATE は .bin 分離で sha256/size が崩れるため不採用）。
+    .glb 拡張子の要求は ops 側で bpy 到達前に検証する。
+    """
+    ns, _, name = operator_path.partition(".")
+    op = getattr(getattr(bpy.ops, ns), name)
+    sel_param = _EXPORT_SELECTION_PARAM[fmt]
+    kwargs: dict[str, Any] = {"filepath": path, "check_existing": False}
+    if fmt == "gltf":
+        kwargs["export_format"] = "GLB"
+
+    if select_objs is None:
+        kwargs[sel_param] = False
+        run_operator(op, **kwargs)
+        exported = None
+    else:
+        saved_selected, saved_active = _select_set(select_objs)
+        kwargs[sel_param] = True
+        extra = {
+            "active_object": select_objs[0],
+            "object": select_objs[0],
+            "selected_objects": list(select_objs),
+            "selected_editable_objects": list(select_objs),
+        }
+        try:
+            run_operator(op, extra_override=extra, **kwargs)
+        finally:
+            _restore_selection(saved_selected, saved_active)
+        exported = sorted(o.name for o in select_objs)
+    return {
+        "format": fmt,
+        "operator": operator_path,
+        "use_selection": select_objs is not None,
+        "exported_objects": exported,
     }
 
 
