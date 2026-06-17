@@ -2029,6 +2029,44 @@ def run_calls():
         assert e.error.get("message") == "E_OPERATOR", e.error
     print("import_multiformat_ok")
 
+    # save（M9 T9.3）: .blend 保存 + backup（.blend1）の決定的制御（save_version 一時上書き）を裏付ける。
+    # 注: save_as_mainfile は bpy.data.filepath を当該パスへ更新する（以降の no-path save が現在ファイルへ）。
+    save_dir = tempfile.mkdtemp(prefix="bli-save-smoke-")
+    sv_path = os.path.join(save_dir, "scene.blend")
+    sv_abs = os.path.abspath(sv_path)
+    # 1) 新規保存: ファイル生成・有効な .blend magic・backed_up=False（既存なし）。
+    # magic は版で異なる: 4.4=非圧縮 b"BLENDER" / 5.0=zstd 圧縮 b"\x28\xb5\x2f\xfd"（compress 既定でも
+    # 5.0 は zstd・研究 §E10）。どちらも valid な .blend なので両対応で判定する。
+    sv1, _ = call_retry("save", {"path": sv_path})
+    assert sv1["data"]["path"] == sv_abs, sv1["data"]
+    assert sv1["data"]["size"] > 0, sv1["data"]
+    assert sv1["data"]["backed_up"] is False and sv1["data"]["backup_path"] is None, sv1["data"]
+    with open(sv_abs, "rb") as _sf:
+        _magic = _sf.read(7)
+    assert _magic.startswith(b"BLENDER") or _magic.startswith(b"\x28\xb5\x2f\xfd"), repr(_magic)
+    # 2) 上書き保存（backup 既定 on）: .blend1 が生成される。
+    sv2, _ = call_retry("save", {"path": sv_path})
+    assert sv2["data"]["backed_up"] is True, sv2["data"]
+    assert sv2["data"]["backup_path"] == sv_abs + "1", sv2["data"]
+    assert os.path.exists(sv_abs + "1"), "backup .blend1 が生成される"
+    # 3) --no-backup で上書き: .blend1 を作らない（save_version=0 抑止）。既存 backup を消して検証。
+    os.remove(sv_abs + "1")
+    sv3, _ = call_retry("save", {"path": sv_path, "backup": False})
+    assert sv3["data"]["backed_up"] is False and sv3["data"]["backup_path"] is None, sv3["data"]
+    assert not os.path.exists(sv_abs + "1"), (
+        "--no-backup は .blend1 を作らない（save_version=0 抑止）"
+    )
+    # 4) --path 省略: 直近 save で設定された現在の .blend へ保存（bpy.data.filepath 解決）。
+    sv4, _ = call_retry("save", {})
+    assert sv4["data"]["path"] == sv_abs, sv4["data"]
+    # 5) 保存先ディレクトリ不在は USER_INPUT（bpy 到達前）。
+    try:
+        call_retry("save", {"path": os.path.join(save_dir, "no_such", "x.blend")})
+        raise AssertionError("不在ディレクトリは INVALID_PARAMS のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "INVALID_PARAMS", e.error
+    print("save_ok", "size=", sv1["data"]["size"])
+
     # capture（実地FB #1）: --background では GUI（window/area）が無いため viewport/screen は
     # E_PRECONDITION で graceful に縮退する（INTERNAL にしない）。実機 viewport/screen/render の
     # 機能検証は GUI の capture_spike.py（両版確認済み）が担う。

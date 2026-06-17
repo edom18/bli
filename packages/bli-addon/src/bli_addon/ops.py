@@ -1263,6 +1263,88 @@ def _import(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     return _ok_offload("import", data, "import/v1", fingerprint=fp)
 
 
+def _save(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    """.blend 保存（M9 T9.3・上書きは既定 backup・研究 §E10）。"""
+    cmd = _command("save")
+    _validate(cmd, params)
+    path = params.get("path")
+    backup = bool(params.get("backup", True))
+    # --path 指定時の拡張子チェックは bpy 不要なので早期に弾く（.glb 必須化と同流儀）。省略時は現在の
+    # .blend へ保存するため拡張子は問わない（既存ファイル）。
+    if path is not None:
+        _require_input(
+            str(path).strip() != "",
+            symptom="--path が空です",
+            remediation="保存先(.blend)を指定するか --path を省略してください",
+        )
+        _require_input(
+            str(path).lower().endswith(".blend"),
+            symptom="--path は .blend 拡張子で指定してください",
+            remediation="保存先を <name>.blend にしてください",
+        )
+
+    import os
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+
+    # target 解決: --path 指定=そのパス / 省略=現在の .blend（未保存=空なら USER_INPUT）。
+    if path is not None:
+        target = os.path.abspath(str(path))
+    else:
+        current = gateway.current_filepath()
+        _require_input(
+            current.strip() != "",
+            symptom="まだ一度も保存されていません（保存先が不明）",
+            remediation="--path で保存先(.blend)を指定してください",
+        )
+        target = os.path.abspath(current)
+
+    # 保存先ディレクトリの不在は operator の生 RuntimeError になり得るため bpy 到達前に弾く（export と同流儀）。
+    parent = os.path.dirname(target) or "."
+    _require_input(
+        os.path.isdir(parent),
+        symptom=f"保存先ディレクトリがありません: {parent}",
+        remediation="存在するディレクトリのパスを指定してください",
+    )
+    # backup を出したかは「保存前に既存ファイルがあったか」で決まる（新規保存は backup なし）。
+    existed = os.path.isfile(target)
+
+    gateway.save_blend(target, backup=backup)
+    try:
+        size = os.path.getsize(target)
+    except OSError as e:  # 保存後の読み取り失敗は INTERNAL でなく業務エラーへ（export と同流儀）。
+        raise JsonRpcError(
+            RPC_BUSINESS_ERROR,
+            ErrorCode.E_OPERATOR,
+            make_error(
+                ErrorCode.E_OPERATOR,
+                category=ErrorCategory.ENVIRONMENT,
+                retryable=False,
+                symptom=f"保存ファイルの確認に失敗しました: {e}",
+                remediation="ディスク容量/権限/パスを確認してください",
+            ),
+        ) from e
+
+    # backup を取ったかは「保存後に .blend1 が実在するか」で確定する（backup 要求 かつ 保存前に既存 だけ
+    # で報告すると、native backup が rename に失敗したケースで『backup 済み』と偽報告し、ロールバック不能を
+    # 安全と誤認させる）。Blender native は <name>.blend → <name>.blend1（§E10・敵対的レビュー P1）。
+    backup_path = target + "1"
+    backed_up = backup and existed and os.path.isfile(backup_path)
+    data = {
+        "path": target,
+        "size": size,
+        "backed_up": backed_up,
+        "backup_path": backup_path if backed_up else None,
+    }
+    # fingerprint は保存結果の軽量 digest（path|size）。.blend 全体 sha は大容量/非決定的のため採らない（§E10）。
+    import hashlib
+
+    fp = hashlib.sha256(f"{target}|{size}".encode()).hexdigest()[:16]
+    return _ok("save", data, fingerprint=fp)
+
+
 def _png_dimensions(path: str) -> tuple[int, int] | None:
     """PNG の IHDR から実出力解像度 (width, height) を読む。
 
@@ -1429,6 +1511,7 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "print-export": _print_export,
     "export": _export,
     "import": _import,
+    "save": _save,
     "capture": _capture,
     "undo": _undo,
     "redo": _redo,

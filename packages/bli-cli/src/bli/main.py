@@ -780,6 +780,30 @@ def import_(
 
 
 @app.command()
+def save(
+    path: str | None = typer.Option(
+        None, "--path", help="保存先 .blend（省略時は現在のファイル・未保存なら要指定）"
+    ),
+    backup: bool = typer.Option(
+        True, "--backup/--no-backup", help="上書き時に .blend1 backup を残す（既定 on）"
+    ),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """.blend ファイルに保存する（上書きは既定でバックアップ .blend1 を残す）。"""
+    params: dict[str, Any] = {"backup": backup}
+    if path is not None:
+        params["path"] = path
+
+    def human(data: dict[str, Any]) -> str:
+        bk = f" backup={data.get('backup_path')}" if data.get("backed_up") else ""
+        return f"saved -> {data.get('path')} ({data.get('size')}B){bk}"
+
+    _rpc("save", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command()
 def select(
     targets: str = typer.Option(
         ..., "--targets", "--target", help="対象オブジェクト（name|regex）"

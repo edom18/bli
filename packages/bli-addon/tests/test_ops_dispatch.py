@@ -1374,3 +1374,48 @@ def test_import_valid_params_reach_bpy():
     ):
         with pytest.raises(ModuleNotFoundError):
             ops.dispatch("import", _import_params(**extra), INFO)
+
+
+# ---- M9 T9.3 save（.blend 保存）の param 検証（bpy 不要）----
+
+
+def test_save_non_blend_extension_invalid_params():
+    # --path は .blend 必須（backup naming/上書き安全のため）。.txt 等は bpy 到達前に USER_INPUT。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("save", {"path": "out.txt"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_save_empty_path_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("save", {"path": "   "}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_save_bad_backup_type_invalid_params():
+    # backup は BOOL。非真偽値は型エラーで INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("save", {"backup": "yes"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_save_unknown_param_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("save", {"bogus": 1}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_save_valid_params_reach_bpy():
+    # 妥当な params（path 省略=現在ファイル / .blend 指定 / backup トグル）は検証を通過し gateway の
+    # 遅延 import まで到達する（保存/未保存判定/backup は bpy 必須＝smoke で検証）。
+    for extra in (
+        {},  # path 省略（現在ファイルへ・未保存判定は bpy 後）
+        {"path": "out.blend"},
+        {"path": "out.blend", "backup": False},
+    ):
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("save", extra, INFO)
