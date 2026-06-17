@@ -113,7 +113,9 @@ errors: `E_TARGET_NOT_FOUND` / `E_PRECONDITION(shared mesh: users>=2)` / `E_MODE
 | `save` | `--path?` `--backup?` | 保存パス | ✓ | △ | s |
 | `open` | `--path` | シーン要約 | ✓ | ✓ | s |
 | `import` | `--format obj\|fbx\|gltf\|stl\|3mf` `--path` | 取込オブジェクト一覧 | ✓ | ✓ | s |
-| `export` | `--format obj\|fbx\|gltf\|stl\|3mf` `--path` `--use-selection?` | 出力パス | - | ✓ | s |
+| `export` | `--format obj\|fbx\|gltf\|stl\|3mf` `--path` `--targets?` `--use-selection?` | 出力パス | - | ✓ | s |
+
+> `export`（**M9 T9.1 実装済み・読み取り専用** mutates=False）: print-export（3Dプリント特化・単一+global_scale 一本化）を多形式へ一般化（研究 §E9）。セレクタは `--targets <name\|regex>` 指定=その集合を選択して書き出す / `--use-selection`=現在の選択集合 / どちらも省略=シーン全体。selection 制御 param は形式別（stl/obj=`export_selected_objects` / gltf/fbx=`use_selection`）で gateway が写像。scale は 1.0 素通し（3Dプリント用スケールは print-export が窓口・gltf は scale param 自体が無い）。**glTF は GLB 単一固定で `--path` は `.glb` 必須**（`export_format` 有効値は両版とも GLB/GLTF_SEPARATE のみ・SEPARATE は .bin 分離で統計が崩れるため不採用・GLTF_EMBEDDED は存在せず）。**`--format 3mf` は両版とも export operator 不在（§E8）→ `CAPABILITY_UNAVAILABLE`（category=ENVIRONMENT）+ 別形式 hint**（黙って差し替えない）。result `{path(絶対), size, sha256, format, operator, use_selection, exported_objects}`（exported_objects はシーン全体時 null）。fingerprint=出力ファイルの content-address（sha 先頭16桁・STL は決定的 / gltf・fbx は環境で変わり得るため版間 golden は往復 bbox で検証）。選択は save/restore で非破壊。
 
 ## 逃げ道
 | method | params | result | M | St |

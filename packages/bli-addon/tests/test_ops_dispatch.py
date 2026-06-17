@@ -1232,3 +1232,88 @@ def test_print_export_valid_params_reach_bpy():
     ):
         with pytest.raises(ModuleNotFoundError):
             ops.dispatch("print-export", _export_params(**extra), INFO)
+
+
+# ---- M9 T9.1 export（多形式 export）の param 検証（bpy 不要）----
+
+
+def _generic_export_params(**extra: object) -> dict[str, object]:
+    base: dict[str, object] = {"format": "stl", "path": "out.stl"}
+    base.update(extra)
+    return base
+
+
+def test_export_missing_format_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("export", {"path": "out.stl"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_export_missing_path_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("export", {"format": "stl"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_export_bad_format_invalid_params():
+    # format は ENUM(obj|fbx|gltf|stl|3mf)。範囲外（ply 等）は schema 検証で INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("export", _generic_export_params(format="ply"), INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_export_empty_path_invalid_params():
+    # 空/空白のみの path は無音失敗を避けるため bpy 到達前に USER_INPUT で弾く。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("export", _generic_export_params(path="   "), INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_export_unknown_param_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("export", _generic_export_params(bogus=1), INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_export_bad_use_selection_type_invalid_params():
+    # use_selection は BOOL。非真偽値は型エラーで INVALID_PARAMS
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("export", _generic_export_params(use_selection="yes"), INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_export_empty_targets_invalid_params():
+    # 空/空白のみの --targets は空 regex で全マッチ＝シーン全体に化けるため bpy 到達前に USER_INPUT で弾く。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("export", _generic_export_params(targets="  "), INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_export_gltf_non_glb_extension_invalid_params():
+    # gltf は GLB 単一固定（.glb 必須）。.gltf 等は無効 enum→INTERNAL を避け bpy 到達前に USER_INPUT。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("export", _generic_export_params(format="gltf", path="out.gltf"), INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_export_valid_params_reach_bpy():
+    # 妥当な params（各形式・targets/use_selection/シーン全体・両指定）は検証を通過し gateway の遅延
+    # import まで到達する（能力解決/実出力は bpy 必須＝smoke で検証）。3mf も gateway 到達後に CAPABILITY。
+    for extra in (
+        {},  # シーン全体（targets/use_selection 省略）
+        {"targets": "Cube"},
+        {"use_selection": True},
+        {"targets": "Cube", "use_selection": True},  # 両指定（targets 優先・use_selection 無視）
+        {"format": "obj"},
+        {"format": "gltf", "path": "out.glb"},
+        {"format": "fbx", "path": "out.fbx"},
+        {"format": "3mf", "path": "out.3mf"},
+    ):
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("export", _generic_export_params(**extra), INFO)

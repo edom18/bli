@@ -467,6 +467,39 @@ command(
     required_mode=Mode.OBJECT,
 )
 
+# ---- ファイルI/O（M9 T9.1〜）----
+command(
+    "export",
+    "シーン/選択を多形式で書き出す（obj/fbx/gltf/stl・3mf は未導入で CAPABILITY）",
+    # print-export（3Dプリント特化・単一+global_scale 一本化）の作法を多形式へ一般化（研究 §E9）。
+    # セレクタ: --targets 指定=対象を選択して書き出す / --use-selection=現在の選択集合 / どちらも省略=
+    # シーン全体。選択 param 名は形式別（stl/obj=export_selected_objects・gltf/fbx=use_selection）で
+    # gateway が写像する。scale は 1.0 素通し（3D プリント用スケールは print-export が窓口・gltf は
+    # scale param 自体が無い・§E9）。glTF は GLB 単一固定で --path は .glb 必須（export_format 有効値は
+    # 両版とも GLB/GLTF_SEPARATE のみ・SEPARATE は .bin 分離で統計が崩れるため不採用・§E9）。
+    # 3mf は両版とも export operator 不在（§E8）→ CAPABILITY_UNAVAILABLE + 別形式 hint。
+    # ファイルを書くだけでシーンは変えない（mutates=False・選択は save/restore で非破壊）。
+    params=(
+        p(
+            "format",
+            ParamType.ENUM,
+            required=True,
+            choices=["obj", "fbx", "gltf", "stl", "3mf"],
+            help="出力形式",
+        ),
+        p("path", ParamType.PATH, required=True, help="出力ファイルパス"),
+        p("targets", ParamType.STR, help="対象（name|regex・指定時はこれを選択して書き出す）"),
+        p(
+            "use_selection",
+            ParamType.BOOL,
+            default=False,
+            help="現在の選択集合のみ書き出す（targets 省略時）",
+        ),
+    ),
+    mutates=False,
+    required_mode=Mode.OBJECT,
+)
+
 # ---- 逃げ道（既定 off / path 型確認用 / 実装は M11）----
 command(
     "exec-python",

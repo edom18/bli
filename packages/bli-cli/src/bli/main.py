@@ -727,6 +727,41 @@ def print_export(
 
 
 @app.command()
+def export(
+    fmt: str = typer.Option(..., "--format", help="出力形式: obj|fbx|gltf|stl|3mf"),
+    path: str = typer.Option(..., "--path", help="出力ファイルパス（gltf は .glb 必須＝GLB 単一）"),
+    targets: str | None = typer.Option(
+        None, "--targets", "--target", help="対象（name|regex・指定時はこれを書き出す）"
+    ),
+    use_selection: bool = typer.Option(
+        False,
+        "--use-selection",
+        help="現在の選択集合のみ書き出す（targets 省略時・省略でシーン全体）",
+    ),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """シーン/選択を多形式で書き出す（obj/fbx/gltf/stl・3mf は未導入で CAPABILITY）。"""
+    params: dict[str, Any] = {"format": fmt, "path": path, "use_selection": use_selection}
+    if targets is not None:
+        params["targets"] = targets
+
+    def human(data: dict[str, Any]) -> str:
+        scope = (
+            f"objects={data.get('exported_objects')}"
+            if data.get("exported_objects") is not None
+            else "whole scene"
+        )
+        return (
+            f"exported [{data.get('format')}] {scope} -> {data.get('path')} "
+            f"({data.get('size')}B, sha={str(data.get('sha256'))[:12]})"
+        )
+
+    _rpc("export", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command()
 def select(
     targets: str = typer.Option(
         ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
