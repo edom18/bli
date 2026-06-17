@@ -542,6 +542,29 @@ command(
     mutates=True,
     required_mode=Mode.ANY,
 )
+command(
+    "open",
+    ".blend ファイルを開く（シーン全体を置換・未保存変更があれば --force 必須）",
+    # target = --path（abspath・.blend 必須）。ファイル不在は bpy 到達前 USER_INPUT・壊れ .blend は
+    # E_OPERATOR（INTERNAL にしない・§6e）。open_mainfile はシーン全体を置換するが、常駐サーバの
+    # persistent pump タイマ / "bli-accept" TCP スレッドは open を跨いで生存することを実機確定済み
+    # （研究 §E11・open_spike/open_job_spike）。よって再登録は不要で open を含む 1 ジョブ内で結果構築→
+    # return も成立する。**未保存ガード**: bli が最後の save/open 以降に mutate していたら（自前の
+    # session_state 追跡＝bpy.data.is_dirty は dispatch 文脈で save 後に reset せず使えない・§E11）
+    # E_PRECONDITION で拒否し、--force で破棄して開く。save とは扱いが対称（mutates=True・モード非依存）。
+    # result `{path, scene, objects, forced, discarded_unsaved}`・fingerprint=scene_state_fingerprint。
+    params=(
+        p("path", ParamType.PATH, required=True, help="開く .blend ファイル"),
+        p(
+            "force",
+            ParamType.BOOL,
+            default=False,
+            help="未保存変更を破棄して開く（既定 off）",
+        ),
+    ),
+    mutates=True,
+    required_mode=Mode.ANY,
+)
 
 # ---- 逃げ道（既定 off / path 型確認用 / 実装は M11）----
 command(

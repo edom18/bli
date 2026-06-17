@@ -454,6 +454,35 @@ def test_save_no_args_local_ok():
     assert res.exit_code != 4  # INVALID_PARAMS では落ちない（接続不能 exit 3 等になる）
 
 
+def test_m9_open_discoverable():
+    # M9 T9.4 の open が実装済み一覧に出る + スキーマ（mutates・path 必須・force 既定 False）。
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    by_name = {c["name"]: c for c in data["commands"]}
+    assert "open" in by_name
+    assert by_name["open"]["stability"] == "stable"
+    assert by_name["open"]["mutates"] is True  # シーン全体を置換する破壊的操作
+    schema = json.loads(runner.invoke(app, ["help", "--command", "open", "--json"]).output)[
+        "schema"
+    ]
+    assert set(schema["properties"]) == {"path", "force"}
+    assert schema["required"] == ["path"]
+    assert schema["properties"]["force"]["default"] is False
+
+
+def test_open_missing_path_local_validation():
+    # --path 必須。省略は送信前にローカルで弾かれる（Typer の必須オプション）。
+    res = runner.invoke(app, ["open", "--json"])
+    assert res.exit_code != 0
+
+
+def test_open_existing_file_local_ok(tmp_path):
+    # 妥当な params はローカル検証を通過する（接続段で落ちる＝検証は通る・exit 4 ではない）。
+    f = tmp_path / "scene.blend"
+    f.write_bytes(b"BLENDER-dummy")
+    res = runner.invoke(app, ["open", "--path", str(f), "--json"])
+    assert res.exit_code != 4
+
+
 def test_m8_capture_discoverable():
     # 実地FB #1 の capture が実装済み一覧に出る + スキーマ（read-only・source ENUM 既定 viewport）
     data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)

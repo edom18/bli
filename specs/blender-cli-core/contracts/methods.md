@@ -111,7 +111,7 @@ errors: `E_TARGET_NOT_FOUND` / `E_PRECONDITION(shared mesh: users>=2)` / `E_MODE
 | method | params | result | M | H | St |
 |--------|--------|--------|:-:|:-:|:--:|
 | `save` | `--path?` `--backup?` | 保存パス | ✓ | △ | s |
-| `open` | `--path` | シーン要約 | ✓ | ✓ | s |
+| `open` | `--path` `--force?` | シーン要約 | ✓ | ✓ | s |
 | `import` | `--format obj\|fbx\|gltf\|stl\|3mf` `--path` | 取込オブジェクト一覧 | ✓ | ✓ | s |
 | `export` | `--format obj\|fbx\|gltf\|stl\|3mf` `--path` `--targets?` `--use-selection?` | 出力パス | - | ✓ | s |
 
@@ -120,6 +120,8 @@ errors: `E_TARGET_NOT_FOUND` / `E_PRECONDITION(shared mesh: users>=2)` / `E_MODE
 > `import`（**M9 T9.2 実装済み・mutates=True**）: export と対称に operator を能力検出で解決（`import.<fmt>`・RESOLVERS）→不在は CAPABILITY_UNAVAILABLE。取込オブジェクトは **import 前後の `bpy.data.objects` 差分**で特定（名前衝突時 Blender が `.001` 等へリネームするため集合差が唯一信頼できる方式）。scale 引数は渡さず operator 既定（=1.0 相当）に委ねる（取込後の単位補正は transform）。**FBX import の版差**（5.0=`wm.fbx_import` / 4.4=`import_scene.fbx`）は RESOLVERS 優先順で吸収。**`--format 3mf` は両版とも import operator 不在（§E8）→ `CAPABILITY_UNAVAILABLE`**。入力ファイル不在は bpy 到達前に `INVALID_PARAMS`（USER_INPUT）・壊れたファイルは `E_OPERATOR`（INTERNAL にしない）。result `{format, operator, path(絶対), imported:[{name,type}], count}`・fingerprint=取込名集合の決定的ハッシュ。シーンにオブジェクトを足す破壊的操作（取込物は選択状態で残る）・大量取込は output_ref 退避（_ok_offload）。往復 golden（export→import で world bbox 一致）は smoke + 研究 §E9。
 
 > `save`（**M9 T9.3 実装済み・mutates=True・Mode.ANY**）: 現在のシーンを `.blend` に保存（`wm.save_as_mainfile`・研究 §E10）。target = `--path`（絶対化・`.blend` 必須）/ 省略時は現在ファイル（`bpy.data.filepath`・未保存=空なら USER_INPUT）。**上書きは既定でバックアップ**（`--backup` 既定 on・spec §セキュリティ「上書きは既定でバックアップ強制」）で、preferences `save_version` を `1 if backup else 0` に一時上書きして native `.blend1` 機構を決定的に制御し restore する（preference 非汚染・逐次処理前提で安全）。`--no-backup` で抑止。保存先 dir 不在は USER_INPUT。result `{path(絶対), size, backed_up, backup_path}`（backed_up は **保存後に `.blend1` の実在を確認**して確定＝偽報告防止・backup_path=`<target>1`）。fingerprint=metadata digest（path|size・.blend 全体 sha は大容量/非決定的のため不採用）。保存 .blend の magic は版差（4.4=非圧縮 `BLENDER` / 5.0=zstd 圧縮）。
+
+> `open`（**M9 T9.4 実装済み・mutates=True・Mode.ANY**）: `.blend` を開いてシーン全体を置換する（`wm.open_mainfile`・研究 §E11）。target = `--path`（絶対化・`.blend` 必須・save と対称）。**未保存ガード**: bli が最後の save/open 以降に mutating コマンドを実行していたら（自前の `session_state` 追跡）、open はその未保存変更を不可逆に失うため **`--force` なしは `E_PRECONDITION`** で拒否する。`--force`（既定 off）で破棄して開く。なぜ `bpy.data.is_dirty` を使わないか: dispatch（pump タイマ）文脈では **save 後も is_dirty が False に戻らず**、background では常時 True で信頼できない（§E11 実測）。`session_state` は dispatch で「mutates=True コマンドの実行 **前** に modified（pre-mark）/ save・open 成功で clean」と遷移する。**実行前 pre-mark の理由**: 途中まで mutate して例外を投げるハンドラ（例: material の create 後に assign 失敗）でも open が未保存を検知して --force を要求する **安全側** に倒すため（実行後フックだと partial mutation を取りこぼし silent data loss）。v1 は静的 `mutates` フラグ判定で **保守的**（select/undo や、検証失敗で何も変えなかった mutating コマンドも modified 扱い＝open に --force が要る安全側）・**bli 由来の変更のみ**追跡（GUI で人間が直接した編集/Ctrl+S は対象外）。per-invocation な dirtied 信号への精緻化は繰越。ファイル不在は bpy 到達前 `INVALID_PARAMS`（USER_INPUT）・壊れ/ロック `.blend` は `E_OPERATOR`（RuntimeError 以外＝OSError 等も写像し INTERNAL にしない）。result `{path(絶対), scene, object_count, forced, discarded_unsaved}`（`object_count`=開いたシーンの総オブジェクト数・scene-info と命名統一 / `discarded_unsaved`=--force で実際に未保存変更を破棄したか）。fingerprint=`scene_state_fingerprint`（開いたシーンの name/type/matrix 粗い指標・undo/redo と共通）。**常駐 GUI の安全性**: open_mainfile はシーン全体を置換するが、Dispatcher の **persistent pump タイマ / `bli-accept` TCP スレッドは open を跨いで生存**し、open を含む 1 ジョブ内で結果構築→return も成立する（§E11 で両版 GUI 実機確定＝**再登録不要**）。
 
 ## 逃げ道
 | method | params | result | M | St |

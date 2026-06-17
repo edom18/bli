@@ -2067,6 +2067,56 @@ def run_calls():
         assert e.error.get("message") == "INVALID_PARAMS", e.error
     print("save_ok", "size=", sv1["data"]["size"])
 
+    # open（M9 T9.4）: .blend を開く（シーン全体置換）+ 未保存ガード（自前 session_state・§E11）。
+    # 常駐 GUI でのタイマ/サーバ生存・open を含む 1 ジョブの結果 return は GUI スパイク（open_spike /
+    # open_job_spike・両版確認済み）が担う。ここでは background の手動 pump で「往復」「ガード」「結果」を裏付ける。
+    from bli_addon import session_state as _sstate
+
+    # 直前に save して clean を保証（save→mark_saved）し、開く .blend を確定させる。
+    call_retry("save", {"path": sv_path})
+    assert _sstate.is_modified() is False, "save 後は clean"
+    # 1) clean で open（force 不要）: シーン置換が成功し path/scene/objects/fingerprint を返す。
+    op1, _ = call_retry("open", {"path": sv_path})
+    assert op1["data"]["path"] == sv_abs, op1["data"]
+    assert op1["data"]["object_count"] >= 1, op1["data"]
+    assert op1["data"]["forced"] is False, op1["data"]
+    assert op1["data"]["discarded_unsaved"] is False, op1["data"]
+    assert op1["fingerprint"], op1
+    assert bpy.data.filepath == sv_abs, bpy.data.filepath
+    assert _sstate.is_modified() is False, "open 後は clean（mark_saved）"
+    # open 後も dispatch は機能する（scene-info が通る＝pump/サーバ生存・background での裏付け）。
+    si_open, _ = call_retry("scene-info", {})
+    assert si_open["data"]["object_count"] >= 1, si_open["data"]
+    print("open_roundtrip_ok", "object_count=", op1["data"]["object_count"])
+
+    # 2) 未保存ガード: mutate（transform）→ session modified → open（force なし）は E_PRECONDITION。
+    call_retry("transform", {"targets": "Cube", "location": [1.0, 0.0, 0.0]})
+    assert _sstate.is_modified() is True, "transform 後は modified"
+    try:
+        call_retry("open", {"path": sv_path})
+        raise AssertionError("未保存変更ありで open（force なし）は E_PRECONDITION のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "E_PRECONDITION", e.error
+    # ガードは bpy 到達前に弾く＝シーンは置換されない（Cube は移動後のまま）。
+    assert _sstate.is_modified() is True, "ガード後も modified のまま"
+    # 3) --force で破棄して open: 成功し discarded_unsaved=True・以後 clean。
+    op3, _ = call_retry("open", {"path": sv_path, "force": True})
+    assert op3["data"]["forced"] is True and op3["data"]["discarded_unsaved"] is True, op3["data"]
+    assert _sstate.is_modified() is False, "open 後は clean"
+    # 4) 不在ファイルは bpy 到達前に USER_INPUT（INVALID_PARAMS）。
+    try:
+        call_retry("open", {"path": os.path.join(save_dir, "no_such.blend")})
+        raise AssertionError("不在ファイルは INVALID_PARAMS のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "INVALID_PARAMS", e.error
+    # 5) .blend 以外の拡張子も USER_INPUT（save と対称・ファイル実在は問わず拡張子で先に弾く）。
+    try:
+        call_retry("open", {"path": os.path.join(save_dir, "scene.txt")})
+        raise AssertionError(".blend 以外は INVALID_PARAMS のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "INVALID_PARAMS", e.error
+    print("open_unsaved_guard_ok")
+
     # capture（実地FB #1）: --background では GUI（window/area）が無いため viewport/screen は
     # E_PRECONDITION で graceful に縮退する（INTERNAL にしない）。実機 viewport/screen/render の
     # 機能検証は GUI の capture_spike.py（両版確認済み）が担う。

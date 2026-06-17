@@ -1345,6 +1345,76 @@ def _save(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     return _ok("save", data, fingerprint=fp)
 
 
+def _open(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    """.blend を開く（M9 T9.4・シーン全体置換・未保存変更は --force 必須・研究 §E11）。"""
+    cmd = _command("open")
+    _validate(cmd, params)
+    path = str(params["path"])
+    force = bool(params.get("force", False))
+    # 空/拡張子チェックは bpy 不要なので早期に弾く（save と対称・.glb 必須化と同流儀）。
+    _require_input(
+        path.strip() != "",
+        symptom="--path が空です",
+        remediation="開く .blend のパスを指定してください",
+    )
+    _require_input(
+        path.lower().endswith(".blend"),
+        symptom="--path は .blend 拡張子で指定してください",
+        remediation="開くファイルを <name>.blend にしてください",
+    )
+
+    import os
+
+    # 相対パスは Python CWD と Blender の解決基準が食い違い得るため先に絶対パス化する（import/save と同流儀）。
+    path = os.path.abspath(path)
+
+    # 入力ファイルの不在は operator の生 RuntimeError になり得るため bpy 到達前に USER_INPUT で弾く
+    # （絶対パスで判定＝operator と同じファイルを見る・import と同流儀）。
+    _require_input(
+        os.path.isfile(path),
+        symptom=f"ファイルがありません: {path}",
+        remediation="存在する .blend のパスを指定してください",
+    )
+
+    # 未保存ガード（§E11・ユーザー選択）: open はシーン全体を置換して未保存変更を不可逆に失う。bli が
+    # 最後の save/open 以降に mutate していたら（自前 session_state 追跡＝is_dirty は dispatch 文脈で
+    # save 後に reset せず使えない）、--force なしは E_PRECONDITION で拒否する。検証はすべて bpy 到達前
+    # （session_state は純Python・§6e）。
+    from . import session_state
+
+    was_modified = session_state.is_modified()
+    if was_modified and not force:
+        raise JsonRpcError(
+            RPC_BUSINESS_ERROR,
+            ErrorCode.E_PRECONDITION,
+            make_error(
+                ErrorCode.E_PRECONDITION,
+                category=ErrorCategory.PRECONDITION,
+                retryable=False,
+                symptom="未保存の変更があります（open はシーン全体を置換し変更を失います）",
+                remediation="先に save するか、破棄してよければ --force を付けてください",
+            ),
+        )
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+
+    summary = gateway.open_blend(path)
+    data = {
+        "path": path,
+        "scene": summary["scene"],
+        "object_count": summary["object_count"],  # scene-info と命名を揃える（int カウント）
+        "forced": force,
+        # --force で実際に未保存変更を破棄したか（エージェントが破棄の有無を判別できるよう返す）。
+        "discarded_unsaved": bool(was_modified),
+    }
+    # session_state の clean 化（mark_saved）は dispatch 後フックが method in _SESSION_CLEARING_METHODS
+    # で行う（単一窓口）。fingerprint は開いたシーンの粗い状態指標（name/type/matrix・undo/redo と共通）。
+    fp = gateway.scene_state_fingerprint()
+    return _ok("open", data, fingerprint=fp)
+
+
 def _png_dimensions(path: str) -> tuple[int, int] | None:
     """PNG の IHDR から実出力解像度 (width, height) を読む。
 
@@ -1512,15 +1582,49 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "export": _export,
     "import": _import,
     "save": _save,
+    "open": _open,
     "capture": _capture,
     "undo": _undo,
     "redo": _redo,
 }
 
 
+# save/open は破壊/置換の後にディスクと一致＝セッションを clean に戻すコマンド（将来 new/revert 等を
+# 足すならここに追加する）。それ以外の mutates=True は実行前に modified にする。
+_SESSION_CLEARING_METHODS = ("save", "open")
+
+
+def _premark_session_modified(method: str) -> None:
+    """mutating コマンドの実行 **前** にセッションを modified にする（open の未保存ガード・§E11）。
+
+    実行後ではなく **実行前** に立てる理由（敵対的レビュー P1）: 途中まで mutate して例外を投げる
+    ハンドラ（例: material の create 後に assign 失敗）でも、後続 open が未保存変更を検知して --force を
+    要求する **安全側** に倒れる（実行後フックだと partial mutation が flag に乗らず silent data loss）。
+    save/open（_SESSION_CLEARING_METHODS）は対象外で、成功後に dispatch が clean 化する。
+
+    v1 は静的 `mutates` フラグで判定する（**保守的**: select/undo や、検証失敗で何も変えなかった
+    mutating コマンドも modified 扱い＝open に --force が要る安全側）。実際に変更したかの per-invocation な
+    精緻化（result 駆動の dirtied 信号）は繰越（methods.md 注記）。
+    """
+    if method in _SESSION_CLEARING_METHODS:
+        return
+    load_definitions()
+    cmd = get_command(method)
+    if cmd is not None and cmd.mutates:
+        from . import session_state
+
+        session_state.mark_modified()
+
+
 def dispatch(method: str, params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     """bpy 系は専用ハンドラ、その他は handlers.dispatch に委譲する。"""
+    # mutating コマンドは実行 **前** に pessimistic に modified（partial mutation でも安全側・§E11）。
+    _premark_session_modified(method)
     fn = _BPY_HANDLERS.get(method)
-    if fn is not None:
-        return fn(params, info)
-    return handlers.dispatch(method, params, info)
+    result = fn(params, info) if fn is not None else handlers.dispatch(method, params, info)
+    # save/open が成功したらディスクと一致＝clean に戻す（例外時はここに来ない＝失敗 save/open は modified のまま）。
+    if method in _SESSION_CLEARING_METHODS and result.get("success") is True:
+        from . import session_state
+
+        session_state.mark_saved()
+    return result
