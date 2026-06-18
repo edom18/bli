@@ -1,6 +1,6 @@
 # bli (Blender CLI) — 引き継ぎ資料 (HANDOFF)
 
-最終更新: 2026-06-18 / 状態: **PR #1–#26 マージ済み（origin/main）。M0–M8 完了。M9 ファイルI/O 完了＝T9.1 export（#21）/ T9.2 import（#22）/ T9.3 save（#23）/ T9.4 open（#25）。README に Claude Code 連携手順を追記（#26）。M9 確定要約は §6i・グラウンドトゥルースは research.md §E9（export/import）/§E10（save）/§E11（open）。**次は M10（非同期job & フリーズ対策）**。俯瞰 `.handoff/ROADMAP.md`**。
+最終更新: 2026-06-19 / 状態: **PR #1–#27 マージ済み（origin/main）。M0–M9 完了。M10 非同期job 進行中＝T10.1 job 化（#27）完了。残り T10.2 render busy / T10.3 watchdog（着手書 `.handoff/NEXT-M10.md`）。M9 確定要約は §6i・M10 T10.1 は §6j・GT research §E9–§E11。**次は T10.2（render busy・GUI スパイク必須）**。俯瞰 `.handoff/ROADMAP.md`**。
 
 > 新規セッションはこの1枚を読めば再開できる。詳細は `specs/blender-cli-core/` を参照。
 > **全体俯瞰は `.handoff/ROADMAP.md`。M9 は完了。次の作業（M10）の着手書は未作成（M10 キックオフ時に `.handoff/NEXT-M10.md` を作る）**（このファイルは全体史 + 規約・§6h=実地FB確定要約・§6i=M9 確定要約）。
@@ -65,10 +65,10 @@
 | **M7 メッシュ編集**（mesh --op: bmesh一次 + heavy modifier 経由） | ✅ main（PR #9 で T7.1–7.3 完了＝**M7 完了**） | pytest 184 + 5.0/4.4 実機 smoke OK |
 | **M8 3シナリオ中核価値**（set-origin / straighten / print-*）+ 実地フィードバック対応 | ✅ **完了**（PR #10–#18, #20）: T8.1–T8.5 + 実地FB PR-1〜5 | pytest + 5.0/4.4 実機 smoke OK |
 | **M9** ファイルI/O（export/import/save/open） | ✅ **完了**（§6i）: T9.1 export（#21）/ T9.2 import（#22）/ T9.3 save（#23）/ T9.4 open（#25） | pytest 303 + 5.0/4.4 実機 smoke OK |
-| M10 | 非同期job & フリーズ対策（job-status/job-wait・--dry-run 一般化・watchdog） | ⬜ **次はここ**（settle/RUNNING 機構は M4 で土台済み） |
+| **M10** 非同期job & フリーズ対策（job 化 / render busy / watchdog） | 🔶 **進行中**（§6j）: T10.1 job 化 ✅（#27）/ **残り T10.2 render busy・T10.3 watchdog** | pytest 316 + 5.0/4.4 実機 smoke OK |
 | M11–M14 | 未着手 | — |
 
-**状態（main・M9 完了）: `uv run pytest` = 303 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright 新規 0（既存3件: `bli/main.py:123` narrowing / `gateway.py:257` materials / `ops.py:394` name・いずれも実行時安全）。Blender 5.0.1/4.4.3 両版 background smoke OPS SMOKE OK（export/import/save/open golden 含む両版同値）。**
+**状態（main・M10 T10.1 完了）: `uv run pytest` = 316 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright 新規 0（既存2件: `gateway.py:257` materials / `ops.py:394` name・実行時安全。`bli/main.py` の narrowing は T10.1 のリファクタで解消）。Blender 5.0.1/4.4.3 両版 background smoke OPS SMOKE OK。**
 
 > PR #1 の Codex レビュー対応で M4 を追補（§6b 参照）: ①request-status のロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（settle）③発見系を implemented 済みに限定 ④サーバ/クライアントのタイムアウト整合（DISPATCH_TIMEOUT < CLIENT_READ_TIMEOUT）⑤TIMEOUT 時に request id を提示。
 
@@ -291,6 +291,21 @@ M9 はサブPR分割。順序 T9.1 export → T9.2 import → T9.3 save → T9.4
 
 ### M9 繰越（別途・M10 以降）
 - NUL バイト等の病的 path で `os.path.abspath`/`isdir` が `ValueError` 未捕捉→INTERNAL 化の恐れ（export/import/save/open 共通・信頼境界）。大量取込時の count inline 表示。GLTF_SEPARATE 対応。複数オブジェクト1ファイル（export は選択集合まとめ可・OK）。open の未保存追跡を per-invocation な dirtied 信号へ精緻化（現状は select/undo・検証失敗も保守的に modified 扱い＝--force 要求）。
+
+## 6j. M10 非同期job & フリーズ対策（進行中・T10.1 完了・残り T10.2/T10.3）
+M10 はサブPR分割（NEXT-M10.md・キックオフ D-A〜D-E 確定）。順序 T10.1 job 化 → T10.2 render busy → T10.3 watchdog。**本質**: bpy はメインスレッド直列で重量ネイティブ処理は中断不能＝「非同期」は**接続を塞がない + 観測性**（メインの並列化ではない・spec §7 残存リスク）。土台は M4（settle/RUNNING/request-status）。**次は T10.2（render busy）= `.handoff/NEXT-M10.md`**。
+
+### T10.1 job 化 ✅（PR #27）— heavy は accepted 即返＋auto-wait/--async
+- heavy（`import`/`export`/`print-check`/`print-repair`・`mesh` op が `boolean`/`decimate`）を非同期 job 化。`Command.is_heavy`/`heavy_ops` + `is_heavy_request(cmd, params)`（純Python）。`Dispatcher.submit_async` + `ACCEPTED` センチネル。executor が heavy→submit_async→ACCEPTED、server が `{accepted, job_id=rid}` 即返し settle が registry 確定。
+- **UX（D-B）**: CLI 既定は **sync 見え**（内部で accepted→`request-status` ポーリングで最終結果まで auto-wait）/ `--async` で job_id 即返。`job-status`/`job-wait`（CLI ポーリングのシュガー・request-status RPC を使う）。
+- **DoD**: `request-status` は `LOCK_FREE_METHODS`＝受信スレッド処理（メイン dispatch を経ない）→ 重量 job がメインを塞いでも応答（接続が塞がらない）。L3 E2E（`test_e2e_jobs.py`・heaviness executor + 別スレッド pump）で実証。**T10.2/T10.3 の観測系も lock-free で受信スレッド処理を踏襲**。
+- **セルフレビュー（独立3視点）で解消**: **P1** registry TTL を `max(600, JOB_WAIT_TIMEOUT)` へ（完了 job の遅延回収が purge で消えない）+ `_await_job` が UNKNOWN job_id を即失敗（30分ハング防止）。**P2** `pump()` を `except BaseException`（重量 C 異常で settle 漏れ→registry 孤児化＋pump 死を防ぐ）/ `job-wait` を `_present_result` で `_rpc` と共有（output_ref/--fetch drift 解消）/ `heavy_ops` を list-commands 露出（発見性）/ ポーリング瞬断許容。pytest 316・両版 OPS SMOKE OK（既存 heavy は smoke の同期 executor で回帰なし）。
+- **落とし穴**: 背景 smoke は**自前の同期 executor**＝非同期経路を通らない（job 経路は L3 が担保）。`bpy.app.timers` は `--background` で非発火＝render handler/watchdog の実発火は **GUI スパイク必須**。
+
+### T10.2 render busy ⬜（次）/ T10.3 watchdog ⬜
+- **T10.2**: レンダ中は重量/破壊系を `BUSY_RENDERING` 即拒否（キューに積まない）。`render_init`/`render_complete`/`render_cancel` handler で busy フラグ。read-only/lock-free は通す。**GUI スパイク必須**（handler 実発火）。
+- **T10.3**: pump 生存印（`last_pump_ts`）+ 監視スレッドで `MAIN_THREAD_UNRESPONSIVE` を検知し**通知のみ**（kill しない）・lock-free な観測系に載せる。**GUI スパイク必須**（重量 op で timer 停止を実測）。
+- 詳細・着手手順・キックオフ判断（R-A〜R-E）は **`.handoff/NEXT-M10.md` §3/§4/§4.5**。
 
 ## 6e. M6 で確立した再利用パターン（T6.2 以降で踏襲）
 - **破壊的 mesh 操作は共有ガード**: `ops._guard_shared_mesh(gateway, obj, params)` を呼ぶ（delete も対象になり得る）。`--make-single-user` 無しで users>=2 は `E_PRECONDITION`。
