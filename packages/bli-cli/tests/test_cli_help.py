@@ -614,6 +614,17 @@ def test_modifier_bad_type_local_validation():
     assert "INVALID_PARAMS" in res.output
 
 
+def test_busy_rendering_maps_to_timeout_pending_exit():
+    # BUSY_RENDERING（レンダ中の未受理・retryable）は exit 2 = TIMEOUT_PENDING へ写像する（M10 T10.2・R-B）。
+    from bli_core.errors import ErrorCategory, ErrorCode, ExitCode
+
+    err = {
+        "message": ErrorCode.BUSY_RENDERING,
+        "data": {"category": ErrorCategory.ENVIRONMENT, "retryable": True},
+    }
+    assert main_mod._exit_code_for(err) == ExitCode.TIMEOUT_PENDING
+
+
 def test_modifier_bad_operation_local_validation():
     # 不正な --operation は送信前ローカル Pydantic 検証で exit 4
     res = runner.invoke(

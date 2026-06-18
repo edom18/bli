@@ -389,7 +389,7 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 |:---:|------|
 | 0 | 成功 |
 | 1 | 確定失敗（業務エラー） |
-| 2 | TIMEOUT_PENDING（未決。`request-status`で要確認） |
+| 2 | TIMEOUT_PENDING（未決。`request-status`で要確認）/ `BUSY_RENDERING`（レンダ中で未受理・retryable・レンダ後に再試行）（M10 T10.2） |
 | 3 | 接続不能 / アドオン未起動 / 認証失敗 |
 | 4 | 入力エラー（CLI引数・スキーマ不一致） |
 
