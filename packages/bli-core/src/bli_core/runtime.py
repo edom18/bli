@@ -25,6 +25,15 @@ OUTPUTS_DIRNAME = "outputs"
 DISPATCH_TIMEOUT = 30.0
 CLIENT_READ_TIMEOUT = 40.0
 
+# 非同期 job（M10・spec §7）。heavy コマンドは accepted 即返し、CLI は既定で job-wait（request-status
+# ポーリング）して最終結果まで自動待機する（エージェントには同期に見える）。auto-wait の総待機上限と
+# ポーリング間隔。`--async` 時は即返、`job-wait --timeout` で上限を上書きできる。
+# request-status は LOCK_FREE で受信スレッド処理＝重量 job がメインスレッドを塞いでもポーリングは応答する。
+JOB_WAIT_TIMEOUT = 1800.0  # 既定 auto-wait 上限（30分・重量 import を見込んだ余裕）
+JOB_POLL_INTERVAL = 0.5  # ポーリング間隔（秒）
+# ポーリング中に許容する連続の接続失敗回数（瞬断/サーバ再接続に強くする・超過で CONNECTION）。
+JOB_POLL_MAX_CONNECT_FAILS = 10
+
 # duplicate の複製数上限（暴走で Blender を固めるのを防ぐ）。CLI（送信前）/ サーバ（ops）双方が
 # この単一定数を参照し、上限のマジックナンバー散在と片側欠落を防ぐ。
 MAX_DUPLICATE_COUNT = 1000

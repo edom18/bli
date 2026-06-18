@@ -17,6 +17,15 @@ class TimeoutPending(Exception):
     """タイムアウト（実体は実行継続中の可能性）。spec §7 後追い回収。"""
 
 
+# heavy コマンドの非同期実行（accepted 即返）を表すセンチネル。executor が submit_async 後に返し、
+# サーバはこれを見て {accepted, job_id} 応答を組み立てる（M10・spec §7）。
+class _Accepted:
+    __slots__ = ()
+
+
+ACCEPTED = _Accepted()
+
+
 # settle(result, error) -> resp: ジョブ完了時にメインスレッドで呼ばれる確定処理。
 # 受信スレッドのタイムアウト有無に関わらず必ず実行されるため、タイムアウト後に
 # 完走したジョブの結果も registry 等へ反映できる（spec §7 後追い回収）。
@@ -31,7 +40,8 @@ class _Job:
         self.settle = settle
         self.event = threading.Event()
         self.result: Any = None
-        self.error: Exception | None = None
+        # 重量ジョブは BaseException（C レベル異常）も投げ得るため広めに保持する（M10）。
+        self.error: BaseException | None = None
 
 
 class Dispatcher:
@@ -55,6 +65,15 @@ class Dispatcher:
             raise job.error
         return job.result
 
+    def submit_async(self, fn: Callable[[], Any], settle: SettleFn) -> None:
+        """fn をキューに積んで **即座に返す**（受信スレッドをブロックしない・M10 heavy job）。
+
+        pump が後でメインスレッドで fn を実行し、完了時に settle が registry を確定する（DONE/FAILED）。
+        submit と違い job.event を待たない（accepted を即返するため）。結果はクライアントが
+        request-status / job-wait で回収する。settle はジョブ完走時に必ず呼ばれる（spec §7）。
+        """
+        self._q.put(_Job(fn, settle))
+
     def pump(self) -> int:
         """キューを drain しメインスレッドで実行する。処理件数を返す。"""
         count = 0
@@ -66,7 +85,11 @@ class Dispatcher:
             try:
                 result = job.fn()
                 error: BaseException | None = None
-            except Exception as e:
+            except BaseException as e:
+                # 重量ネイティブ処理は C レベルの異常（BaseException）を投げ得る。Exception 限定だと
+                # settle が走らず registry が RUNNING のまま孤児化し、例外が _tick へ伝播してタイマ
+                # （pump）ごと死ぬ（=以降のジョブがハング）。BaseException を捕捉して必ず settle へ流し、
+                # registry を FAILED 確定 + pump を生かす（M10・敵対的レビュー P2）。
                 result, error = None, e
             if job.settle is not None:
                 # 確定処理（registry 更新等）もメインスレッドで実行する。

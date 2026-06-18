@@ -32,7 +32,7 @@ from bli_core.errors import (
 )
 from bli_core.protocol import JsonRpcError
 
-from .dispatcher import TimeoutPending
+from .dispatcher import ACCEPTED, TimeoutPending
 from .handlers import ServerInfo
 from .handlers import dispatch as default_dispatch
 from .request_registry import RequestRegistry
@@ -77,13 +77,18 @@ class Server:
         port: int,
         info: ServerInfo,
         handler: DispatchFn,
-        ttl: float = 600.0,
+        ttl: float | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self.info = info
         self._handler = handler
-        self._registry = RequestRegistry(ttl)
+        # registry の終端エントリ保持時間（冪等性 + 非同期 job 結果の後追い回収）。M10: 既定 auto-wait /
+        # job-wait の上限（JOB_WAIT_TIMEOUT）より **短くしない**（短いと完了 job が TTL purge され、
+        # 遅延 job-wait が結果を取り損ねて UNKNOWN になる・敵対的/設計レビュー P1）。
+        self._registry = RequestRegistry(
+            ttl if ttl is not None else max(600.0, runtime.JOB_WAIT_TIMEOUT)
+        )
         self._session_lock = threading.Lock()
         self._stop = threading.Event()
         self._listen: socket.socket | None = None
@@ -304,6 +309,14 @@ class Server:
         except Exception as e:
             # ハンドラが settle 前に異常終了した場合の保険。
             resp = settle(None, e)
+        if resp is ACCEPTED:
+            # heavy job を受理した（M10・spec §7）。実体は pump で実行継続中で、registry は begin() の
+            # RUNNING のまま。job_id=rid で accepted を即返し、完了時に settle が DONE/FAILED を確定する。
+            # クライアントは request-status / job-wait で最終結果を回収する。
+            resp = proto.build_success(
+                rid,
+                {"success": True, "operation": method, "accepted": True, "job_id": rid},
+            )
         self._send(conn, resp)
 
     def _build_resp(self, rid: str, result: Any, error: BaseException | None) -> dict[str, Any]:

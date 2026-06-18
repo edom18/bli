@@ -32,6 +32,9 @@ class Command:
     required_mode: Mode = Mode.ANY
     capability_deps: tuple[str, ...] = ()
     is_heavy: bool = False
+    # 特定の op 値のときだけ heavy になるコマンド向け（例: mesh は boolean/decimate のみ重量）。
+    # `op` パラメータの値がこの集合に入れば heavy 扱い（is_heavy=False でも）。M10 非同期 job 用。
+    heavy_ops: tuple[str, ...] = ()
     stability: Stability = Stability.STABLE
     result_schema: dict[str, Any] | None = None
     # CLI/サーバで実行可能か。False=SSOT に定義済みだが未実装（発見系の既定一覧から除外）。
@@ -66,6 +69,7 @@ def command(
     required_mode: Mode = Mode.ANY,
     capability_deps: tuple[str, ...] = (),
     is_heavy: bool = False,
+    heavy_ops: tuple[str, ...] = (),
     stability: Stability = Stability.STABLE,
     result_schema: dict[str, Any] | None = None,
     implemented: bool = True,
@@ -81,12 +85,26 @@ def command(
         required_mode=required_mode,
         capability_deps=tuple(capability_deps),
         is_heavy=is_heavy,
+        heavy_ops=tuple(heavy_ops),
         stability=stability,
         result_schema=result_schema,
         implemented=implemented,
     )
     COMMANDS[name] = cmd
     return cmd
+
+
+def is_heavy_request(cmd: Command, params: dict[str, Any]) -> bool:
+    """この呼び出しが重量（非同期 job 化対象）かを判定する（M10・spec §7）。
+
+    `cmd.is_heavy`（コマンド全体が重量＝import/export/print-check/print-repair）か、`cmd.heavy_ops`
+    に該当する `op` 値（mesh の boolean/decimate のみ重量）なら True。純Python・bpy 非依存。
+    """
+    if cmd.is_heavy:
+        return True
+    if cmd.heavy_ops:
+        return str(params.get("op", "")) in cmd.heavy_ops
+    return False
 
 
 def get_command(name: str) -> Command | None:

@@ -55,12 +55,12 @@ def register() -> None:
     import bpy  # type: ignore  # lazy: アドオンロード時のみ
 
     from bli_core import runtime
-    from bli_core.commands import load_definitions
+    from bli_core.commands import get_command, is_heavy_request, load_definitions
     from bli_core.schema import schema_hash
 
     from . import ops, server
     from .capability import CapabilityRegistry
-    from .dispatcher import Dispatcher
+    from .dispatcher import ACCEPTED, Dispatcher
 
     global _dispatcher
     _dispatcher = Dispatcher()
@@ -72,12 +72,20 @@ def register() -> None:
         # 受信スレッドから submit → メインスレッドで ops.dispatch を直列実行。
         # settle はジョブ完了時にメインスレッドで呼ばれ、registry を確定させる
         # （タイムアウト後に完走したジョブも request-status で回収可能になる）。
-        # ウォッチドッグはクライアント読み取り猶予より短くし、TIMEOUT 応答を先に返す。
-        return dispatcher.submit(
-            lambda: ops.dispatch(method, params, info),
-            timeout=runtime.DISPATCH_TIMEOUT,
-            settle=settle,
-        )
+        def _run():
+            return ops.dispatch(method, params, info)
+
+        # heavy コマンド（M10・spec §7）は accepted 即返＝submit_async でキューに積んで待たずに返し、
+        # ACCEPTED センチネルを返す（サーバが {accepted, job_id} 応答を組み立てる）。クライアントは
+        # request-status / job-wait で回収する。これで重量 import 中も受信スレッドが塞がらない。
+        cmd = get_command(method)
+        if cmd is not None and is_heavy_request(cmd, params):
+            dispatcher.submit_async(_run, settle=settle)
+            return ACCEPTED
+
+        # 通常（light）コマンドは同期 submit。ウォッチドッグはクライアント読み取り猶予より短くし、
+        # 超過時は TIMEOUT 応答を先に返す（request-status で後追い可能）。
+        return dispatcher.submit(_run, timeout=runtime.DISPATCH_TIMEOUT, settle=settle)
 
     server.start(
         blender_version=bpy.app.version_string,

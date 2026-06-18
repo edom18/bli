@@ -96,3 +96,14 @@ def call(
             sock.close()
         except OSError:
             pass
+
+
+def interpret_stored_response(resp: Any) -> dict[str, Any]:
+    """registry に保存された JSON-RPC レスポンス（job 完了時の result）を call() と同じ規約で解釈する。
+
+    M10 の job-wait/auto-wait で、request-status が返す `data.result`（settle が組んだ JSON-RPC 応答）を
+    直接呼び出しと同じく解く: error があれば RpcRemoteError、成功なら domain result（_ok エンベロープ）。
+    """
+    if isinstance(resp, dict) and resp.get("error") is not None:
+        raise RpcRemoteError(resp["error"])
+    return resp.get("result", {}) if isinstance(resp, dict) else {}
