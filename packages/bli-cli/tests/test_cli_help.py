@@ -790,3 +790,16 @@ def test_ping_timeout_maps_exit2_with_id(monkeypatch):
     payload = json.loads(res.output)
     assert payload["kind"] == "TIMEOUT"
     assert payload["request_id"] == seen["id"]
+
+
+def test_m10_heavy_metadata_discoverable():
+    # M10: heavy コマンドと mesh の heavy_ops が list-commands に出る（非同期 job 発見用）。
+    data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+    by_name = {c["name"]: c for c in data["commands"]}
+    for name in ("import", "export", "print-check", "print-repair"):
+        assert by_name[name]["is_heavy"] is True, name
+    assert by_name["mesh"]["is_heavy"] is False
+    assert by_name["mesh"]["heavy_ops"] == ["boolean", "decimate"]
+    # job-status / job-wait（CLI ポーリング・request-status 上のシュガー）も発見できる。
+    assert "job-status" in by_name
+    assert "job-wait" in by_name

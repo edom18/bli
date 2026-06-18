@@ -10,13 +10,15 @@ from __future__ import annotations
 import json
 import math
 import sys
+import time
 import uuid
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import typer
 
+from bli_core import runtime
 from bli_core.commands import Command, load_definitions
 from bli_core.errors import ErrorCategory, ErrorCode, ExitCode
 from bli_core.schema import schema_hash, to_json_schema
@@ -118,44 +120,94 @@ def _call_or_exit(
         _emit_error(json_out, "CONNECTION", str(e), request_id=request_id)
         raise typer.Exit(int(ExitCode.CONNECTION)) from None
     except client.RpcRemoteError as e:
-        kind = e.error.get("message", "RPC_ERROR")
-        data = e.error.get("data") if isinstance(e.error.get("data"), dict) else {}
-        symptom = data.get("userVisibleSymptom") or str(e)
-        if kind == ErrorCode.TIMEOUT:
-            symptom = f"{symptom}（後追い: bli request-status --id {request_id}）"
-        _emit_error(json_out, kind, symptom, request_id=request_id)
-        raise typer.Exit(int(_exit_code_for(e.error))) from None
+        _emit_remote_error_exit(e.error, json_out=json_out, request_id=request_id)
 
 
-def _rpc(
-    method: str,
-    params: dict[str, Any],
-    *,
-    json_out: bool,
-    port: int | None,
-    human: Callable[[dict[str, Any]], str],
-    request_id: str | None = None,
-    fetch: bool = False,
-) -> None:
-    """RPC を1往復し結果を出力する（接続/業務エラーは終了コードへ写像）。
+def _emit_remote_error_exit(error: dict[str, Any], *, json_out: bool, request_id: str) -> NoReturn:
+    """サーバ業務エラーを終了コードへ写像して exit する（直接呼び出しと job 完了の共通写像）。必ず送出。"""
+    kind = error.get("message", "RPC_ERROR")
+    raw = error.get("data")
+    data = raw if isinstance(raw, dict) else {}
+    symptom = data.get("userVisibleSymptom") or kind
+    if kind == ErrorCode.TIMEOUT:
+        symptom = f"{symptom}（後追い: bli request-status --id {request_id}）"
+    _emit_error(json_out, kind, symptom, request_id=request_id)
+    raise typer.Exit(int(_exit_code_for(error))) from None
 
-    結果が output_ref(shared-fs) を含む場合、既定は **参照のみ** を返す（エージェント向け
-    オンデマンド取得）。`fetch=True` のときだけ退避ファイルを読み sha256 検証して data へ
-    展開する。整合不一致は STALE_OUTPUT（exit 1）。
+
+def _await_job(
+    job_id: str, *, json_out: bool, port: int | None, timeout: float | None = None
+) -> dict[str, Any]:
+    """heavy job（accepted 即返）の完了を request-status ポーリングで待ち、最終 domain result を返す（M10）。
+
+    DONE → domain result（_ok エンベロープ）。FAILED → 業務エラーを直接呼び出しと同じ写像で exit。
+    上限超過 → TIMEOUT_PENDING(exit2)（job_id で後追い可能）。request-status は LOCK_FREE で受信スレッド
+    処理＝重量 job がメインスレッドを塞いでも応答する（spec §7・DoD: 接続が塞がらない）。
     """
-    try:
-        models.validate_params(method, params)  # 送信前のローカル Pydantic 検証
-    except models.ParamValidationError as e:
-        _emit_error(json_out, ErrorCode.INVALID_PARAMS, e.detail)
-        raise typer.Exit(int(ExitCode.INPUT)) from None
+    deadline = time.monotonic() + (timeout if timeout is not None else runtime.JOB_WAIT_TIMEOUT)
+    connect_fails = 0
+    while True:
+        try:
+            sr, _ = client.call(
+                "request-status", {"id": job_id}, port=port, request_id=str(uuid.uuid4())
+            )
+        except client.ConnectError as e:
+            # ポーリング中の一過性の接続失敗は数回まで許容（瞬断/サーバ再接続に強くする）。超過で CONNECTION。
+            connect_fails += 1
+            if connect_fails > runtime.JOB_POLL_MAX_CONNECT_FAILS:
+                _emit_error(json_out, "CONNECTION", str(e), request_id=job_id)
+                raise typer.Exit(int(ExitCode.CONNECTION)) from None
+            if time.monotonic() >= deadline:
+                _emit_error(json_out, "CONNECTION", str(e), request_id=job_id)
+                raise typer.Exit(int(ExitCode.CONNECTION)) from None
+            time.sleep(runtime.JOB_POLL_INTERVAL)
+            continue
+        except client.RpcRemoteError as e:
+            _emit_remote_error_exit(e.error, json_out=json_out, request_id=job_id)
+        connect_fails = 0
+        data = sr.get("data", {}) if isinstance(sr, dict) else {}
+        state = data.get("state")
+        # 未知/TTL 失効した job_id は即座に失敗させる（30分ハングを防ぐ・全レビュー P1）。accepted を受けた
+        # 直後の auto-wait では begin() で RUNNING 登録済みなので UNKNOWN にはならない＝この分岐は遅延
+        # job-wait での typo/失効が主。
+        if data.get("known") is False or state == "UNKNOWN":
+            _emit_error(
+                json_out,
+                "UNKNOWN_JOB",
+                f"job_id が見つかりません（未送信/typo、または結果が失効しました）: {job_id}",
+                request_id=job_id,
+            )
+            raise typer.Exit(int(ExitCode.FAILURE)) from None
+        if state in ("DONE", "FAILED"):
+            try:
+                return client.interpret_stored_response(data.get("result"))
+            except client.RpcRemoteError as e:
+                _emit_remote_error_exit(e.error, json_out=json_out, request_id=job_id)
+        if time.monotonic() >= deadline:
+            _emit_error(
+                json_out,
+                ErrorCode.TIMEOUT,
+                f"ジョブが時間内に完了しませんでした（job_id={job_id}・bli job-wait/request-status で後追い）",
+                request_id=job_id,
+            )
+            raise typer.Exit(int(ExitCode.TIMEOUT_PENDING)) from None
+        time.sleep(runtime.JOB_POLL_INTERVAL)
 
-    # request id は CLI 側で確定させる。TIMEOUT 等でも request-status で後追いできるよう、
-    # 生成した id を必ずユーザに提示する（--id 省略時に id が見えない問題を防ぐ）。
-    request_id = request_id or str(uuid.uuid4())
-    result, _hello = _call_or_exit(
-        method, params, json_out=json_out, port=port, request_id=request_id
-    )
 
+def _present_result(
+    result: dict[str, Any],
+    *,
+    method: str,
+    request_id: str,
+    json_out: bool,
+    fetch: bool,
+    human: Callable[[dict[str, Any]], str] | None,
+) -> None:
+    """domain result（_ok エンベロープ）を提示する（output_ref/--fetch/human を含む）。
+
+    `_rpc`（同期 + auto-wait）と `job-wait`（遅延 job）で共有し、output_ref/--fetch の取り扱いが
+    二重実装で drift しないようにする（設計レビュー P2）。human=None は汎用メッセージ（job-wait 用）。
+    """
     raw_ref = result.get("output_ref")
     output_ref: dict[str, Any] | None = raw_ref if isinstance(raw_ref, dict) else None
     offloaded = output_ref is not None and output_ref.get("transport") == "shared-fs"
@@ -184,9 +236,69 @@ def _rpc(
             f"size={output_ref.get('size')}B sha256={str(output_ref.get('sha256'))[:12]} "
             f"path={output_ref.get('path')}  (--fetch で展開)"
         )
-    else:
+    elif human is not None:
         human_msg = human(result.get("data") or {})
+    else:
+        human_msg = f"done operation={result.get('operation', method)}"
     _emit(json_out, human_msg, payload)
+
+
+def _rpc(
+    method: str,
+    params: dict[str, Any],
+    *,
+    json_out: bool,
+    port: int | None,
+    human: Callable[[dict[str, Any]], str],
+    request_id: str | None = None,
+    fetch: bool = False,
+    async_: bool = False,
+) -> None:
+    """RPC を1往復し結果を出力する（接続/業務エラーは終了コードへ写像）。
+
+    結果が output_ref(shared-fs) を含む場合、既定は **参照のみ** を返す（エージェント向け
+    オンデマンド取得）。`fetch=True` のときだけ退避ファイルを読み sha256 検証して data へ
+    展開する。整合不一致は STALE_OUTPUT（exit 1）。
+
+    heavy コマンド（M10・spec §7）はサーバが `{accepted, job_id}` を即返す。既定は job-wait で
+    最終結果まで自動待機して通常どおり提示する（エージェントには同期に見える）。`async_=True` のときは
+    job_id を返して即終了（fire-and-forget）。
+    """
+    try:
+        models.validate_params(method, params)  # 送信前のローカル Pydantic 検証
+    except models.ParamValidationError as e:
+        _emit_error(json_out, ErrorCode.INVALID_PARAMS, e.detail)
+        raise typer.Exit(int(ExitCode.INPUT)) from None
+
+    # request id は CLI 側で確定させる。TIMEOUT 等でも request-status で後追いできるよう、
+    # 生成した id を必ずユーザに提示する（--id 省略時に id が見えない問題を防ぐ）。
+    request_id = request_id or str(uuid.uuid4())
+    result, _hello = _call_or_exit(
+        method, params, json_out=json_out, port=port, request_id=request_id
+    )
+
+    # heavy job（accepted 即返）の処理（M10）。job_id=request_id（サーバは rid を job_id にする）。
+    if isinstance(result, dict) and result.get("accepted") is True:
+        job_id = str(result.get("job_id") or request_id)
+        if async_:
+            _emit(
+                json_out,
+                f"accepted job_id={job_id}（bli job-wait --id {job_id} で結果取得）",
+                {
+                    "ok": True,
+                    "operation": result.get("operation", method),
+                    "status": "accepted",
+                    "job_id": job_id,
+                    "request_id": request_id,
+                },
+            )
+            return
+        # 既定: 完了まで自動待機して domain result を取得（以降は通常の result 提示に合流）。
+        result = _await_job(job_id, json_out=json_out, port=port)
+
+    _present_result(
+        result, method=method, request_id=request_id, json_out=json_out, fetch=fetch, human=human
+    )
 
 
 @app.command()
@@ -610,6 +722,9 @@ def print_check(
         False, "--fetch", help="退避(output_ref)を読み込み sha256 検証して展開する"
     ),
     request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    async_out: bool = typer.Option(
+        False, "--async", help="job_id を即返し（既定は完了まで自動待機）"
+    ),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
@@ -643,6 +758,7 @@ def print_check(
         human=human,
         request_id=request_id,
         fetch=fetch,
+        async_=async_out,
     )
 
 
@@ -660,6 +776,9 @@ def print_repair(
         False, "--make-single-user", help="共有mesh時に単一ユーザ化を許可"
     ),
     request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    async_out: bool = typer.Option(
+        False, "--async", help="job_id を即返し（既定は完了まで自動待機）"
+    ),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
@@ -684,7 +803,15 @@ def print_repair(
             f"printable={after.get('is_printable')}"
         )
 
-    _rpc("print-repair", params, json_out=json_out, port=port, human=human, request_id=request_id)
+    _rpc(
+        "print-repair",
+        params,
+        json_out=json_out,
+        port=port,
+        human=human,
+        request_id=request_id,
+        async_=async_out,
+    )
 
 
 @app.command("print-export")
@@ -739,6 +866,9 @@ def export(
         help="現在の選択集合のみ書き出す（targets 省略時・省略でシーン全体）",
     ),
     request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    async_out: bool = typer.Option(
+        False, "--async", help="job_id を即返し（既定は完了まで自動待機）"
+    ),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
@@ -758,7 +888,15 @@ def export(
             f"({data.get('size')}B, sha={str(data.get('sha256'))[:12]})"
         )
 
-    _rpc("export", params, json_out=json_out, port=port, human=human, request_id=request_id)
+    _rpc(
+        "export",
+        params,
+        json_out=json_out,
+        port=port,
+        human=human,
+        request_id=request_id,
+        async_=async_out,
+    )
 
 
 @app.command("import")
@@ -766,6 +904,9 @@ def import_(
     fmt: str = typer.Option(..., "--format", help="入力形式: obj|fbx|gltf|stl|3mf"),
     path: str = typer.Option(..., "--path", help="入力ファイルパス"),
     request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    async_out: bool = typer.Option(
+        False, "--async", help="job_id を即返し（既定は完了まで自動待機）"
+    ),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
@@ -776,7 +917,15 @@ def import_(
         names = [o.get("name") for o in (data.get("imported") or [])]
         return f"imported [{data.get('format')}] {data.get('count')}: {names}"
 
-    _rpc("import", params, json_out=json_out, port=port, human=human, request_id=request_id)
+    _rpc(
+        "import",
+        params,
+        json_out=json_out,
+        port=port,
+        human=human,
+        request_id=request_id,
+        async_=async_out,
+    )
 
 
 @app.command()
@@ -1120,6 +1269,9 @@ def mesh(
         False, "--make-single-user", help="共有mesh時に単一ユーザ化を許可"
     ),
     request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    async_out: bool = typer.Option(
+        False, "--async", help="job_id を即返し（boolean/decimate のみ・既定は自動待機）"
+    ),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
@@ -1182,7 +1334,15 @@ def mesh(
             f"{st.get('vertices')}v/{st.get('edges')}e/{st.get('polygons')}f"
         )
 
-    _rpc("mesh", params, json_out=json_out, port=port, human=human, request_id=request_id)
+    _rpc(
+        "mesh",
+        params,
+        json_out=json_out,
+        port=port,
+        human=human,
+        request_id=request_id,
+        async_=async_out,
+    )
 
 
 @app.command("request-status")
@@ -1199,6 +1359,40 @@ def request_status(
     _rpc("request-status", {"id": request_id}, json_out=json_out, port=port, human=human)
 
 
+@app.command("job-status")
+def job_status(
+    request_id: str = typer.Option(..., "--id", help="ジョブID(=request_id)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """非同期 job（heavy コマンドの --async）の状態を取得する（request-status を1回問い合わせ）。"""
+
+    def human(data: dict[str, Any]) -> str:
+        return f"job_id={data.get('id')} state={data.get('state')} known={data.get('known')}"
+
+    _rpc("request-status", {"id": request_id}, json_out=json_out, port=port, human=human)
+
+
+@app.command("job-wait")
+def job_wait(
+    request_id: str = typer.Option(..., "--id", help="ジョブID(=request_id)"),
+    timeout: float | None = typer.Option(
+        None, "--timeout", help="待機上限秒（既定 JOB_WAIT_TIMEOUT）"
+    ),
+    fetch: bool = typer.Option(
+        False, "--fetch", help="退避(output_ref)を読み込み sha256 検証して展開する"
+    ),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """非同期 job の完了を待って最終結果を取得する（request-status をポーリング）。"""
+    result = _await_job(request_id, json_out=json_out, port=port, timeout=timeout)
+    # _rpc と同じ提示経路（output_ref/--fetch も対応）を共有する。human=None で汎用メッセージ。
+    _present_result(
+        result, method="job-wait", request_id=request_id, json_out=json_out, fetch=fetch, human=None
+    )
+
+
 def _command_meta(cmd: Command) -> dict[str, Any]:
     return {
         "name": cmd.name,
@@ -1207,6 +1401,9 @@ def _command_meta(cmd: Command) -> dict[str, Any]:
         "required_mode": cmd.required_mode.value,
         "stability": cmd.stability.value,
         "is_heavy": cmd.is_heavy,
+        # op 依存で heavy になる op 群（mesh の boolean/decimate）。エージェントが「どの呼び出しが
+        # accepted/job 化されるか」を発見できるよう list-commands に載せる（M10・仕様レビュー P2）。
+        "heavy_ops": list(cmd.heavy_ops),
         "capability_deps": list(cmd.capability_deps),
         "implemented": cmd.implemented,
     }

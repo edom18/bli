@@ -136,6 +136,7 @@ def _command_to_canonical(cmd: Command) -> dict[str, Any]:
         "required_mode": cmd.required_mode.value,
         "capability_deps": list(cmd.capability_deps),
         "is_heavy": cmd.is_heavy,
+        "heavy_ops": list(cmd.heavy_ops),
         "stability": cmd.stability.value,
         "implemented": cmd.implemented,
         "result_schema": cmd.result_schema,

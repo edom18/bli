@@ -87,3 +87,22 @@ def test_submit_without_settle_returns_raw_result():
         time.sleep(0.005)
     t.join(timeout=1.0)
     assert box["r"] == 99
+
+
+def test_submit_async_does_not_block_and_settles_on_pump():
+    """submit_async は待たずに返り、後続 pump で fn 実行 + settle が呼ばれる（M10 heavy job）。"""
+    d = Dispatcher()
+    captured: dict = {}
+
+    def settle(result, error):
+        captured["result"] = result
+        captured["error"] = error
+        return {"settled": result}
+
+    # 待たずに即返る（戻り値 None）。
+    assert d.submit_async(lambda: 99, settle=settle) is None
+    assert "result" not in captured  # まだ pump していない
+    n = d.pump()
+    assert n == 1
+    assert captured["result"] == 99
+    assert captured["error"] is None

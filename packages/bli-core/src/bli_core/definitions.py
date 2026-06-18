@@ -25,6 +25,21 @@ command(
     "リクエストの決着状態を取得（タイムアウト後の後追い回収）",
     params=(p("id", ParamType.STR, required=True, help="リクエストID(UUIDv4)"),),
 )
+# 非同期 job（M10・spec §7）。heavy コマンドの accepted 即返後、job_id で状態取得/完了待機する。
+# どちらも CLI 側で request-status RPC をポーリングする発見用エントリ（lock-free・mutates なし）。
+command(
+    "job-status",
+    "非同期 job の状態を取得（heavy コマンドの job_id・request-status を1回問い合わせ）",
+    params=(p("id", ParamType.STR, required=True, help="ジョブID(=request_id)"),),
+)
+command(
+    "job-wait",
+    "非同期 job の完了を待って最終結果を取得（request-status をポーリング）",
+    params=(
+        p("id", ParamType.STR, required=True, help="ジョブID(=request_id)"),
+        p("timeout", ParamType.FLOAT, help="待機上限秒（省略時は既定 JOB_WAIT_TIMEOUT）"),
+    ),
+)
 
 # ---- 情報取得（読み取り専用）----
 command(
@@ -187,6 +202,7 @@ command(
         p("intersect", ParamType.BOOL, help="自己交差チェック（print3d 依存・未導入は同上）"),
     ),
     required_mode=Mode.OBJECT,
+    is_heavy=True,  # 大規模 mesh の全頂点/辺走査は重量（M10・非同期 job 化）
 )
 command(
     "print-repair",
@@ -202,6 +218,7 @@ command(
     ),
     mutates=True,
     required_mode=Mode.OBJECT,
+    is_heavy=True,  # 修復は全頂点/辺走査 + bmesh 書き戻しで重量（M10・非同期 job 化）
 )
 command(
     "print-export",
@@ -465,6 +482,8 @@ command(
     mutates=True,
     stability=Stability.EXPERIMENTAL,
     required_mode=Mode.OBJECT,
+    # mesh は op で重さが異なる。boolean/decimate（modifier add+apply＝重量）だけ非同期 job 化する（M10）。
+    heavy_ops=("boolean", "decimate"),
 )
 
 # ---- ファイルI/O（M9 T9.1〜）----
@@ -498,6 +517,7 @@ command(
     ),
     mutates=False,
     required_mode=Mode.OBJECT,
+    is_heavy=True,  # exporter のネイティブ書き出しは大規模シーンで重量（M10・非同期 job 化）
 )
 command(
     "import",
@@ -521,6 +541,7 @@ command(
     ),
     mutates=True,
     required_mode=Mode.OBJECT,
+    is_heavy=True,  # importer のネイティブ取込は大規模ファイルで重量（M10・非同期 job 化・DoD の主対象）
 )
 command(
     "save",
