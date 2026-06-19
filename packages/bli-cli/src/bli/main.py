@@ -96,6 +96,8 @@ def _exit_code_for(err: dict[str, Any]) -> ExitCode:
     category = data.get("category") if isinstance(data, dict) else None
     if kind == ErrorCode.TIMEOUT:
         return ExitCode.TIMEOUT_PENDING  # 未決: request-status で後追い
+    if kind == ErrorCode.BUSY_RENDERING:
+        return ExitCode.TIMEOUT_PENDING  # レンダ中で未受理（retryable・レンダ後に再試行）
     if kind == ErrorCode.INVALID_PARAMS or category == ErrorCategory.USER_INPUT:
         return ExitCode.INPUT
     return ExitCode.FAILURE

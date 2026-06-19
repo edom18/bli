@@ -4,6 +4,8 @@
 
 > 各メソッドは `bli <method>` CLI サブコマンドに 1:1 対応。params は `bli-core` の Command 定義が真実。
 
+> **レンダ中の拒否（M10 T10.2・spec §7・研究 §E12）**: Blender がレンダリング中（`render_init`〜`render_complete`/`render_cancel`）は、**M=mutates または H=heavy** のメソッドを dispatch 前に `BUSY_RENDERING`（category=ENVIRONMENT・retryable・CLI exit 2）で即拒否する（キューに積まない＝フリーズ中の滞留防止）。**読み取り専用（scene-info/list-objects/object-info 等）と lock-free（request-status/job-status/job-wait）はレンダ中も通る**（観測性を維持）。busy 検知は `render_state`（`threading.Event`）＝render handler は内部レンダスレッドから発火するため thread-safe に保持。
+
 ---
 
 ## 接続・診断（ローカル完結 / 一部はRPC前）

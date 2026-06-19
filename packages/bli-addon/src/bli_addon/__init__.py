@@ -58,13 +58,14 @@ def register() -> None:
     from bli_core.commands import get_command, is_heavy_request, load_definitions
     from bli_core.schema import schema_hash
 
-    from . import ops, server
+    from . import ops, render_state, server
     from .capability import CapabilityRegistry
     from .dispatcher import ACCEPTED, Dispatcher
 
     global _dispatcher
     _dispatcher = Dispatcher()
     _dispatcher.install_timer()  # bpy.app.timers が pump を駆動
+    render_state.install()  # render handler を登録し busy フラグを駆動（M10 T10.2）
 
     dispatcher = _dispatcher
 
@@ -92,14 +93,16 @@ def register() -> None:
         schema_hash=schema_hash(load_definitions()),
         capabilities=CapabilityRegistry().list_capabilities(),
         handler=_executor,
+        render_busy=render_state.is_busy,  # レンダ中は重量/破壊系を dispatch 前に拒否
     )
 
 
 def unregister() -> None:
-    """TCP サーバを停止し、タイマを解除する。"""
-    from . import server
+    """TCP サーバを停止し、タイマ・render handler を解除する。"""
+    from . import render_state, server
 
     server.stop()
+    render_state.remove()
     global _dispatcher
     if _dispatcher is not None:
         _dispatcher.remove_timer()

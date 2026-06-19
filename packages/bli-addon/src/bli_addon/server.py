@@ -22,6 +22,7 @@ from typing import Any
 
 from bli_core import protocol as proto
 from bli_core import runtime
+from bli_core.commands import get_command, is_heavy_request, load_definitions
 from bli_core.errors import (
     RPC_BUSINESS_ERROR,
     RPC_INTERNAL_ERROR,
@@ -78,11 +79,15 @@ class Server:
         info: ServerInfo,
         handler: DispatchFn,
         ttl: float | None = None,
+        render_busy: Callable[[], bool] | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self.info = info
         self._handler = handler
+        # レンダ中判定（受信スレッドが dispatch 前に読む・既定は常に False＝GUI 非常駐/テスト）。
+        # アドオンは render_state.is_busy を注入する（bpy 依存は addon 側に閉じ込める）。
+        self._render_busy = render_busy or (lambda: False)
         # registry の終端エントリ保持時間（冪等性 + 非同期 job 結果の後追い回収）。M10: 既定 auto-wait /
         # job-wait の上限（JOB_WAIT_TIMEOUT）より **短くしない**（短いと完了 job が TTL purge され、
         # 遅延 job-wait が結果を取り損ねて UNKNOWN になる・敵対的/設計レビュー P1）。
@@ -272,6 +277,13 @@ class Server:
             self._send(conn, self._busy_error(rid))
             return
 
+        # レンダリング中は重量/破壊系を即拒否する（spec §7・研究 §E12）。**キューに積まない**＝
+        # begin も settle もせず、フリーズ中のジョブ滞留を防ぐ。read-only と lock-free
+        # （request-status は上で処理済み）はレンダ中も通す＝観測性を維持。
+        if self._render_busy() and self._blocked_during_render(method, params):
+            self._send(conn, self._busy_rendering_error(rid))
+            return
+
         state, cached = self._registry.begin(rid)
         if state == "cached" and cached is not None:
             self._send(conn, cached)
@@ -385,6 +397,24 @@ class Server:
             retryable=True,
         )
 
+    def _blocked_during_render(self, method: str, params: dict[str, Any]) -> bool:
+        """レンダ中に拒否すべき要求か（mutating または heavy）。read-only は通す（観測性）。"""
+        load_definitions()  # 受信スレッドで COMMANDS 未ロードでも get_command が解決できるよう冪等ロード
+        cmd = get_command(method)
+        if cmd is None:
+            return False  # 未知メソッドは通常経路（METHOD_NOT_FOUND）に任せる
+        return cmd.mutates or is_heavy_request(cmd, params)
+
+    def _busy_rendering_error(self, rid: str | None) -> dict[str, Any]:
+        eo = make_error(
+            ErrorCode.BUSY_RENDERING,
+            category=ErrorCategory.ENVIRONMENT,
+            retryable=True,
+            symptom="レンダリング中のため重量/破壊系コマンドを受け付けられません（キューに積みません）",
+            remediation="レンダ完了後に再試行してください（read-only と request-status はレンダ中も可）",
+        )
+        return proto.build_error(rid, RPC_BUSINESS_ERROR, ErrorCode.BUSY_RENDERING, eo)
+
     def _err(
         self,
         rid: str | None,
@@ -413,6 +443,7 @@ def start(
     host: str | None = None,
     port: int | None = None,
     handler: DispatchFn | None = None,
+    render_busy: Callable[[], bool] | None = None,
 ) -> Server:
     """サーバを起動（既存があれば先に停止して二重 listen を防ぐ）。"""
     global _server
@@ -425,6 +456,7 @@ def start(
         port or runtime.DEFAULT_PORT,
         info,
         handler or _sync_handler,
+        render_busy=render_busy,
     )
     srv.start()
     _server = srv

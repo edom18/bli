@@ -72,7 +72,7 @@ os.environ["BLI_STATE_DIR"] = tempfile.mkdtemp(prefix="bli-ops-smoke-")
 import bpy  # type: ignore  # noqa: E402
 
 from bli import client  # noqa: E402
-from bli_addon import ops  # noqa: E402
+from bli_addon import ops, render_state  # noqa: E402
 from bli_addon import server as srv_mod  # noqa: E402
 from bli_addon.capability import CapabilityRegistry  # noqa: E402
 from bli_addon.dispatcher import Dispatcher  # noqa: E402
@@ -2151,6 +2151,32 @@ def run_calls():
             assert e.error.get("message") == "INVALID_PARAMS", (method, e.error)
     print("undo_redo_background_graceful_ok")
 
+    # render busy（M10 T10.2）: レンダ中（render_state.mark_busy）は mutating/heavy を dispatch 前に
+    # BUSY_RENDERING で即拒否し、read-only は通す（観測性維持）。render handler の実発火（GUI）は
+    # render_spike.py（研究 §E12）が担う。ここでは busy フラグを手動 ON にして拒否経路を裏付ける。
+    render_state.mark_busy()
+    try:
+        try:
+            call_retry("transform", {"targets": "Cube", "location": [0.0, 0.0, 0.0]})
+            raise AssertionError("レンダ中の transform は BUSY_RENDERING のはず")
+        except client.RpcRemoteError as e:
+            assert e.error.get("message") == "BUSY_RENDERING", e.error
+            assert (e.error.get("data") or {}).get("retryable") is True, e.error
+        # heavy だが mutates=False の export も拒否（heavy ブランチが mutating と独立）。
+        try:
+            call_retry("export", {"format": "stl", "path": "busy.stl"})
+            raise AssertionError("レンダ中の export は BUSY_RENDERING のはず")
+        except client.RpcRemoteError as e:
+            assert e.error.get("message") == "BUSY_RENDERING", e.error
+        # read-only（scene-info）はレンダ中も通る＝観測性を維持。
+        si_busy, _ = call_retry("scene-info", {})
+        assert si_busy["data"]["object_count"] >= 1, si_busy["data"]
+    finally:
+        render_state.mark_idle()
+    # idle に戻れば mutating も通常どおり通る（busy 判定が誤爆していない）。
+    call_retry("transform", {"targets": "Cube", "location": [0.0, 0.0, 0.0]})
+    print("render_busy_reject_ok")
+
 
 def main():
     print("=== BLI_OPS_SMOKE_BEGIN ===")
@@ -2166,6 +2192,7 @@ def main():
     ensure_export_fixture()  # M8 T8.5 print-export（world (5,0,0) cube）検証用（メインスレッドで生成）
 
     dispatcher = Dispatcher()  # background では timer を使わず手動 pump
+    render_state.install()  # render handler を登録（busy フラグ駆動・本番 register と同じ）
 
     def executor(method, params, info, settle):
         return dispatcher.submit(
@@ -2181,6 +2208,7 @@ def main():
         host="127.0.0.1",
         port=0,
         handler=executor,
+        render_busy=render_state.is_busy,  # レンダ中は重量/破壊系を dispatch 前に拒否
     )
 
     state = {}
@@ -2202,12 +2230,29 @@ def main():
     dispatcher.pump()  # 最後の job を drain
     t.join(timeout=2.0)
 
-    srv_mod.stop()
+    # @persistent 生存確認（M10 T10.2・研究 §E12）: worker 完了後＝以後 quit するのでシーンを汚しても可。
+    # render handler（install 済み）が open_mainfile を跨いで残るか。GUI 内で timer から open を呼ぶと
+    # 固まるため GUI スパイクでは扱わず、read_homefile が無確認で安全な background でここで裏付ける。
+    # 「未登録」と「open で消えた」を区別する（前者は install 不全＝別バグ）。
+    installed_before = render_state.init_handler_registered()
+    bpy.ops.wm.read_homefile(use_empty=True)  # ファイル読み込み相当（background は無確認）
+    survived_open = render_state.init_handler_registered()
+    persist_ok = installed_before and survived_open
+    print(
+        f"render_handler_persistent_ok installed={installed_before} survived_open={survived_open}"
+    )
 
-    if state.get("ok"):
+    srv_mod.stop()
+    render_state.remove()
+
+    if state.get("ok") and persist_ok:
         print("OPS SMOKE OK")
     else:
         print("OPS SMOKE FAIL")
+        if not installed_before:
+            print("render handler が install されていない（@persistent 以前の登録不全）")
+        elif not survived_open:
+            print("render handler が open_mainfile を跨いで生存しなかった（@persistent 不全）")
         print(state.get("error", "worker did not finish in time"))
     print("=== BLI_OPS_SMOKE_END ===")
 
