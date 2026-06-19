@@ -1,6 +1,6 @@
 # bli (Blender CLI) — ロードマップ俯瞰（ROADMAP）
 
-最終更新: 2026-06-19 / このファイルは**全体像を1枚で見渡す**ための索引。詳細は各リンク先へ。
+最終更新: 2026-06-20 / このファイルは**全体像を1枚で見渡す**ための索引。詳細は各リンク先へ。
 
 - **プロダクト**: AIエージェントが **CLI 経由で Blender を自律操作**するツール（`bli`）。常駐 GUI Blender + アドオン TCP ソケット ← Python/Typer 製 CLI。MCP のトークン非効率を CLI で解消。
 - **真実の情報源（SSOT）**: `specs/blender-cli-core/`（`spec.md` / `plan.md` / `research.md` / `contracts/methods.md` / `data-model.md`）。
@@ -24,7 +24,7 @@
 | M7 | メッシュ編集（mesh --op: bmesh 一次 + heavy は modifier 経由） | ✅ | PR #7–#9 |
 | **M8** | **3シナリオ中核価値（set-origin / straighten / print-*）+ 実地フィードバック対応** | ✅ **完了**（PR #10–#18, #20） | 下記 §M8 |
 | **M9** | ファイルI/O（export / import / save / open・3mf 不可→CAPABILITY） | ✅ **完了**: T9.1 export(#21)/T9.2 import(#22)/T9.3 save(#23)/T9.4 open(#25) | 確定要約 HANDOFF §6i / GT research §E9・§E10・§E11 |
-| **M10** | 非同期job & フリーズ対策（job 化 / render busy / watchdog） | 🔶 **進行中**: T10.1 job 化(#27) ✅・**残り T10.2 render busy・T10.3 watchdog** | 確定要約 HANDOFF §6j / 着手書 NEXT-M10.md（--dry-run は M13 繰越） |
+| **M10** | 非同期job & フリーズ対策（job 化 / render busy / watchdog） | 🔶 **進行中**: T10.1 job 化(#27) ✅・T10.2 render busy(#28) ✅・**残り T10.3 watchdog** | 確定要約 HANDOFF §6j / 着手書 NEXT-M10.md（--dry-run は M13 繰越） |
 | M11 | exec-python（既定 off・audited/trusted は設定昇格） | ⬜ 未着手 | |
 | M12 | Skill 同梱 & スキーマ同期（`.claude/skills/bli/` + help --json 生成 + schema_hash） | ⬜ 未着手 | D12 |
 | M13 | テスト網羅 & CI 仕上げ | ⬜ 未着手 | |
