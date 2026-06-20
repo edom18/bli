@@ -3,7 +3,7 @@ name: test-blender
 on: [push, pull_request]
 
 jobs:
-  # L1 純ユニット + lint + AST guard（全 PR ゲート / bpy 不要）
+  # L1 純ユニット + lint + AST guard + L3 プロトコル E2E + schema snapshot（全 PR ゲート / bpy 不要）
   unit:
     runs-on: ubuntu-latest
     steps:
@@ -18,23 +18,32 @@ jobs:
           uv run ruff format --check .
       - name: AST guard (生 bpy.ops 禁止)
         run: uv run python scripts/check_no_raw_bpy_ops.py packages/bli-addon/src
-      - name: Unit tests (L1) + protocol E2E (L3)
+      - name: Type check (pyright)
+        run: uv run pyright
+      - name: Unit (L1) + protocol E2E (L3) + schema snapshot (M12 T12.3)
         run: uv run pytest
 
-  # L2 bpy 統合（5.0 主軸 / 4.4 ベストエフォート）— M0.5 以降で有効化
-  # bpy-integration:
-  #   runs-on: ${{ matrix.os }}
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       os: [ubuntu-latest]
-  #       blender-version: ["4.4", "5.0"]
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: BradyAJohnston/setup-blender@v5
-  #       with:
-  #         version: ${{ matrix.blender-version }}
-  #     - name: Capability dump + 契約テスト
-  #       run: |
-  #         blender --background --python packages/bli-addon/spikes/dump_capabilities.py
-  #         blender --background --python packages/bli-addon/tests/test_contract.py
+  # L2 bpy 統合（5.0 主軸＝必須ゲート / 4.4 ベストエフォート）。M13 T13.1。
+  # golden smoke（3シナリオ + 主要編集の数値検証）と bl_rna 契約テストを実機 Blender で走らせる。
+  bpy-integration:
+    needs: unit
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        blender-version: ["5.0", "4.4"]
+    # 5.0 は必須ゲート（失敗でワークフロー赤）、4.4 はベストエフォート（失敗を許容）。
+    continue-on-error: ${{ matrix.blender-version == '4.4' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Blender ${{ matrix.blender-version }}
+        uses: BradyAJohnston/setup-blender@v5
+        with:
+          version: ${{ matrix.blender-version }}
+      - name: Golden smoke (L2 統合 + 3シナリオ golden / M13 T13.3)
+        shell: bash
+        run: |
+          blender --background --python packages/bli-addon/spikes/smoke_ops.py 2>&1 | tee smoke.log
+          grep -q "OPS SMOKE OK" smoke.log || { echo "::error::OPS SMOKE が OK で終わっていない"; exit 1; }
+      - name: bl_rna 契約テスト (operator 実在・引数 / M13 T13.2)
+        run: blender --background --python packages/bli-addon/spikes/contract_check.py
