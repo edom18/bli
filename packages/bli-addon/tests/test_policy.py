@@ -65,3 +65,31 @@ def test_exec_section_not_a_table_falls_back_to_off(state_dir):
 
 def test_policy_path_is_under_state_dir(state_dir):
     assert policy.policy_path() == state_dir / "policy.toml"
+
+
+# ---- allow_hashes（T11.3・R-B）----
+
+
+def test_allow_hashes_missing_is_empty(state_dir):
+    assert policy.read_allow_hashes() == frozenset()
+
+
+def test_allow_hashes_read_and_normalized(state_dir):
+    _write_policy(state_dir, '[exec]\nmode = "audited"\nallow_hashes = ["ABC123", "def456"]\n')
+    # 小文字へ正規化される。
+    assert policy.read_allow_hashes() == frozenset({"abc123", "def456"})
+
+
+def test_allow_hashes_non_list_is_empty(state_dir):
+    _write_policy(state_dir, '[exec]\nallow_hashes = "abc"\n')
+    assert policy.read_allow_hashes() == frozenset()
+
+
+def test_allow_hashes_ignores_non_string_items(state_dir):
+    _write_policy(state_dir, '[exec]\nallow_hashes = ["abc", 123, true]\n')
+    assert policy.read_allow_hashes() == frozenset({"abc"})
+
+
+def test_allow_hashes_malformed_toml_is_empty(state_dir):
+    _write_policy(state_dir, "broken [[[")
+    assert policy.read_allow_hashes() == frozenset()

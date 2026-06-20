@@ -271,16 +271,16 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 | モード | 挙動 | 既定 |
 |--------|------|:---:|
 | `off` | exec-python を無効化。呼ぶと `EXEC_DISABLED` を返す | **✓** |
-| `audited` | 全コードを `audit/` に記録。承認ゲート or 許可ハッシュで自走 | |
+| `audited` | 全コードを `audit/` に記録。**許可ハッシュ（sha256）一致で自走**（T11.3・R-B） | |
 | `trusted` | 無制限実行。明示有効化（設定）が前提 | |
 - モードは **ユーザ所有の設定ファイルでのみ昇格可能**。CLIフラグ単体では緩められない。
   - **真実源（M11 T11.1・R-A 確定）**: サーバ（Blender アドオン）は **ユーザローカルの `policy.toml`**（`BLI_STATE_DIR/policy.toml`・OS 所有者限定・git 非管理）の `[exec] mode` のみを読む。CLI は mode を送らず（送れず）、リポジトリ内 `.bli/config.toml` の `[exec] mode` は **表示用ヒント**でサーバは読まない（mode=trusted を commit しても昇格しない）。policy 読取は実行ごとに最新化（off↔trusted の切替を即反映）。fail-closed（不在/パース失敗/不正値はすべて off）。
-  - `mode != trusted` は `EXEC_DISABLED`（PRECONDITION・retryable=False）。**T11.1 では `audited` も fail-closed で拒否**（承認ゲート/許可ハッシュは T11.3）。
+  - off / audited 未許可は `EXEC_DISABLED`（PRECONDITION・retryable=False）。**audited（T11.3・R-B）**: コードの sha256 が `policy.toml` の `[exec] allow_hashes` に一致したときだけ自走実行し、不一致は拒否メッセージに追加すべき sha256 を提示する。trusted は無条件実行。
 - AST検査は「安全保証」ではなく **ヒューリスティックなフラグ付け**。レスポンスに `security_guarantee: false` と `heuristic_flags` を含める（T11.2）。**サンドボックスは提供しない**（§脅威モデル）＝コードは同一 OS 権限で走る。ユーザコードの実行時例外は `EXEC_ERROR`（runtime=ENVIRONMENT / 構文エラー=USER_INPUT・compile フェーズ）へ写像し INTERNAL にしない。
 - 3シナリオは構造化サブコマンドのみで完遂可能（exec不要）。
 
 ### 監査・ロギング
-- メインスレッドの単一実行口を通る全Python文字列を `audit/` に記録（防止でなく検知・追跡）。
+- メインスレッドの単一実行口を通る全Python文字列を `audit/` に記録（防止でなく検知・追跡）。**実装（T11.3）**: exec の試行をすべて `BLI_STATE_DIR/audit/exec.jsonl`（JSONL）に追記＝executed も rejected:off / rejected:audited-unlisted も記録（ts/mode/decision/code_sha256/code_len/heuristic_flags/source）。書込は best-effort（失敗時は応答 `audit_ok=false`・可用性優先）。
 - `save` / `open` / `export` / `import` は対象パスを明示ログ。`.blend` 上書きは既定でバックアップ強制。`open` はシーン全体を置換するため、未保存の bli 変更があれば `--force` を要求（誤って未保存作業を破棄しない）。
 
 ### 設定・トークンの配置（ハイブリッド）

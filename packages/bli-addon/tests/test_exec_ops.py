@@ -58,12 +58,48 @@ def test_explicit_off_rejects(state_dir):
     assert ei.value.message == ErrorCode.EXEC_DISABLED
 
 
-def test_audited_is_fail_closed_in_t111(state_dir):
-    # audited は許可ハッシュゲート（T11.3）まで fail-closed で拒否する。
+def test_audited_unlisted_rejected(state_dir):
+    # audited（T11.3）: 許可リストに無いコードは EXEC_DISABLED（不一致は fail-closed）。
     _write_policy(state_dir, "audited")
     with pytest.raises(JsonRpcError) as ei:
         ops._exec_python({"code": "1 + 1"}, INFO)
     assert ei.value.message == ErrorCode.EXEC_DISABLED
+    # remediation に追加すべき sha256 が提示される（自走への導線）。
+    from bli_addon import audit
+
+    assert audit.code_sha256("1 + 1") in ei.value.data.remediation
+
+
+def test_audited_listed_executes(state_dir, monkeypatch):
+    # audited（T11.3）: sha256 が allow_hashes に一致すれば自走実行する。
+    from bli_addon import audit
+
+    code = "21 * 2"
+    sha = audit.code_sha256(code)
+    (state_dir / "policy.toml").write_text(
+        f'[exec]\nmode = "audited"\nallow_hashes = ["{sha}"]\n', encoding="utf-8"
+    )
+    _install_fake_gateway(monkeypatch)
+    result = ops._exec_python({"code": code}, INFO)
+    assert result["success"] is True
+    assert result["data"]["mode"] == "audited"
+    assert result["data"]["result_repr"] == "42"
+    assert result["data"]["code_sha256"] == sha
+
+
+def test_audited_allow_hash_is_case_insensitive(state_dir, monkeypatch):
+    # allow_hashes に大文字で書いても、code_sha256（常に小文字）と一致して自走する（正規化の統合確認）。
+    from bli_addon import audit
+
+    code = "10 + 5"
+    sha_upper = audit.code_sha256(code).upper()
+    (state_dir / "policy.toml").write_text(
+        f'[exec]\nmode = "audited"\nallow_hashes = ["  {sha_upper}  "]\n', encoding="utf-8"
+    )
+    _install_fake_gateway(monkeypatch)
+    result = ops._exec_python({"code": code}, INFO)
+    assert result["success"] is True
+    assert result["data"]["result_repr"] == "15"
 
 
 # ---- R-A: params 経由で昇格できない ----
@@ -139,6 +175,47 @@ def test_trusted_captures_stdout(state_dir, monkeypatch):
     _install_fake_gateway(monkeypatch)
     result = ops._exec_python({"code": "print('from exec')"}, INFO)
     assert result["data"]["stdout"].strip() == "from exec"
+
+
+# ---- 監査ログ（T11.3・spec §280 防止でなく検知）----
+
+
+def test_trusted_execution_is_audited(state_dir, monkeypatch):
+    from bli_addon import audit
+
+    _write_policy(state_dir, "trusted")
+    _install_fake_gateway(monkeypatch)
+    result = ops._exec_python({"code": "1 + 1"}, INFO)
+    assert result["data"]["audit_ok"] is True
+    entries = audit.read_entries()
+    assert len(entries) == 1
+    assert entries[0]["mode"] == "trusted"
+    assert entries[0]["decision"] == "executed"
+    assert entries[0]["code_sha256"] == audit.code_sha256("1 + 1")
+
+
+def test_off_rejection_is_audited(state_dir):
+    # off でも「呼ばれた事実」を記録する（防止でなく検知・§280）。
+    from bli_addon import audit
+
+    _write_policy(state_dir, "off")
+    with pytest.raises(JsonRpcError):
+        ops._exec_python({"code": "1 + 1"}, INFO)
+    entries = audit.read_entries()
+    assert len(entries) == 1
+    assert entries[0]["decision"] == "rejected:off"
+
+
+def test_audited_unlisted_rejection_is_audited(state_dir):
+    from bli_addon import audit
+
+    _write_policy(state_dir, "audited")
+    with pytest.raises(JsonRpcError):
+        ops._exec_python({"code": "1 + 1"}, INFO)
+    entries = audit.read_entries()
+    assert len(entries) == 1
+    assert entries[0]["decision"] == "rejected:audited-unlisted"
+    assert entries[0]["code_sha256"] == audit.code_sha256("1 + 1")
 
 
 def test_trusted_runtime_error_maps_to_exec_error(state_dir, monkeypatch):

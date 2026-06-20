@@ -16,6 +16,7 @@ DEFAULT_PORT = 9876
 CONNECTION_FILENAME = "connection.json"
 TOKEN_FILENAME = "session.token"
 OUTPUTS_DIRNAME = "outputs"
+AUDIT_DIRNAME = "audit"
 
 # タイムアウト調整（spec §7）。サーバの主スレッド実行ウォッチドッグ（DISPATCH_TIMEOUT）が
 # クライアントのソケット読み取り猶予（CLIENT_READ_TIMEOUT）より「先に」発火しなければならない。
@@ -90,5 +91,15 @@ def outputs_dir() -> Path:
     アドオン（書込）と CLI（読込）が同じ場所を参照する。テストは env で差し替える。
     """
     d = user_state_dir() / OUTPUTS_DIRNAME
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def audit_dir() -> Path:
+    """exec-python の監査ログ置き場（`BLI_STATE_DIR/audit` 既定・git 非管理・M11 T11.3）。
+
+    policy.toml と同じユーザローカル信頼域。サンドボックス非提供の代償＝「防止でなく検知」の証跡。
+    """
+    d = user_state_dir() / AUDIT_DIRNAME
     d.mkdir(parents=True, exist_ok=True)
     return d

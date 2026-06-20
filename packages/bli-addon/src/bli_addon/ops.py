@@ -989,19 +989,8 @@ def _exec_error(message: str, *, phase: str, cause: str = "") -> JsonRpcError:
     )
 
 
-def _exec_disabled(mode: str) -> JsonRpcError:
-    """exec が無効（off / 未実装の audited）のときの EXEC_DISABLED を組み立てる（fail-closed）。"""
-    from . import policy
-
-    if mode == "audited":
-        symptom = "exec mode=audited はまだ未実装です（許可ハッシュゲートは T11.3）"
-        remediation = "現状は policy.toml の [exec] mode を trusted にしたときだけ実行できます"
-    else:
-        symptom = "exec-python は無効です（既定 off・サンドボックスは提供しません）"
-        remediation = (
-            f"ユーザローカルの policy.toml（{policy.policy_path()}）で [exec] mode を trusted に "
-            "してください（リポジトリ内の config.toml では昇格できません）"
-        )
+def _exec_disabled(symptom: str, remediation: str) -> JsonRpcError:
+    """exec が無効（off / audited で許可リスト外）のときの EXEC_DISABLED（PRECONDITION・retryable=False）。"""
     return JsonRpcError(
         RPC_BUSINESS_ERROR,
         ErrorCode.EXEC_DISABLED,
@@ -1013,6 +1002,25 @@ def _exec_disabled(mode: str) -> JsonRpcError:
             remediation=remediation,
         ),
     )
+
+
+def _audit_exec(entry: Any) -> bool:
+    """exec 監査を記録し、失敗（best-effort False）なら stderr に警告する（§280 の検知漏れを観測可能に）。
+
+    executed 経路は戻り値を `audit_ok` で応答に載せるが、rejected 経路（off / audited-unlisted）は
+    raise で終わり応答に載らないため、ここで stderr 警告して証跡欠落を必ず観測可能にする。
+    """
+    from . import audit
+
+    ok = audit.record(entry)
+    if not ok:
+        import sys
+
+        print(
+            "[bli] warning: exec 監査ログの書き込みに失敗しました（証跡が残りません・§280）",
+            file=sys.stderr,
+        )
+    return ok
 
 
 def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
@@ -1032,16 +1040,31 @@ def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
 
     # **mode の真実源はサーバが読む policy.toml（R-A）**。params の mode は一切読まない＝CLI 単体では
     # 昇格できない（spec §276・§459）。読取は実行ごとに最新化（trusted→off の切替を即反映＝安全側）。
-    from . import policy
+    from . import audit, policy
 
     mode = policy.read_exec_mode()
-    # T11.1 は off=拒否 / trusted=実行。audited（許可ハッシュゲート）は T11.3 まで fail-closed で拒否する
-    # （未ガードの audited を出荷しない）。off / audited はここで EXEC_DISABLED を投げて bpy に到達しない。
-    if mode != "trusted":
-        raise _exec_disabled(mode)
 
-    # --file は直接 RPC 用にサーバ側でも読む（CLI は --file を CLI 側で読んで code として送る）。
-    # path はサーバ（Blender プロセス）の CWD 基準で解決される＝存在しなければ USER_INPUT。
+    # off: file を読む前に拒否（試行は監査に残す＝防止でなく検知・§280）。
+    if mode == "off":
+        sha = audit.code_sha256(str(code)) if has_code else None
+        ref = "code" if has_code else f"file:{file}"
+        _audit_exec(
+            audit.make_entry(
+                mode="off",
+                decision="rejected:off",
+                source=ref,
+                code_sha256=sha,
+                code_len=len(str(code)) if has_code else None,
+            )
+        )
+        raise _exec_disabled(
+            "exec-python は無効です（既定 off・サンドボックスは提供しません）",
+            f"ユーザローカルの policy.toml（{policy.policy_path()}）で [exec] mode を trusted に "
+            "してください（リポジトリ内の config.toml では昇格できません）",
+        )
+
+    # audited/trusted: source を解決する（--file は直接 RPC 用にサーバ側でも読む。CLI は --file を
+    # CLI 側で読んで code として送る）。path はサーバ（Blender プロセス）の CWD 基準で解決される。
     if has_file:
         import os
 
@@ -1058,8 +1081,45 @@ def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             raise _exec_error(
                 f"スクリプトファイルの読み取りに失敗しました: {e}", phase="compile"
             ) from e
+        ref = f"file:{abspath}"
     else:
         source = str(code)
+        ref = "code"
+
+    from . import ast_heuristics
+
+    sha = audit.code_sha256(source)
+    flags = ast_heuristics.scan(source)
+
+    # audited（R-B）: 許可ハッシュ集合に一致するコードだけ自走実行する。不一致は監査に残して拒否し、
+    # 追加すべき sha を提示する（ユーザがその sha を policy.toml の allow_hashes に足せば次回から自走）。
+    if mode == "audited" and sha not in policy.read_allow_hashes():
+        _audit_exec(
+            audit.make_entry(
+                mode="audited",
+                decision="rejected:audited-unlisted",
+                source=ref,
+                code_sha256=sha,
+                code_len=len(source),
+                heuristic_flags=flags,
+            )
+        )
+        raise _exec_disabled(
+            f"exec mode=audited: このコードは許可リストにありません（sha256={sha}）",
+            f"承認するなら policy.toml の [exec] allow_hashes にこの sha256 を追加してください: {sha}",
+        )
+
+    # 実行が確定（trusted / audited で許可済み）。**実行前に**監査へ記録する（証跡を先に残す）。
+    audit_ok = _audit_exec(
+        audit.make_entry(
+            mode=mode,
+            decision="executed",
+            source=ref,
+            code_sha256=sha,
+            code_len=len(source),
+            heuristic_flags=flags,
+        )
+    )
 
     from . import gateway  # lazy: bpy 依存
 
@@ -1077,8 +1137,6 @@ def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             phase=outcome.error.phase,
             cause=" | ".join(captured),
         )
-    from . import ast_heuristics
-
     data = {
         "mode": mode,
         "stdout": outcome.stdout,
@@ -1087,7 +1145,11 @@ def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         # **サンドボックスはしない**＝この出力を信頼の根拠にしないこと（spec §459・常に false）。
         "security_guarantee": False,
         # AST ヒューリスティック（T11.2・R-D）。注意喚起のみでブロックしない（mode ゲートとは独立）。
-        "heuristic_flags": ast_heuristics.scan(source),
+        "heuristic_flags": flags,
+        # 許可リスト追加用（audited 昇格に使える）。
+        "code_sha256": sha,
+        # 監査記録に成功したか（false なら証跡欠落＝可用性優先で実行はしたが観測可能にする・§280）。
+        "audit_ok": audit_ok,
     }
     return _ok_offload("exec-python", data, "exec-python/v1", fingerprint=fingerprint)
 

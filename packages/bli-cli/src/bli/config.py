@@ -15,7 +15,13 @@ CONFIG_TOML = """# bli プロジェクト設定（.bli/config.toml）
 # 注意（M11・R-A）: この mode は **表示用ヒント** に過ぎず、サーバ（Blender アドオン）は読まない。
 # exec の真実源は **ユーザローカルの policy.toml**（BLI_STATE_DIR/policy.toml・OS 所有者限定）。
 # リポジトリに mode=trusted を commit しても昇格しない。実際に有効化するには自分の OS アカウントの
-# policy.toml に [exec] mode = "trusted" を書く（CLI フラグ単体では昇格できない・spec §276/§459）。
+# policy.toml に [exec] mode を書く（CLI フラグ単体では昇格できない・spec §276/§459）。
+#   policy.toml の例:
+#     [exec]
+#     mode = "trusted"                       # off | audited | trusted
+#     # audited のときは許可した sha256 のコードだけ自走実行する（R-B）:
+#     # allow_hashes = ["<exec 応答の code_sha256>", ...]
+#   exec の試行はすべて BLI_STATE_DIR/audit/exec.jsonl に記録される（防止でなく検知・§280）。
 mode = "off"          # off | audited | trusted（既定 off・表示用）
 
 [server]

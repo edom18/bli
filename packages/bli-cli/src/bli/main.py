@@ -1076,6 +1076,11 @@ def exec_python(
             parts.append(f"[stderr] {err}")
         if data.get("result_repr") is not None:
             parts.append(f"=> {data.get('result_repr')}")
+        flags = data.get("heuristic_flags") or []
+        if flags:
+            parts.append(f"[heuristic_flags] {', '.join(flags)}（注意喚起・ブロックはしない）")
+        if data.get("audit_ok") is False:
+            parts.append("[warn] 監査ログの書き込みに失敗しました（証跡が残っていません）")
         return "\n".join(parts)
 
     _rpc("exec-python", params, json_out=json_out, port=port, human=human, request_id=request_id)

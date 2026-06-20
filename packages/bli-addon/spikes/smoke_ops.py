@@ -72,7 +72,7 @@ os.environ["BLI_STATE_DIR"] = tempfile.mkdtemp(prefix="bli-ops-smoke-")
 import bpy  # type: ignore  # noqa: E402
 
 from bli import client  # noqa: E402
-from bli_addon import ops, policy, render_state, watchdog  # noqa: E402
+from bli_addon import audit, ops, policy, render_state, watchdog  # noqa: E402
 from bli_addon import server as srv_mod  # noqa: E402
 from bli_addon.capability import CapabilityRegistry  # noqa: E402
 from bli_addon.dispatcher import Dispatcher  # noqa: E402
@@ -2203,13 +2203,23 @@ def run_calls():
         raise AssertionError("policy off で exec は EXEC_DISABLED のはず")
     except client.RpcRemoteError as e:
         assert e.error.get("message") == "EXEC_DISABLED", e.error
-    # (b) audited も T11.1 では fail-closed で拒否（許可ハッシュゲートは T11.3）。
+    # (b) audited（T11.3・R-B）: 許可リストに無いコードは EXEC_DISABLED（不一致は fail-closed）。
     _policy_file.write_text('[exec]\nmode = "audited"\n', encoding="utf-8")
     try:
         call_retry("exec-python", {"code": "1 + 1"})
-        raise AssertionError("audited は T11.1 では EXEC_DISABLED のはず")
+        raise AssertionError("audited で未許可コードは EXEC_DISABLED のはず")
     except client.RpcRemoteError as e:
         assert e.error.get("message") == "EXEC_DISABLED", e.error
+    # (b2) audited で sha256 を allow_hashes に追加すれば自走実行できる。
+    _audited_code = "1 + 1"
+    _audited_sha = audit.code_sha256(_audited_code)
+    _policy_file.write_text(
+        f'[exec]\nmode = "audited"\nallow_hashes = ["{_audited_sha}"]\n', encoding="utf-8"
+    )
+    exa, _ = call_retry("exec-python", {"code": _audited_code})
+    assert exa["data"]["mode"] == "audited", exa["data"]
+    assert exa["data"]["result_repr"] == "2", exa["data"]
+    assert exa["data"]["code_sha256"] == _audited_sha, exa["data"]
     # (c) trusted へ昇格＝実行できる。stdout キャプチャ + 最終式 repr + security_guarantee=false。
     _policy_file.write_text('[exec]\nmode = "trusted"\n', encoding="utf-8")
     ex, _ = call_retry(
@@ -2257,6 +2267,12 @@ def run_calls():
         raise AssertionError("off へ戻したら再び EXEC_DISABLED のはず")
     except client.RpcRemoteError as e:
         assert e.error.get("message") == "EXEC_DISABLED", e.error
+    # (h) 監査ログ（T11.3・§280）: 実行も拒否もすべて audit/exec.jsonl に残る（防止でなく検知）。
+    _audit_rows = audit.read_entries()
+    _decisions = [r["decision"] for r in _audit_rows]
+    assert "executed" in _decisions, _decisions  # trusted/audited の実行
+    assert "rejected:off" in _decisions, _decisions  # off 拒否
+    assert "rejected:audited-unlisted" in _decisions, _decisions  # 未許可 audited 拒否
     print("exec_python_mode_gate_ok")
 
 

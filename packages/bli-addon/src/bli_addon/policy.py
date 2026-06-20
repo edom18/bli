@@ -56,3 +56,19 @@ def read_exec_mode() -> str:
         if mode in VALID_MODES:
             return str(mode)
     return DEFAULT_MODE
+
+
+def read_allow_hashes() -> frozenset[str]:
+    """policy.toml の `[exec] allow_hashes`（許可コードの sha256・小文字16進）を返す（M11 T11.3・R-B）。
+
+    audited モードはここに一致する sha256 のコードだけ自走実行する。不在/不正は空集合（fail-closed）。
+    要素は小文字に正規化し、文字列でないものは無視する。
+    """
+    exec_section = _load_policy().get("exec")
+    if not isinstance(exec_section, dict):
+        return frozenset()
+    raw = exec_section.get("allow_hashes")
+    if not isinstance(raw, list):
+        return frozenset()
+    # コピペ事故（前後空白・大文字）で沈黙して自走しない事態を減らすため strip + lower で正規化する。
+    return frozenset(h.strip().lower() for h in raw if isinstance(h, str))
