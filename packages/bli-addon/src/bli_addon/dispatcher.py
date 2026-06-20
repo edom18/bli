@@ -106,10 +106,21 @@ class Dispatcher:
 
     # ---- bpy.app.timers 連携（GUI 常駐）----
 
-    def install_timer(self, interval: float = 0.02) -> None:
+    def install_timer(
+        self, interval: float = 0.02, on_tick: Callable[[], None] | None = None
+    ) -> None:
         import bpy  # type: ignore  # lazy: bpy 依存をここに閉じ込める
 
         def _tick() -> float:
+            # 生存印を tick の冒頭で更新する（M10 T10.3）。tick が発火したこと＝メインスレッドが
+            # 動いている証拠。重量 op 中は pump→job が tick を占有して以後の tick が止まり、
+            # 生存印が進まなくなる＝ウォッチドッグが unresponsive を検知できる。on_tick の例外は
+            # pump を巻き添えにしないよう握り潰す。
+            if on_tick is not None:
+                try:
+                    on_tick()
+                except Exception:
+                    pass
             try:
                 self.pump()
             except Exception:

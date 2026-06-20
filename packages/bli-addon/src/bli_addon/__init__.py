@@ -58,13 +58,15 @@ def register() -> None:
     from bli_core.commands import get_command, is_heavy_request, load_definitions
     from bli_core.schema import schema_hash
 
-    from . import ops, render_state, server
+    from . import ops, render_state, server, watchdog
     from .capability import CapabilityRegistry
     from .dispatcher import ACCEPTED, Dispatcher
 
     global _dispatcher
     _dispatcher = Dispatcher()
-    _dispatcher.install_timer()  # bpy.app.timers が pump を駆動
+    watchdog.start()  # メインスレッド応答性の監視スレッドを起動（M10 T10.3）
+    # pump tick が生存印を更新＝重量 op で tick が止まると watchdog が unresponsive を検知できる。
+    _dispatcher.install_timer(on_tick=watchdog.mark_alive)  # bpy.app.timers が pump を駆動
     render_state.install()  # render handler を登録し busy フラグを駆動（M10 T10.2）
 
     dispatcher = _dispatcher
@@ -94,16 +96,18 @@ def register() -> None:
         capabilities=CapabilityRegistry().list_capabilities(),
         handler=_executor,
         render_busy=render_state.is_busy,  # レンダ中は重量/破壊系を dispatch 前に拒否
+        watchdog_status=watchdog.snapshot,  # メインスレッド応答性を観測系（request-status）へ載せる
     )
 
 
 def unregister() -> None:
-    """TCP サーバを停止し、タイマ・render handler を解除する。"""
-    from . import render_state, server
+    """TCP サーバを停止し、タイマ・render handler・ウォッチドッグを解除する。"""
+    from . import render_state, server, watchdog
 
     server.stop()
     render_state.remove()
     global _dispatcher
     if _dispatcher is not None:
-        _dispatcher.remove_timer()
+        _dispatcher.remove_timer()  # pump tick を止めてから watchdog を停止（reset 後の再 mark_alive を防ぐ）
         _dispatcher = None
+    watchdog.stop()  # 監視スレッドを停止（M10 T10.3）

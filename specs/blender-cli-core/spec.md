@@ -334,7 +334,7 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 - 代わりに観測性で守る:
   - 重量ジョブ（import/export/print-check/大規模処理）は受信時 `job_id` を採番し `status=accepted` を即返。`job-status` / `job-wait` で追跡。
   - レンダリング中は `render_init`/`render_complete` ハンドラで busy 管理し `BUSY_RENDERING` を即拒否（キューに積まない）。
-  - heartbeat watchdog で `MAIN_THREAD_UNRESPONSIVE` を検知・通知。
+  - heartbeat watchdog で `MAIN_THREAD_UNRESPONSIVE` を検知・**通知のみ**（実行は止めない／kill しない＝重量ネイティブ処理は中断不能）。pump タイマが生存印を更新し、別スレッド監視が「閾値(既定 60s=DISPATCH_TIMEOUT の2倍)を超えて未更新」で unresponsive を判定。**lock-free な観測系**（`request-status`/`job-status`/`doctor` 応答の `watchdog`/`main_thread_responsive`）に載せる＝メインが固まっていても受信スレッドが読んで返す（M10 T10.3・研究 §E13）。
 - 注意: チャンク化不能なネイティブC処理（importer/exporter/print3d内部）は実行中GUIが固まり得る（残存リスク）。
 
 ### bpy.ops フォールバック方針

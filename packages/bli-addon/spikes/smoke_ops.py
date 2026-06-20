@@ -72,7 +72,7 @@ os.environ["BLI_STATE_DIR"] = tempfile.mkdtemp(prefix="bli-ops-smoke-")
 import bpy  # type: ignore  # noqa: E402
 
 from bli import client  # noqa: E402
-from bli_addon import ops, render_state  # noqa: E402
+from bli_addon import ops, render_state, watchdog  # noqa: E402
 from bli_addon import server as srv_mod  # noqa: E402
 from bli_addon.capability import CapabilityRegistry  # noqa: E402
 from bli_addon.dispatcher import Dispatcher  # noqa: E402
@@ -2177,6 +2177,21 @@ def run_calls():
     call_retry("transform", {"targets": "Cube", "location": [0.0, 0.0, 0.0]})
     print("render_busy_reject_ok")
 
+    # watchdog（M10 T10.3）: メインスレッド応答性は request-status（lock-free）応答に載る。background は
+    # bpy.app.timers が発火しない＝heartbeat が自動更新されないため、生存印を手動で操作して観測経路を
+    # 裏付ける（実 timer 停止の観測は watchdog_spike.py・研究 §E13 が担う）。
+    watchdog.reset()
+    watchdog.mark_alive()  # 直近 heartbeat あり＝responsive
+    sr_wd, _ = call_retry("request-status", {"id": "smoke-wd"})
+    assert sr_wd["data"]["watchdog"]["responsive"] is True, sr_wd["data"]["watchdog"]
+    # 生存印を閾値より十分過去へずらす＝pump 停止（メインが固まった状態）の模擬。
+    watchdog._last_pump_ts = time.time() - (runtime.WATCHDOG_UNRESPONSIVE_THRESHOLD + 30)
+    sr_wd2, _ = call_retry("request-status", {"id": "smoke-wd"})
+    wd = sr_wd2["data"]["watchdog"]
+    assert wd["responsive"] is False and wd["unresponsive_since"] is not None, wd
+    watchdog.reset()  # idle へ戻す（後続が無ければ無害）
+    print("watchdog_observability_ok")
+
 
 def main():
     print("=== BLI_OPS_SMOKE_BEGIN ===")
@@ -2209,6 +2224,7 @@ def main():
         port=0,
         handler=executor,
         render_busy=render_state.is_busy,  # レンダ中は重量/破壊系を dispatch 前に拒否
+        watchdog_status=watchdog.snapshot,  # メインスレッド応答性を request-status に載せる（M10 T10.3）
     )
 
     state = {}

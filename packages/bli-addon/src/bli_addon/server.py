@@ -80,6 +80,7 @@ class Server:
         handler: DispatchFn,
         ttl: float | None = None,
         render_busy: Callable[[], bool] | None = None,
+        watchdog_status: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -88,6 +89,19 @@ class Server:
         # レンダ中判定（受信スレッドが dispatch 前に読む・既定は常に False＝GUI 非常駐/テスト）。
         # アドオンは render_state.is_busy を注入する（bpy 依存は addon 側に閉じ込める）。
         self._render_busy = render_busy or (lambda: False)
+        # メインスレッド応答性（M10 T10.3）。受信スレッドが lock-free に読み request-status へ載せる。
+        # アドオンは watchdog.snapshot を注入する（既定は常に responsive＝GUI 非常駐/テスト）。
+        # 既定 stub も watchdog.snapshot と同じキー形（responsive/unresponsive_since/last_pump_age/
+        # threshold/kind）を返す＝注入有無で消費側の契約がぶれない。
+        self._watchdog_status = watchdog_status or (
+            lambda: {
+                "responsive": True,
+                "unresponsive_since": None,
+                "last_pump_age": None,
+                "threshold": runtime.WATCHDOG_UNRESPONSIVE_THRESHOLD,
+                "kind": None,
+            }
+        )
         # registry の終端エントリ保持時間（冪等性 + 非同期 job 結果の後追い回収）。M10: 既定 auto-wait /
         # job-wait の上限（JOB_WAIT_TIMEOUT）より **短くしない**（短いと完了 job が TTL purge され、
         # 遅延 job-wait が結果を取り損ねて UNKNOWN になる・敵対的/設計レビュー P1）。
@@ -375,6 +389,10 @@ class Server:
             "known": state is not None,
             "state": state or "UNKNOWN",
             "result": result,
+            # メインスレッド応答性（M10 T10.3）。サーバ全体の状態で id 非依存。固まった重量 job を
+            # job-wait でポーリング中のエージェントが「進行中だが固まっている」を観測できる。
+            # 受信スレッドが watchdog を直接読むため、メインが塞がっていても応答する（lock-free）。
+            "watchdog": self._watchdog_status(),
         }
         return proto.build_success(
             rid, {"success": True, "operation": "request-status", "data": data}
@@ -444,6 +462,7 @@ def start(
     port: int | None = None,
     handler: DispatchFn | None = None,
     render_busy: Callable[[], bool] | None = None,
+    watchdog_status: Callable[[], dict[str, Any]] | None = None,
 ) -> Server:
     """サーバを起動（既存があれば先に停止して二重 listen を防ぐ）。"""
     global _server
@@ -457,6 +476,7 @@ def start(
         info,
         handler or _sync_handler,
         render_busy=render_busy,
+        watchdog_status=watchdog_status,
     )
     srv.start()
     _server = srv

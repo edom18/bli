@@ -34,6 +34,15 @@ JOB_POLL_INTERVAL = 0.5  # ポーリング間隔（秒）
 # ポーリング中に許容する連続の接続失敗回数（瞬断/サーバ再接続に強くする・超過で CONNECTION）。
 JOB_POLL_MAX_CONNECT_FAILS = 10
 
+# ウォッチドッグ（M10 T10.3・spec §7 line 337）。重量ネイティブ処理は bpy のメインスレッドを
+# 1回の blocking 呼び出しで占有し中断できない＝その間 pump タイマが発火せずメインが固まる。これを
+# **検知して観測可能にする**（実行は止めない・通知のみ）。pump タイマが生存印 last_pump_ts を更新し、
+# 別スレッド監視が「今 − last_pump_ts > 閾値」で unresponsive を判定する。受信スレッドが lock-free に
+# 読んで request-status / doctor 応答へ載せる（メインを待たない＝固まっていても観測できる）。
+# 閾値は DISPATCH_TIMEOUT(30s) の2倍＝通常の同期ジョブのタイムアウト待機を誤検知しない安全側。
+WATCHDOG_UNRESPONSIVE_THRESHOLD = 60.0  # pump がこの秒数停止したら unresponsive とみなす
+WATCHDOG_POLL_INTERVAL = 5.0  # 監視スレッドのチェック間隔（秒）
+
 # duplicate の複製数上限（暴走で Blender を固めるのを防ぐ）。CLI（送信前）/ サーバ（ops）双方が
 # この単一定数を参照し、上限のマジックナンバー散在と片側欠落を防ぐ。
 MAX_DUPLICATE_COUNT = 1000

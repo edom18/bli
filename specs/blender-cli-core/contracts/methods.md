@@ -6,6 +6,8 @@
 
 > **レンダ中の拒否（M10 T10.2・spec §7・研究 §E12）**: Blender がレンダリング中（`render_init`〜`render_complete`/`render_cancel`）は、**M=mutates または H=heavy** のメソッドを dispatch 前に `BUSY_RENDERING`（category=ENVIRONMENT・retryable・CLI exit 2）で即拒否する（キューに積まない＝フリーズ中の滞留防止）。**読み取り専用（scene-info/list-objects/object-info 等）と lock-free（request-status/job-status/job-wait）はレンダ中も通る**（観測性を維持）。busy 検知は `render_state`（`threading.Event`）＝render handler は内部レンダスレッドから発火するため thread-safe に保持。
 
+> **メインスレッド応答性 watchdog（M10 T10.3・spec §7・研究 §E13）**: 重量ネイティブ処理（boolean/decimate/import 等）がメインスレッドを占有して固まると、pump タイマが止まり生存印が更新されなくなる。これを別スレッド監視が「閾値(既定 60s)を超えて未更新」で検知し **通知のみ**（実行は止めない／kill しない）。`request-status`（→`job-status`/`job-wait`）応答の `data.watchdog`（`{responsive, unresponsive_since, last_pump_age, threshold}`）と `doctor` の `main_thread_responsive` に載せる＝**lock-free**（受信スレッド処理）でメインが固まっていても観測できる。
+
 ---
 
 ## 接続・診断（ローカル完結 / 一部はRPC前）

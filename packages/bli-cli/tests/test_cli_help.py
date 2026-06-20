@@ -625,6 +625,58 @@ def test_busy_rendering_maps_to_timeout_pending_exit():
     assert main_mod._exit_code_for(err) == ExitCode.TIMEOUT_PENDING
 
 
+def test_watchdog_suffix_responsive_is_empty():
+    # 応答中 / watchdog 情報なし は注記を付けない（M10 T10.3）。
+    assert main_mod._watchdog_suffix({"watchdog": {"responsive": True}}) == ""
+    assert main_mod._watchdog_suffix({}) == ""
+    assert main_mod._watchdog_suffix({"watchdog": None}) == ""
+
+
+def test_watchdog_suffix_unresponsive_notes_age():
+    # 応答なしのときだけ経過秒つきで注記する（実行は継続中＝固まっている可視化）。
+    s = main_mod._watchdog_suffix({"watchdog": {"responsive": False, "last_pump_age": 99.0}})
+    assert "応答なし" in s
+    assert "99s" in s
+    assert "実行は継続中" in s
+
+
+def _rs(state, watchdog, job_id="job-x"):
+    """request-status の (result, hello) を組み立てるテストヘルパ。"""
+    data = {"id": job_id, "known": True, "state": state, "result": None, "watchdog": watchdog}
+    if state == "DONE":
+        data["result"] = {"result": {"success": True, "operation": "import", "data": {"count": 0}}}
+    return ({"success": True, "operation": "request-status", "data": data}, {})
+
+
+def test_await_job_warns_once_on_unresponsive_main_thread(monkeypatch, capsys):
+    # auto-wait/job-wait ポーリング中に watchdog が unresponsive を返したら一度だけ stderr へ通知する
+    # （M10 T10.3・P1: 既定の auto-wait でも固まりを可視化する）。request-status は lock-free。
+    unresp = {"responsive": False, "unresponsive_since": 1.0, "last_pump_age": 99.0}
+    polls = [
+        _rs("RUNNING", unresp),
+        _rs("RUNNING", unresp),  # 2回目も unresponsive だが通知は1回だけ
+        _rs("DONE", {"responsive": True, "unresponsive_since": None}),
+    ]
+    calls = {"n": 0}
+
+    def fake_call(method, params=None, **kwargs):
+        i = calls["n"]
+        calls["n"] += 1
+        return polls[min(i, len(polls) - 1)]
+
+    monkeypatch.setattr(main_mod.client, "call", fake_call)
+    monkeypatch.setattr(
+        main_mod.runtime, "JOB_POLL_INTERVAL", 0.0
+    )  # ポーリング待ちを潰して即進める
+    result = main_mod._await_job("job-x", json_out=True, port=None, timeout=30)
+    err = capsys.readouterr().err
+    assert result.get("operation") == "import"
+    assert "メインスレッドが応答していません" in err
+    assert (
+        err.count("メインスレッドが応答していません") == 1
+    )  # 通知は一度だけ（毎ポーリングで出さない）
+
+
 def test_modifier_bad_operation_local_validation():
     # 不正な --operation は送信前ローカル Pydantic 検証で exit 4
     res = runner.invoke(
