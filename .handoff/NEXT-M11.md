@@ -1,4 +1,6 @@
-# 次の作業 — M11「exec-python（既定 off）」着手書
+# 【履歴】M11「exec-python（既定 off）」着手書 — ✅ 完了（PR #32）
+
+> **このファイルは履歴**。M11（T11.1 mode ゲート / T11.2 AST flag / T11.3 監査+許可ハッシュ）は実装完了＝**PR #32**。確定要約は `HANDOFF.md §6k`、GT は `research.md §E14`。キックオフ R-A〜R-E は全て推奨案でユーザー確定済み（R-A=真実源はサーバが読む user-local policy.toml）。次の作業は **M14 = `.handoff/NEXT-M14.md`**。以下は着手時の設計メモ（参考）。
 
 最終更新: 2026-06-20 / 前提: **M0–M10 完了**（M10 確定要約 HANDOFF §6j）。出典: `plan.md §M11` / `spec.md`（§270 exec-python 3モード・§277 AST ヒューリスティック・§280 監査・§284 設定配置・§459 脅威モデル・D3/D5）/ §エラー `EXEC_DISABLED`。全体俯瞰 `.handoff/ROADMAP.md`。
 
