@@ -12,7 +12,11 @@ CONFIG_TOML = """# bli プロジェクト設定（.bli/config.toml）
 # トークン/connection.json はここに置かない（ユーザローカル・git非管理）。
 
 [exec]
-mode = "off"          # off | audited | trusted（既定 off）
+# 注意（M11・R-A）: この mode は **表示用ヒント** に過ぎず、サーバ（Blender アドオン）は読まない。
+# exec の真実源は **ユーザローカルの policy.toml**（BLI_STATE_DIR/policy.toml・OS 所有者限定）。
+# リポジトリに mode=trusted を commit しても昇格しない。実際に有効化するには自分の OS アカウントの
+# policy.toml に [exec] mode = "trusted" を書く（CLI フラグ単体では昇格できない・spec §276/§459）。
+mode = "off"          # off | audited | trusted（既定 off・表示用）
 
 [server]
 port = 9876

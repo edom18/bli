@@ -966,6 +966,129 @@ def _print_repair(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     )
 
 
+# ---- 逃げ道: exec-python（M11・既定 off・サンドボックスなし）----
+
+
+def _exec_error(message: str, *, phase: str, cause: str = "") -> JsonRpcError:
+    """ユーザコードの例外を EXEC_ERROR へ写像する（INTERNAL 化しない・研究 §E14）。
+
+    compile フェーズ（SyntaxError 等）はユーザコードの不備＝USER_INPUT、runtime は ENVIRONMENT。
+    """
+    category = ErrorCategory.USER_INPUT if phase == "compile" else ErrorCategory.ENVIRONMENT
+    return JsonRpcError(
+        RPC_BUSINESS_ERROR,
+        ErrorCode.EXEC_ERROR,
+        make_error(
+            ErrorCode.EXEC_ERROR,
+            category=category,
+            retryable=False,
+            symptom=message,
+            remediation="コードを修正して再実行してください",
+            cause=cause,
+        ),
+    )
+
+
+def _exec_disabled(mode: str) -> JsonRpcError:
+    """exec が無効（off / 未実装の audited）のときの EXEC_DISABLED を組み立てる（fail-closed）。"""
+    from . import policy
+
+    if mode == "audited":
+        symptom = "exec mode=audited はまだ未実装です（許可ハッシュゲートは T11.3）"
+        remediation = "現状は policy.toml の [exec] mode を trusted にしたときだけ実行できます"
+    else:
+        symptom = "exec-python は無効です（既定 off・サンドボックスは提供しません）"
+        remediation = (
+            f"ユーザローカルの policy.toml（{policy.policy_path()}）で [exec] mode を trusted に "
+            "してください（リポジトリ内の config.toml では昇格できません）"
+        )
+    return JsonRpcError(
+        RPC_BUSINESS_ERROR,
+        ErrorCode.EXEC_DISABLED,
+        make_error(
+            ErrorCode.EXEC_DISABLED,
+            category=ErrorCategory.PRECONDITION,
+            retryable=False,
+            symptom=symptom,
+            remediation=remediation,
+        ),
+    )
+
+
+def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    """構造化で表現できない操作の逃げ道（spec D3）。**サンドボックスなし**＝防止でなく検知（§459）。"""
+    cmd = _command("exec-python")
+    _validate(cmd, params)
+    code = params.get("code")
+    file = params.get("file")
+    has_code = isinstance(code, str) and code.strip() != ""
+    has_file = isinstance(file, str) and file.strip() != ""
+    # code/file は排他（どちらか一方が必須）。bpy 到達前に弾く（§6e）。
+    _require_input(
+        has_code != has_file,
+        symptom="--code か --file のどちらか一方を指定してください（両方/どちらも無しは不可）",
+        remediation='exec-python --code "<python>" または --file <path> のどちらかを使ってください',
+    )
+
+    # **mode の真実源はサーバが読む policy.toml（R-A）**。params の mode は一切読まない＝CLI 単体では
+    # 昇格できない（spec §276・§459）。読取は実行ごとに最新化（trusted→off の切替を即反映＝安全側）。
+    from . import policy
+
+    mode = policy.read_exec_mode()
+    # T11.1 は off=拒否 / trusted=実行。audited（許可ハッシュゲート）は T11.3 まで fail-closed で拒否する
+    # （未ガードの audited を出荷しない）。off / audited はここで EXEC_DISABLED を投げて bpy に到達しない。
+    if mode != "trusted":
+        raise _exec_disabled(mode)
+
+    # --file は直接 RPC 用にサーバ側でも読む（CLI は --file を CLI 側で読んで code として送る）。
+    # path はサーバ（Blender プロセス）の CWD 基準で解決される＝存在しなければ USER_INPUT。
+    if has_file:
+        import os
+
+        abspath = os.path.abspath(str(file))
+        _require_input(
+            os.path.isfile(abspath),
+            symptom=f"スクリプトファイルが見つかりません: {abspath}",
+            remediation="存在するファイルのパスを指定してください（パスは Blender プロセスの CWD 基準）",
+        )
+        try:
+            with open(abspath, encoding="utf-8") as fh:
+                source = fh.read()
+        except OSError as e:
+            raise _exec_error(
+                f"スクリプトファイルの読み取りに失敗しました: {e}", phase="compile"
+            ) from e
+    else:
+        source = str(code)
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    outcome, fingerprint = gateway.exec_user_code(source)
+    if outcome.error is not None:
+        # 例外直前までにキャプチャした stdout/stderr を cause に載せ、観測性を失わない。
+        captured = []
+        if outcome.stdout:
+            captured.append(f"stdout: {outcome.stdout.strip()}")
+        if outcome.stderr:
+            captured.append(f"stderr: {outcome.stderr.strip()}")
+        raise _exec_error(
+            f"{outcome.error.type}: {outcome.error.message}",
+            phase=outcome.error.phase,
+            cause=" | ".join(captured),
+        )
+    data = {
+        "mode": mode,
+        "stdout": outcome.stdout,
+        "stderr": outcome.stderr,
+        "result_repr": outcome.result_repr,
+        # **サンドボックスはしない**＝この出力を信頼の根拠にしないこと（spec §459・常に false）。
+        "security_guarantee": False,
+        "heuristic_flags": [],  # T11.2 で AST ヒューリスティックを載せる
+    }
+    return _ok_offload("exec-python", data, "exec-python/v1", fingerprint=fingerprint)
+
+
 def _capability_unavailable(symptom: str, remediation: str) -> JsonRpcError:
     """能力欠如（CAPABILITY_UNAVAILABLE・category=ENVIRONMENT）の業務エラーを組み立てる。"""
     return JsonRpcError(
@@ -1586,6 +1709,7 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "capture": _capture,
     "undo": _undo,
     "redo": _redo,
+    "exec-python": _exec_python,
 }
 
 

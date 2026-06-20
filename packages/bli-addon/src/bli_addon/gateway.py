@@ -137,6 +137,22 @@ def scene_state_fingerprint() -> str:
     return _digest16({"objects": items})
 
 
+def exec_user_code(code: str) -> tuple[Any, str]:
+    """ユーザコードを `bpy` 注入済み namespace で実行し (ExecOutcome, fingerprint) を返す（M11）。
+
+    bpy の接点（namespace への注入・実行後のシーン fingerprint）をこの gateway 層に集約する。
+    実行メカニクス（ast 分割・stdout/stderr キャプチャ・例外捕捉）は bpy 非依存の `exec_runner` に
+    委譲する（研究 §E14）。**サンドボックスはしない**＝コードは同一 OS 権限で走る（spec §459）。
+    namespace は毎回新規（セッション REPL ではない・v1）。`__builtins__` は exec が自動注入する。
+    """
+    from . import exec_runner
+
+    namespace: dict[str, Any] = {"bpy": bpy, "__name__": "__bli_exec__"}
+    outcome = exec_runner.run_code(code, namespace)
+    # 実行で何が変わったか観測できるよう粗いシーン fingerprint を返す（undo/open と同じ指標）。
+    return outcome, scene_state_fingerprint()
+
+
 # ---- オブジェクト解決・情報 ----
 
 

@@ -72,7 +72,7 @@ os.environ["BLI_STATE_DIR"] = tempfile.mkdtemp(prefix="bli-ops-smoke-")
 import bpy  # type: ignore  # noqa: E402
 
 from bli import client  # noqa: E402
-from bli_addon import ops, render_state, watchdog  # noqa: E402
+from bli_addon import ops, policy, render_state, watchdog  # noqa: E402
 from bli_addon import server as srv_mod  # noqa: E402
 from bli_addon.capability import CapabilityRegistry  # noqa: E402
 from bli_addon.dispatcher import Dispatcher  # noqa: E402
@@ -2191,6 +2191,68 @@ def run_calls():
     assert wd["responsive"] is False and wd["unresponsive_since"] is not None, wd
     watchdog.reset()  # idle へ戻す（後続が無ければ無害）
     print("watchdog_observability_ok")
+
+    # exec-python（M11 T11.1）: mode の真実源はユーザローカル policy.toml（R-A）。GUI スパイク不要＝
+    # 既存 Dispatcher のメインスレッド直列で実 bpy 上を走る（研究 §E14）。off→拒否 / trusted→実行を裏付ける。
+    _policy_file = policy.policy_path()
+    # (a) policy 不在＝off → EXEC_DISABLED（CLI からは mode を送れない＝昇格不可）。
+    if _policy_file.exists():
+        _policy_file.unlink()
+    try:
+        call_retry("exec-python", {"code": "1 + 1"})
+        raise AssertionError("policy off で exec は EXEC_DISABLED のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "EXEC_DISABLED", e.error
+    # (b) audited も T11.1 では fail-closed で拒否（許可ハッシュゲートは T11.3）。
+    _policy_file.write_text('[exec]\nmode = "audited"\n', encoding="utf-8")
+    try:
+        call_retry("exec-python", {"code": "1 + 1"})
+        raise AssertionError("audited は T11.1 では EXEC_DISABLED のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "EXEC_DISABLED", e.error
+    # (c) trusted へ昇格＝実行できる。stdout キャプチャ + 最終式 repr + security_guarantee=false。
+    _policy_file.write_text('[exec]\nmode = "trusted"\n', encoding="utf-8")
+    ex, _ = call_retry(
+        "exec-python",
+        {"code": "import bpy\nprint('hi from exec')\nlen(bpy.data.objects)"},
+    )
+    assert ex["operation"] == "exec-python", ex
+    assert ex["data"]["mode"] == "trusted", ex["data"]
+    assert ex["data"]["stdout"].strip() == "hi from exec", ex["data"]
+    assert ex["data"]["result_repr"] == str(len(bpy.data.objects)), ex["data"]
+    assert ex["data"]["security_guarantee"] is False, ex["data"]
+    assert ex["data"]["heuristic_flags"] == [], ex["data"]
+    # (d) 実 bpy を mutate できる（exec 経由でシーンが変わる）。Cube.x を 7 にして検証→0 へ戻す。
+    exm, _ = call_retry(
+        "exec-python",
+        {
+            "code": "import bpy\nbpy.data.objects['Cube'].location.x = 7.0\nbpy.data.objects['Cube'].location.x"
+        },
+    )
+    assert exm["data"]["result_repr"] == "7.0", exm["data"]
+    oi_exec, _ = call_retry("object-info", {"targets": "Cube"})
+    assert approx(oi_exec["data"]["location"], [7.0, 0.0, 0.0]), oi_exec["data"]["location"]
+    call_retry("exec-python", {"code": "import bpy\nbpy.data.objects['Cube'].location.x = 0.0"})
+    # (e) ユーザコードの実行時例外 → EXEC_ERROR（INTERNAL 化しない）。
+    try:
+        call_retry("exec-python", {"code": "raise ValueError('boom')"})
+        raise AssertionError("実行時例外は EXEC_ERROR のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "EXEC_ERROR", e.error
+    # (f) 構文エラー → EXEC_ERROR（USER_INPUT・compile フェーズ）。
+    try:
+        call_retry("exec-python", {"code": "def (:\n  pass"})
+        raise AssertionError("構文エラーは EXEC_ERROR のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "EXEC_ERROR", e.error
+    # (g) policy を off へ戻すと再び拒否＝トグルが即反映される（再起動不要）。
+    _policy_file.unlink()
+    try:
+        call_retry("exec-python", {"code": "1 + 1"})
+        raise AssertionError("off へ戻したら再び EXEC_DISABLED のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "EXEC_DISABLED", e.error
+    print("exec_python_mode_gate_ok")
 
 
 def main():

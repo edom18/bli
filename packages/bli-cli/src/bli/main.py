@@ -1028,6 +1028,59 @@ def open_(
     _rpc("open", params, json_out=json_out, port=port, human=human, request_id=request_id)
 
 
+@app.command("exec-python")
+def exec_python(
+    code: str | None = typer.Option(None, "--code", help="実行する Python コード（--file と排他）"),
+    file: str | None = typer.Option(
+        None, "--file", help="実行するスクリプトファイル（--code と排他）"
+    ),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """構造化サブコマンドで表現できない操作の逃げ道（既定 off・サンドボックスなし）。
+
+    既定では無効。サーバ側のユーザローカル policy.toml で [exec] mode=trusted のときだけ実行できる。
+    CLI からは mode を送れない＝CLI フラグ単体では昇格できない（spec §276・§459）。
+    実行コードは同一 OS 権限で走る＝結果の security_guarantee は常に false（過信しないこと）。
+    """
+    # --code / --file は排他（どちらか一方が必須）。送信前に弾く（exit 4）。
+    if (code is None) == (file is None):
+        _emit_error(
+            json_out,
+            ErrorCode.INVALID_PARAMS,
+            "--code か --file のどちらか一方を指定してください（両方/どちらも無しは不可）",
+        )
+        raise typer.Exit(int(ExitCode.INPUT))
+
+    # --file は **CLI 側で読む**（CLI の CWD 基準＝予測可能。Blender プロセスの CWD と区別）。
+    # サーバには code として送る（サーバ側 file 読取は直接 RPC 用のフォールバック）。
+    if file is not None:
+        try:
+            source = Path(file).read_text(encoding="utf-8")
+        except OSError as e:
+            _emit_error(json_out, ErrorCode.INVALID_PARAMS, f"スクリプトファイルを読めません: {e}")
+            raise typer.Exit(int(ExitCode.INPUT)) from None
+    else:
+        source = str(code)
+
+    params: dict[str, Any] = {"code": source}
+
+    def human(data: dict[str, Any]) -> str:
+        parts = ["exec ok（security_guarantee=false・サンドボックスなし）"]
+        out = (data.get("stdout") or "").rstrip()
+        if out:
+            parts.append(out)
+        err = (data.get("stderr") or "").rstrip()
+        if err:
+            parts.append(f"[stderr] {err}")
+        if data.get("result_repr") is not None:
+            parts.append(f"=> {data.get('result_repr')}")
+        return "\n".join(parts)
+
+    _rpc("exec-python", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
 @app.command()
 def select(
     targets: str = typer.Option(

@@ -274,7 +274,9 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 | `audited` | 全コードを `audit/` に記録。承認ゲート or 許可ハッシュで自走 | |
 | `trusted` | 無制限実行。明示有効化（設定）が前提 | |
 - モードは **ユーザ所有の設定ファイルでのみ昇格可能**。CLIフラグ単体では緩められない。
-- AST検査は「安全保証」ではなく **ヒューリスティックなフラグ付け**。レスポンスに `security_guarantee: false` と `heuristic_flags` を含める。
+  - **真実源（M11 T11.1・R-A 確定）**: サーバ（Blender アドオン）は **ユーザローカルの `policy.toml`**（`BLI_STATE_DIR/policy.toml`・OS 所有者限定・git 非管理）の `[exec] mode` のみを読む。CLI は mode を送らず（送れず）、リポジトリ内 `.bli/config.toml` の `[exec] mode` は **表示用ヒント**でサーバは読まない（mode=trusted を commit しても昇格しない）。policy 読取は実行ごとに最新化（off↔trusted の切替を即反映）。fail-closed（不在/パース失敗/不正値はすべて off）。
+  - `mode != trusted` は `EXEC_DISABLED`（PRECONDITION・retryable=False）。**T11.1 では `audited` も fail-closed で拒否**（承認ゲート/許可ハッシュは T11.3）。
+- AST検査は「安全保証」ではなく **ヒューリスティックなフラグ付け**。レスポンスに `security_guarantee: false` と `heuristic_flags` を含める（T11.2）。**サンドボックスは提供しない**（§脅威モデル）＝コードは同一 OS 権限で走る。ユーザコードの実行時例外は `EXEC_ERROR`（runtime=ENVIRONMENT / 構文エラー=USER_INPUT・compile フェーズ）へ写像し INTERNAL にしない。
 - 3シナリオは構造化サブコマンドのみで完遂可能（exec不要）。
 
 ### 監査・ロギング
@@ -286,7 +288,9 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 |------|------|:---:|
 | セッショントークン | ユーザローカル（OS設定ディレクトリ / 所有者限定権限） | 非管理 |
 | `connection.json`（ポート/PID/protocol_version） | ユーザローカル（Blenderインスタンス単位） | 非管理 |
-| 権限ポリシー（exec mode等）・プロジェクト設定 | プロジェクトローカル `.bli/` | 管理可 |
+| **exec 権限ポリシー（`policy.toml` の mode）** | **ユーザローカル（`BLI_STATE_DIR/policy.toml`・OS 所有者限定）** | **非管理** |
+| プロジェクト設定（`.bli/config.toml`・port 等） | プロジェクトローカル `.bli/` | 管理可 |
+- **exec mode の真実源はユーザローカル `policy.toml`**（M11 T11.1・R-A）。`.bli/config.toml` の `[exec] mode` は表示用ヒントで昇格に使えない（リポジトリ commit で昇格させない）。
 - トークンを `.bli/` やリポジトリに置かない（誤コミット防止）。
 - `.bli/` には `.gitignore` 雛形を同梱し、`outputs/` / `audit/` / 機微情報を除外。
 
@@ -382,7 +386,9 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 `SERVER_SHUTTING_DOWN` / `NO_RESPONSE` / `CONNECTION_RESET` / `SESSION_BUSY` /
 `IN_PROGRESS` / `E_MODE_MISMATCH` / `E_TARGET_NOT_FOUND` / `W_STATE_DRIFT` /
 `CAPABILITY_UNAVAILABLE` / `STALE_OUTPUT` / `PROTOCOL_VERSION_MISMATCH` /
-`SCHEMA_MISMATCH` / `EXEC_DISABLED` / `INVALID_PARAMS(-32602)`
+`SCHEMA_MISMATCH` / `EXEC_DISABLED` / `EXEC_ERROR` / `INVALID_PARAMS(-32602)`
+- `EXEC_DISABLED`（PRECONDITION・retryable=False）: exec mode が trusted 以外（off / T11.1 では audited も）。
+- `EXEC_ERROR`（runtime=ENVIRONMENT / 構文エラー=USER_INPUT・compile・retryable=False）: exec ユーザコードの例外（INTERNAL にしない・例外直前の stdout/stderr は cause に載る）。
 
 ### 終了コード表
 | コード | 意味 |
@@ -467,7 +473,7 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 2. ~~**アドオン配布形態**~~ → **確定: 手動zip一次（`doctor`で導入支援）、Extensionsは後続**（D10）。
 3. **CLI配布**: `pipx install` を一次とする（確定）。
 4. ~~**import/export対応フォーマット**~~ → **確定: stl / obj / gltf(glb) / 3mf / fbx すべてv1必須**（D11）。
-5. ~~**設定ファイル/トークンの置き場所**~~ → **確定: ハイブリッド（token/connection.json=ユーザローカル・git非管理, policy=プロジェクトローカル `.bli/`）**（D14）。
+5. ~~**設定ファイル/トークンの置き場所**~~ → **確定: ハイブリッド（token/connection.json=ユーザローカル・git非管理）。exec 権限ポリシー（mode）も**ユーザローカル `policy.toml`**（M11 T11.1・R-A で確定＝昇格の真実源をユーザ所有に置く）。`.bli/config.toml` はプロジェクト設定の提示用（mode は表示ヒント）**（D14）。
 
 > 実装時に確定可（Deferred）: `connection.json` の厳密スキーマ、modifier/mesh各コマンドの個別パラメータ詳細、メッシュ選択指定子の表現力、Extensions移行時期。
 
@@ -490,7 +496,7 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 | D11 | 対応フォーマット | stl / obj / gltf(glb) / 3mf / fbx（全てv1必須） |
 | D12 | コマンド発見 | Claude Code Skill同梱 ＋ `help --json` |
 | D13 | 編集カバレッジ | オブジェクト操作 ＋ 主要モディファイア ＋ メッシュ編集 |
-| D14 | 設定配置 | ハイブリッド（token=ユーザローカル, policy=`.bli/`） |
+| D14 | 設定配置 | ハイブリッド（token=ユーザローカル / exec policy mode=ユーザローカル `policy.toml`〔M11 T11.1・R-A〕 / `.bli/config.toml`=プロジェクト設定の提示用） |
 
 ---
 
@@ -502,4 +508,4 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 - Q: import/export 必須フォーマット → A: **stl / obj / gltf(glb) / 3mf / fbx**（fbxもv1必須）。
 - Q: エージェントのコマンド発見導線 → A: **Claude Code Skill として同梱**（`.claude/skills/bli/`）。詳細は `help --json` でオンデマンド取得。
 - Q: v1汎用編集のカバレッジ → A: **オブジェクト操作 ＋ 主要モディファイア ＋ メッシュ編集（編集モード操作）**。
-- Q: 設定/トークン/connection.json の配置 → A: **ハイブリッド**（token/connection.json=ユーザローカル・git非管理, policy/設定=プロジェクトローカル `.bli/`）。
+- Q: 設定/トークン/connection.json の配置 → A: **ハイブリッド**（token/connection.json=ユーザローカル・git非管理。**exec policy mode=ユーザローカル `policy.toml`**〔M11 T11.1・R-A〕。`.bli/config.toml`=プロジェクト設定の提示用＝mode は表示ヒントでサーバは読まない）。

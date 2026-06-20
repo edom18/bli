@@ -587,15 +587,17 @@ command(
     required_mode=Mode.ANY,
 )
 
-# ---- 逃げ道（既定 off / path 型確認用 / 実装は M11）----
+# ---- 逃げ道（既定 off・サンドボックスなし・M11）----
+# mode（off|audited|trusted）は **サーバがユーザローカル policy.toml から読む**（R-A）。CLI は
+# mode を送らない＝CLI フラグ単体では昇格できない（spec §276・脅威モデル §459）。code/file は排他。
 command(
     "exec-python",
-    "構造化で表現できない操作のフォールバック（既定 off）",
+    "構造化で表現できない操作のフォールバック（既定 off・サンドボックスなし）",
     params=(
-        p("code", ParamType.STR, help="実行するPythonコード"),
-        p("file", ParamType.PATH, help="実行するスクリプトファイル"),
+        p("code", ParamType.STR, help="実行するPythonコード（file と排他）"),
+        p("file", ParamType.PATH, help="実行するスクリプトファイル（code と排他）"),
     ),
     mutates=True,
     stability=Stability.EXPERIMENTAL,
-    implemented=False,  # M11 で実装予定
+    implemented=True,  # M11 T11.1 で実装
 )
