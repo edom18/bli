@@ -119,8 +119,19 @@ def test_trusted_executes_and_returns_envelope(state_dir, monkeypatch):
     assert result["data"]["result_repr"] == "42"
     # **常に false**（サンドボックスしない）。
     assert result["data"]["security_guarantee"] is False
-    assert result["data"]["heuristic_flags"] == []  # T11.2 で埋まる
+    assert result["data"]["heuristic_flags"] == []  # 無害コードは flag なし
     assert result["fingerprint"] == "fakefp"
+
+
+def test_trusted_populates_heuristic_flags(state_dir, monkeypatch):
+    # T11.2: 危険な import/呼び出しは heuristic_flags に載る（ブロックはしない＝実行は成功）。
+    # 実行は fake gateway 経由＝副作用を避けるため import のみ（os の import は無害）。
+    _write_policy(state_dir, "trusted")
+    _install_fake_gateway(monkeypatch)
+    result = ops._exec_python({"code": "import os\nimport socket"}, INFO)
+    assert result["success"] is True
+    assert result["data"]["heuristic_flags"] == ["import:os", "import:socket"]
+    assert result["data"]["security_guarantee"] is False
 
 
 def test_trusted_captures_stdout(state_dir, monkeypatch):

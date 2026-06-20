@@ -2221,7 +2221,12 @@ def run_calls():
     assert ex["data"]["stdout"].strip() == "hi from exec", ex["data"]
     assert ex["data"]["result_repr"] == str(len(bpy.data.objects)), ex["data"]
     assert ex["data"]["security_guarantee"] is False, ex["data"]
+    # bpy の import は注目モジュールではない＝無害コードは flag なし（T11.2）。
     assert ex["data"]["heuristic_flags"] == [], ex["data"]
+    # (c2) AST ヒューリスティック（T11.2・R-D）: 危険 import は flag に載るが **ブロックしない**＝実行は成功。
+    exf, _ = call_retry("exec-python", {"code": "import os\nlen(list(bpy.data.objects))"})
+    assert exf["data"]["heuristic_flags"] == ["import:os"], exf["data"]
+    assert exf["data"]["security_guarantee"] is False, exf["data"]
     # (d) 実 bpy を mutate できる（exec 経由でシーンが変わる）。Cube.x を 7 にして検証→0 へ戻す。
     exm, _ = call_retry(
         "exec-python",

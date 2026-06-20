@@ -1077,6 +1077,8 @@ def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             phase=outcome.error.phase,
             cause=" | ".join(captured),
         )
+    from . import ast_heuristics
+
     data = {
         "mode": mode,
         "stdout": outcome.stdout,
@@ -1084,7 +1086,8 @@ def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         "result_repr": outcome.result_repr,
         # **サンドボックスはしない**＝この出力を信頼の根拠にしないこと（spec §459・常に false）。
         "security_guarantee": False,
-        "heuristic_flags": [],  # T11.2 で AST ヒューリスティックを載せる
+        # AST ヒューリスティック（T11.2・R-D）。注意喚起のみでブロックしない（mode ゲートとは独立）。
+        "heuristic_flags": ast_heuristics.scan(source),
     }
     return _ok_offload("exec-python", data, "exec-python/v1", fingerprint=fingerprint)
 
