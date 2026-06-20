@@ -756,35 +756,79 @@ def test_schema_hash_matches_core():
     assert json.loads(res.output)["schema_hash"] == schema_hash(load_definitions())
 
 
-def test_list_commands_excludes_unimplemented_by_default():
-    # 発見系は未実装コマンド（exec-python）を広告しない（transform は M6 で実装済み）
+# M11 T11.1 で exec-python が implemented=True 化＝実装済みコマンドだけが残った。発見系の
+# 「未実装は広告しない・--all で出す」フィルタ機構自体は維持されるため、合成の未実装コマンドを
+# 一時登録して機構を検証する（実コマンドの実装状況に依存しないテストにする）。
+_FAKE_UNIMPL = "fake-unimpl-cmd"
+
+
+def _register_fake_unimplemented():
+    from bli_core.commands import COMMANDS, command, load_definitions
+
+    load_definitions()
+    if _FAKE_UNIMPL not in COMMANDS:
+        command(_FAKE_UNIMPL, "テスト用の未実装コマンド", implemented=False)
+
+
+def _unregister_fake_unimplemented():
+    from bli_core.commands import COMMANDS
+
+    COMMANDS.pop(_FAKE_UNIMPL, None)
+
+
+def test_exec_python_is_discoverable_now():
+    # M11: exec-python は implemented=True ＝発見系に出る（help --command も implemented:True）。
     data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
-    names = {c["name"] for c in data["commands"]}
-    assert "exec-python" not in names
-    assert "set-origin" in names
-    assert "transform" in names  # M6 T6.1 で実装済みになった
+    by_name = {c["name"]: c for c in data["commands"]}
+    assert "exec-python" in by_name
+    res = json.loads(runner.invoke(app, ["help", "--command", "exec-python", "--json"]).output)
+    assert res["command"]["implemented"] is True
+
+
+def test_list_commands_excludes_unimplemented_by_default():
+    _register_fake_unimplemented()
+    try:
+        data = json.loads(runner.invoke(app, ["list-commands", "--json"]).output)
+        names = {c["name"] for c in data["commands"]}
+        assert _FAKE_UNIMPL not in names
+        assert "set-origin" in names
+        assert "exec-python" in names  # M11 T11.1 で実装済みになった
+    finally:
+        _unregister_fake_unimplemented()
 
 
 def test_list_commands_all_includes_unimplemented():
-    data = json.loads(runner.invoke(app, ["list-commands", "--all", "--json"]).output)
-    by_name = {c["name"]: c for c in data["commands"]}
-    assert "exec-python" in by_name
-    assert by_name["exec-python"]["implemented"] is False
+    _register_fake_unimplemented()
+    try:
+        data = json.loads(runner.invoke(app, ["list-commands", "--all", "--json"]).output)
+        by_name = {c["name"]: c for c in data["commands"]}
+        assert _FAKE_UNIMPL in by_name
+        assert by_name[_FAKE_UNIMPL]["implemented"] is False
+    finally:
+        _unregister_fake_unimplemented()
 
 
 def test_help_excludes_unimplemented_by_default():
-    data = json.loads(runner.invoke(app, ["help", "--json"]).output)
-    assert "exec-python" not in data["commands"]
-    data_all = json.loads(runner.invoke(app, ["help", "--all", "--json"]).output)
-    assert "exec-python" in data_all["commands"]
+    _register_fake_unimplemented()
+    try:
+        data = json.loads(runner.invoke(app, ["help", "--json"]).output)
+        assert _FAKE_UNIMPL not in data["commands"]
+        data_all = json.loads(runner.invoke(app, ["help", "--all", "--json"]).output)
+        assert _FAKE_UNIMPL in data_all["commands"]
+    finally:
+        _unregister_fake_unimplemented()
 
 
 def test_help_command_introspects_unimplemented():
     # 個別 introspection は未実装でも可（implemented=False を明示）
-    res = runner.invoke(app, ["help", "--command", "exec-python", "--json"])
-    assert res.exit_code == 0
-    data = json.loads(res.output)
-    assert data["command"]["implemented"] is False
+    _register_fake_unimplemented()
+    try:
+        res = runner.invoke(app, ["help", "--command", _FAKE_UNIMPL, "--json"])
+        assert res.exit_code == 0
+        data = json.loads(res.output)
+        assert data["command"]["implemented"] is False
+    finally:
+        _unregister_fake_unimplemented()
 
 
 def _fake_timeout_error():

@@ -130,6 +130,20 @@ errors: `E_TARGET_NOT_FOUND` / `E_PRECONDITION(shared mesh: users>=2)` / `E_MODE
 ## 逃げ道
 | method | params | result | M | St |
 |--------|--------|--------|:-:|:--:|
-| `exec-python` | `--code\|--file` | 実行結果（既定 `EXEC_DISABLED`） | ✓? | e |
+| `exec-python` | `--code\|--file` | `{mode, stdout, stderr, result_repr, security_guarantee:false, heuristic_flags, code_sha256, audit_ok}` | ✓ | e |
 
-> `exec-python` は config `exec.mode` が off の場合 `EXEC_DISABLED` を返す。audited/trusted は設定昇格時のみ。レスポンスに `security_guarantee:false` / `heuristic_flags`。
+> `exec-python`（**M11 実装済み・mutates=True・Mode.ANY・サンドボックスなし**）: 構造化サブコマンドで表現できない操作のフォールバック（spec D3 ハイブリッドの逃げ道）。**`--code` と `--file` は排他**（CLI は `--file` を CLI 側の CWD 基準で読み、code として送る＝Blender プロセスの CWD と区別。サーバ側 file 読取は直接 RPC 用フォールバック）。実行は既存 Dispatcher のメインスレッド直列で実 bpy 上を走る（新 timer/handler 機構なし＝研究 §E14）。`bpy` を namespace に注入し、最後の文が式ならその repr を `result_repr` に載せる（REPL 流儀・None は抑制）。stdout/stderr を分離キャプチャ。
+>
+> **mode ゲート（R-A・M11 の肝）**: exec の可否（off/audited/trusted）の**真実源はサーバが読むユーザローカル `policy.toml`**（`BLI_STATE_DIR/policy.toml`・OS 所有者限定・git 非管理）。**CLI は mode を送らない＝CLI フラグ単体では昇格できない**。リポジトリ内の `.bli/config.toml` の `[exec] mode` は表示用ヒントに過ぎず、サーバは読まない（mode=trusted を commit しても昇格しない・spec §276/§459）。`mode != trusted` かつ未許可は **`EXEC_DISABLED`**（PRECONDITION・retryable=False）。policy 読取は実行ごとに最新化（trusted→off の切替を即反映）。
+>
+> - **off**: 常に `EXEC_DISABLED`（file は読まずに拒否）。
+> - **trusted**: 無条件で実行。
+> - **audited（T11.3・R-B）**: コードの sha256 が `policy.toml` の `[exec] allow_hashes`（小文字16進の配列）に**一致するときだけ自走実行**。不一致は `EXEC_DISABLED` で、remediation に**追加すべき sha256 を提示**する（応答の `code_sha256` か拒否メッセージの sha を `allow_hashes` に足せば次回から自走）。
+>
+> **監査ログ（T11.3・spec §280「防止でなく検知」）**: exec の**試行はすべて** `BLI_STATE_DIR/audit/exec.jsonl`（JSONL・1行1イベント）に追記される＝trusted/audited の `executed` も、off / audited 未許可の `rejected:*` も記録（`ts`・`mode`・`decision`・`code_sha256`・`code_len`・`heuristic_flags`・`source`）。サンドボックス非提供の代償としての事後追跡。書込は best-effort＝失敗しても exec は止めず応答 `audit_ok=false` で証跡欠落を観測可能にする（可用性優先・v1）。
+>
+> **サンドボックスは提供しない**（spec §459・確定判断）。実行コードは同一 OS 権限で走る＝`security_guarantee` は**常に false**（過信させない）。`heuristic_flags`（**T11.2 実装済み**）は AST 走査による注意喚起で、**ブロックはしない**（実行可否は mode ゲートのみが決める・mode と独立）。語彙: `import:<top-module>`（os/subprocess/socket/shutil/urllib/ctypes/pickle/... ＝プロセス/ネットワーク/FS/シリアライズ系。`import os.path`/`from urllib.request import ...` は top で集約）/ `call:eval`・`call:exec`・`call:compile`・`call:__import__` / `file-write`（`open(...,'w'/'a'/'x'/'+')`・非定数 mode は保守的に flag）。ヒューリスティックゆえ false negative あり（属性経由・別名束縛は捕捉しない）＝安全保証ではない。ユーザコードの実行時例外は **`EXEC_ERROR`**（runtime=ENVIRONMENT / 構文エラー=USER_INPUT・compile フェーズ）へ写像し INTERNAL にしない（実行段は `except BaseException`＝`sys.exit()` 等が dispatch を巻き込まないようにし、例外直前の stdout/stderr は error の cause に載せる）。大出力は output_ref 退避。
+>
+> **job 化しない（M10 との非対称・v1 制約）**: exec は `is_heavy=False`＝既存 Dispatcher のメインスレッド**同期**実行。他の heavy 操作（import/export/mesh decimate）は accepted 即返で接続を塞がないが、exec は重量コード（重い `bpy.ops`・無限ループ等）でメインを同期占有し得る＝**M10 watchdog（`MAIN_THREAD_UNRESPONSIVE`）の通知対象**。将来 job 化する場合は bpy 注入 namespace の job ワーカー生存が論点。
+>
+> **`--file` のパス封じ込めは意図的に課さない**: CLI は `--file` を CLI 側 CWD で読み code 送信。サーバ側 file 読取（直接 RPC 用フォールバック）は存在確認のみで配下制限しない＝**trusted 前提ではユーザコードが `open()` で任意ファイルを読めるため confinement は security 価値が無い**（NEXT-M11 §48 の「outputs/state 配下逸脱拒否」は入力スクリプトには不適＝不採用）。`isfile` 不在は USER_INPUT、読取失敗は EXEC_ERROR(compile)。
