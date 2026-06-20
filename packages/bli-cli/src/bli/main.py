@@ -72,6 +72,20 @@ def _emit_error(json_out: bool, kind: str, message: str, request_id: str | None 
         typer.echo(f"エラー[{kind}]: {message}{tail}", err=True)
 
 
+def _watchdog_suffix(data: dict[str, Any]) -> str:
+    """request-status/job-status の human 出力に付けるメインスレッド応答性の注記（M10 T10.3）。
+
+    応答中（または watchdog 情報なし）は空文字。固まっている場合のみ注記を返す（実行は継続中＝
+    重量ネイティブ処理が固めている可能性をエージェントに可視化する）。
+    """
+    wd = data.get("watchdog")
+    if not isinstance(wd, dict) or wd.get("responsive", True):
+        return ""
+    age = wd.get("last_pump_age")
+    age_s = f"{age:.0f}s" if isinstance(age, (int, float)) else "?"
+    return f"  ⚠ メインスレッド応答なし（{age_s} 停止・重量処理で固まっている可能性／実行は継続中）"
+
+
 def _parse_vec(name: str, raw: str, n: int) -> list[float]:
     """ "a,b,..." 文字列を n 要素の float リストへ変換する（不正は ValueError）。
 
@@ -148,6 +162,7 @@ def _await_job(
     """
     deadline = time.monotonic() + (timeout if timeout is not None else runtime.JOB_WAIT_TIMEOUT)
     connect_fails = 0
+    warned_unresponsive = False
     while True:
         try:
             sr, _ = client.call(
@@ -169,6 +184,20 @@ def _await_job(
         connect_fails = 0
         data = sr.get("data", {}) if isinstance(sr, dict) else {}
         state = data.get("state")
+        # auto-wait/job-wait のポーリング中にメインスレッドが固まったら **一度だけ** stderr へ通知する
+        # （M10 T10.3）。request-status は lock-free＝重量 op がメインを塞いでもこの観測は届く。重量
+        # ネイティブ処理は中断不能なのでジョブは継続中＝待機を続ける（kill しない）。stderr に出すので
+        # JSON 出力（stdout）は汚さない。
+        wd = data.get("watchdog")
+        if not warned_unresponsive and isinstance(wd, dict) and wd.get("responsive") is False:
+            warned_unresponsive = True
+            age = wd.get("last_pump_age")
+            age_s = f"{age:.0f}s" if isinstance(age, (int, float)) else "?"
+            typer.echo(
+                f"[bli] メインスレッドが応答していません（{age_s} 停止・重量処理で固まっている可能性）。"
+                f"ジョブは継続中です（job_id={job_id}・request-status で観測可）。",
+                err=True,
+            )
         # 未知/TTL 失効した job_id は即座に失敗させる（30分ハングを防ぐ・全レビュー P1）。accepted を受けた
         # 直後の auto-wait では begin() で RUNNING 登録済みなので UNKNOWN にはならない＝この分岐は遅延
         # job-wait での typo/失効が主。
@@ -352,20 +381,44 @@ def doctor(
     except client.RpcRemoteError as e:
         detail = f"認証/RPCエラー: {e}"
 
+    # メインスレッド応答性（M10 T10.3）。lock-free な request-status 経由で取得する＝メインが重量
+    # 処理で固まっていても観測できる（ping は Dispatcher 経由で固まると応答しないため別経路にする）。
+    watchdog: dict[str, Any] | None = None
+    if reachable:
+        try:
+            sr, _ = client.call("request-status", {"id": str(uuid.uuid4())}, port=port, timeout=5.0)
+            wd = (sr.get("data") or {}).get("watchdog")
+            if isinstance(wd, dict):
+                watchdog = wd
+        except Exception:
+            # 純粋にベストエフォートの観測（到達性判定は別経路の ping が担う）。フレーム破損等の
+            # 想定外も含めて握り潰し watchdog=None（「不明」）へ縮退する＝doctor の終了挙動を変えない。
+            pass
+
+    main_responsive = watchdog.get("responsive") if watchdog else None
     payload = {
         "connection_json": cp.exists(),
         "connection_path": str(cp),
         "token_present": tp.exists(),
         "addon_reachable": reachable,
         "blender_version": blender_version,
+        "main_thread_responsive": main_responsive,
+        "watchdog": watchdog,
         "detail": detail,
     }
+    if main_responsive is None:
+        wd_line = "不明" if reachable else "—（未到達）"
+    elif main_responsive:
+        wd_line = "応答中"
+    else:
+        wd_line = "応答なし（重量処理で固まっている可能性／実行は継続中）"
     human = "\n".join(
         [
             "bli doctor:",
             f"  connection.json : {'あり' if payload['connection_json'] else 'なし'} ({cp})",
             f"  token           : {'あり' if payload['token_present'] else 'なし'}",
             f"  アドオン到達     : {'OK (Blender ' + str(blender_version) + ')' if reachable else 'NG'}",
+            f"  メインスレッド   : {wd_line}",
         ]
         + ([f"  詳細            : {detail}"] if detail else [])
     )
@@ -1356,7 +1409,8 @@ def request_status(
     """リクエストの決着状態を取得する（タイムアウト後の後追い回収）。"""
 
     def human(data: dict[str, Any]) -> str:
-        return f"id={data.get('id')} state={data.get('state')} known={data.get('known')}"
+        base = f"id={data.get('id')} state={data.get('state')} known={data.get('known')}"
+        return base + _watchdog_suffix(data)
 
     _rpc("request-status", {"id": request_id}, json_out=json_out, port=port, human=human)
 
@@ -1370,7 +1424,8 @@ def job_status(
     """非同期 job（heavy コマンドの --async）の状態を取得する（request-status を1回問い合わせ）。"""
 
     def human(data: dict[str, Any]) -> str:
-        return f"job_id={data.get('id')} state={data.get('state')} known={data.get('known')}"
+        base = f"job_id={data.get('id')} state={data.get('state')} known={data.get('known')}"
+        return base + _watchdog_suffix(data)
 
     _rpc("request-status", {"id": request_id}, json_out=json_out, port=port, human=human)
 
