@@ -1,0 +1,1332 @@
+{
+  "commands": [
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "apply-transform",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "オブジェクトの位置/回転/拡縮をメッシュデータに適用する（全省略時は全適用）",
+        "properties": {
+          "location": {
+            "description": "位置を適用",
+            "type": "boolean"
+          },
+          "make_single_user": {
+            "default": false,
+            "description": "共有mesh時に明示許可",
+            "type": "boolean"
+          },
+          "rotation": {
+            "description": "回転を適用",
+            "type": "boolean"
+          },
+          "scale": {
+            "description": "拡縮を適用",
+            "type": "boolean"
+          },
+          "targets": {
+            "description": "対象（name|regex）",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targets"
+        ],
+        "title": "apply-transform",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "オブジェクトの位置/回転/拡縮をメッシュデータに適用する（全省略時は全適用）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": false,
+      "name": "capture",
+      "required_mode": "ANY",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "現在の状態を画像で取得する（viewport/screen/render・PNG をファイル出力しパスを返す）",
+        "properties": {
+          "camera": {
+            "description": "render で使うカメラ名（省略時 active camera・render 専用）",
+            "type": "string"
+          },
+          "height": {
+            "description": "出力高px（viewport/render・省略時 既定値）",
+            "type": "integer"
+          },
+          "source": {
+            "default": "viewport",
+            "description": "取得元: viewport(offscreen)|screen(領域)|render(カメラ)（既定 viewport）",
+            "enum": [
+              "viewport",
+              "screen",
+              "render"
+            ],
+            "type": "string"
+          },
+          "width": {
+            "description": "出力幅px（viewport/render・省略時 既定値）",
+            "type": "integer"
+          }
+        },
+        "title": "capture",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "現在の状態を画像で取得する（viewport/screen/render・PNG をファイル出力しパスを返す）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "delete",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "オブジェクトを削除する（削除前サマリを backup として結果に残す）",
+        "properties": {
+          "targets": {
+            "description": "対象（name|regex）",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targets"
+        ],
+        "title": "delete",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "オブジェクトを削除する（削除前サマリを backup として結果に残す）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": false,
+      "name": "doctor",
+      "required_mode": "ANY",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "環境診断（Blender検出/アドオン導入/port/version/能力）",
+        "properties": {},
+        "title": "doctor",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "環境診断（Blender検出/アドオン導入/port/version/能力）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "duplicate",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "オブジェクトを複製する（count 回・world offset 累積・linked でデータ共有）",
+        "properties": {
+          "count": {
+            "default": 1,
+            "description": "複製数（1〜1000）",
+            "type": "integer"
+          },
+          "linked": {
+            "default": false,
+            "description": "データを共有する（リンク複製）",
+            "type": "boolean"
+          },
+          "offset": {
+            "description": "複製ごとの world オフセット x,y,z（累積）",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "targets": {
+            "description": "対象（name|regex）",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targets"
+        ],
+        "title": "duplicate",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "オブジェクトを複製する（count 回・world offset 累積・linked でデータ共有）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "exec-python",
+      "required_mode": "ANY",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "構造化で表現できない操作のフォールバック（既定 off・サンドボックスなし）",
+        "properties": {
+          "code": {
+            "description": "実行するPythonコード（file と排他）",
+            "type": "string"
+          },
+          "file": {
+            "description": "実行するスクリプトファイル（code と排他）",
+            "type": "string"
+          }
+        },
+        "title": "exec-python",
+        "type": "object"
+      },
+      "stability": "experimental",
+      "summary": "構造化で表現できない操作のフォールバック（既定 off・サンドボックスなし）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": true,
+      "mutates": false,
+      "name": "export",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "シーン/選択を多形式で書き出す（obj/fbx/gltf/stl・3mf は未導入で CAPABILITY）",
+        "properties": {
+          "format": {
+            "description": "出力形式",
+            "enum": [
+              "obj",
+              "fbx",
+              "gltf",
+              "stl",
+              "3mf"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "description": "出力ファイルパス",
+            "type": "string"
+          },
+          "targets": {
+            "description": "対象（name|regex・指定時はこれを選択して書き出す）",
+            "type": "string"
+          },
+          "use_selection": {
+            "default": false,
+            "description": "現在の選択集合のみ書き出す（targets 省略時）",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "format",
+          "path"
+        ],
+        "title": "export",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "シーン/選択を多形式で書き出す（obj/fbx/gltf/stl・3mf は未導入で CAPABILITY）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": true,
+      "mutates": true,
+      "name": "import",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "多形式ファイルをシーンに取り込む（obj/fbx/gltf/stl・3mf は未導入で CAPABILITY）",
+        "properties": {
+          "format": {
+            "description": "入力形式",
+            "enum": [
+              "obj",
+              "fbx",
+              "gltf",
+              "stl",
+              "3mf"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "description": "入力ファイルパス",
+            "type": "string"
+          }
+        },
+        "required": [
+          "format",
+          "path"
+        ],
+        "title": "import",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "多形式ファイルをシーンに取り込む（obj/fbx/gltf/stl・3mf は未導入で CAPABILITY）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": false,
+      "name": "init",
+      "required_mode": "ANY",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "設定生成・セッショントークン発行・connection.json 書き込み",
+        "properties": {
+          "force": {
+            "default": false,
+            "description": "既存設定を上書き",
+            "type": "boolean"
+          },
+          "port": {
+            "description": "リッスンポート（既定 9876）",
+            "type": "integer"
+          }
+        },
+        "title": "init",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "設定生成・セッショントークン発行・connection.json 書き込み"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": false,
+      "name": "job-status",
+      "required_mode": "ANY",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "非同期 job の状態を取得（heavy コマンドの job_id・request-status を1回問い合わせ）",
+        "properties": {
+          "id": {
+            "description": "ジョブID(=request_id)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "job-status",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "非同期 job の状態を取得（heavy コマンドの job_id・request-status を1回問い合わせ）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": false,
+      "name": "job-wait",
+      "required_mode": "ANY",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "非同期 job の完了を待って最終結果を取得（request-status をポーリング）",
+        "properties": {
+          "id": {
+            "description": "ジョブID(=request_id)",
+            "type": "string"
+          },
+          "timeout": {
+            "description": "待機上限秒（省略時は既定 JOB_WAIT_TIMEOUT）",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "job-wait",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "非同期 job の完了を待って最終結果を取得（request-status をポーリング）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": false,
+      "name": "list-objects",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "シーン内オブジェクトを type/regex でフィルタして一覧する",
+        "properties": {
+          "regex": {
+            "description": "名前の正規表現フィルタ（部分一致）",
+            "type": "string"
+          },
+          "type": {
+            "description": "型フィルタ（MESH/CURVE/EMPTY/LIGHT/CAMERA 等・大小無視）",
+            "type": "string"
+          }
+        },
+        "title": "list-objects",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "シーン内オブジェクトを type/regex でフィルタして一覧する"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "material",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "マテリアルを割り当て/作成/一覧する（create は対象へ作成と同時に割り当て）",
+        "properties": {
+          "action": {
+            "description": "操作: assign|create|list",
+            "enum": [
+              "assign",
+              "create",
+              "list"
+            ],
+            "type": "string"
+          },
+          "color": {
+            "description": "RGBA r,g,b,a（create の Base Color）",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "type": "array"
+          },
+          "make_single_user": {
+            "default": false,
+            "description": "共有mesh時に単一ユーザ化を許可",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "マテリアル名（assign=既存名 / create=新規名）",
+            "type": "string"
+          },
+          "targets": {
+            "description": "対象（name|regex）",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "material",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "マテリアルを割り当て/作成/一覧する（create は対象へ作成と同時に割り当て）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [
+        "boolean",
+        "decimate"
+      ],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "mesh",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "メッシュを編集する（op 別: 法線再計算 / 距離マージ / 押し出し / ベベル / インセット / ブール / デシメート）",
+        "properties": {
+          "distance": {
+            "description": "merge-by-distance: マージ距離（既定 0.0001）",
+            "type": "number"
+          },
+          "inside": {
+            "description": "recalc-normals: 法線を内向きにする",
+            "type": "boolean"
+          },
+          "make_single_user": {
+            "default": false,
+            "description": "共有mesh時に単一ユーザ化を許可",
+            "type": "boolean"
+          },
+          "offset": {
+            "description": "extrude: 押し出しベクトル x,y,z（world・必須）",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "op": {
+            "description": "操作: recalc-normals|merge-by-distance|extrude|bevel|inset|boolean|decimate",
+            "enum": [
+              "recalc-normals",
+              "merge-by-distance",
+              "extrude",
+              "bevel",
+              "inset",
+              "boolean",
+              "decimate"
+            ],
+            "type": "string"
+          },
+          "operation": {
+            "description": "boolean: 演算（必須）",
+            "enum": [
+              "UNION",
+              "DIFFERENCE",
+              "INTERSECT"
+            ],
+            "type": "string"
+          },
+          "ratio": {
+            "description": "decimate: 削減比率 0..1（必須）",
+            "type": "number"
+          },
+          "segments": {
+            "description": "bevel: 分割数（既定1・1〜100）",
+            "type": "integer"
+          },
+          "targets": {
+            "description": "対象（name|regex）",
+            "type": "string"
+          },
+          "thickness": {
+            "description": "inset: インセット厚み（ローカル・必須・0以上）",
+            "type": "number"
+          },
+          "width": {
+            "description": "bevel: ベベル幅（ローカル・必須・0以上）",
+            "type": "number"
+          },
+          "with_object": {
+            "description": "boolean: 相手 mesh オブジェクト名（必須）",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "targets"
+        ],
+        "title": "mesh",
+        "type": "object"
+      },
+      "stability": "experimental",
+      "summary": "メッシュを編集する（op 別: 法線再計算 / 距離マージ / 押し出し / ベベル / インセット / ブール / デシメート）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "modifier",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "モディファイアを追加/削除/一覧/適用する（add は --type 必須・apply は mesh へ焼き込み）",
+        "properties": {
+          "action": {
+            "description": "操作: add|remove|list|apply",
+            "enum": [
+              "add",
+              "remove",
+              "list",
+              "apply"
+            ],
+            "type": "string"
+          },
+          "axis": {
+            "description": "MIRROR の軸",
+            "enum": [
+              "X",
+              "Y",
+              "Z"
+            ],
+            "type": "string"
+          },
+          "levels": {
+            "description": "SUBSURF の分割数",
+            "type": "integer"
+          },
+          "make_single_user": {
+            "default": false,
+            "description": "apply 時に共有mesh単一ユーザ化を許可",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "モディファイア名（remove/apply の対象 / add の任意名）",
+            "type": "string"
+          },
+          "operation": {
+            "description": "BOOLEAN の演算",
+            "enum": [
+              "UNION",
+              "DIFFERENCE",
+              "INTERSECT"
+            ],
+            "type": "string"
+          },
+          "ratio": {
+            "description": "DECIMATE の比率（0..1）",
+            "type": "number"
+          },
+          "targets": {
+            "description": "対象（name|regex）",
+            "type": "string"
+          },
+          "thickness": {
+            "description": "SOLIDIFY の厚み",
+            "type": "number"
+          },
+          "type": {
+            "description": "add 時の種類",
+            "enum": [
+              "MIRROR",
+              "SUBSURF",
+              "SOLIDIFY",
+              "DECIMATE",
+              "BOOLEAN"
+            ],
+            "type": "string"
+          },
+          "with_object": {
+            "description": "BOOLEAN の相手オブジェクト名",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "targets"
+        ],
+        "title": "modifier",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "モディファイアを追加/削除/一覧/適用する（add は --type 必須・apply は mesh へ焼き込み）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": false,
+      "name": "object-info",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "オブジェクトの寸法/頂点数/transform/bbox/材質/modifier を取得",
+        "properties": {
+          "targets": {
+            "description": "対象（name|regex）",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targets"
+        ],
+        "title": "object-info",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "オブジェクトの寸法/頂点数/transform/bbox/材質/modifier を取得"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "open",
+      "required_mode": "ANY",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": ".blend ファイルを開く（シーン全体を置換・未保存変更があれば --force 必須）",
+        "properties": {
+          "force": {
+            "default": false,
+            "description": "未保存変更を破棄して開く（既定 off）",
+            "type": "boolean"
+          },
+          "path": {
+            "description": "開く .blend ファイル",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "open",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": ".blend ファイルを開く（シーン全体を置換・未保存変更があれば --force 必須）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": false,
+      "name": "ping",
+      "required_mode": "ANY",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "アドオンへ疎通確認し protocol/version/capabilities を返す",
+        "properties": {},
+        "title": "ping",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "アドオンへ疎通確認し protocol/version/capabilities を返す"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": true,
+      "mutates": false,
+      "name": "print-check",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "3Dプリント健全性をチェックする（manifold/normals/degenerate は bmesh 自前・件数を返す）",
+        "properties": {
+          "degenerate": {
+            "description": "退化面チェック",
+            "type": "boolean"
+          },
+          "intersect": {
+            "description": "自己交差チェック（print3d 依存・未導入は同上）",
+            "type": "boolean"
+          },
+          "manifold": {
+            "description": "非多様体チェック",
+            "type": "boolean"
+          },
+          "min_thickness": {
+            "description": "thin の最小厚み（thin 専用）",
+            "type": "number"
+          },
+          "normals": {
+            "description": "反転法線チェック",
+            "type": "boolean"
+          },
+          "targets": {
+            "description": "対象（name|regex）",
+            "type": "string"
+          },
+          "thin": {
+            "description": "薄壁チェック（print3d 依存・未導入は CAPABILITY_UNAVAILABLE）",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "targets"
+        ],
+        "title": "print-check",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "3Dプリント健全性をチェックする（manifold/normals/degenerate は bmesh 自前・件数を返す）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": false,
+      "name": "print-export",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "3Dプリント向けに mesh を STL で書き出す（3MF は未導入のため STL を hint）",
+        "properties": {
+          "apply_modifiers": {
+            "default": true,
+            "description": "モディファイア適用後の最終形を出力（既定 on）",
+            "type": "boolean"
+          },
+          "ascii": {
+            "default": false,
+            "description": "STL を ASCII で出力（既定 binary）",
+            "type": "boolean"
+          },
+          "format": {
+            "description": "出力形式",
+            "enum": [
+              "stl",
+              "3mf"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "description": "出力ファイルパス",
+            "type": "string"
+          },
+          "scale": {
+            "default": 1.0,
+            "description": "出力スケール（global_scale・既定 1.0）",
+            "type": "number"
+          },
+          "targets": {
+            "description": "対象（name|regex）",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targets",
+          "format",
+          "path"
+        ],
+        "title": "print-export",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "3Dプリント向けに mesh を STL で書き出す（3MF は未導入のため STL を hint）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": true,
+      "mutates": true,
+      "name": "print-repair",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "3Dプリント向けに mesh を best-effort 修復する（make-manifold/recalc-normals/remove-degenerate）",
+        "properties": {
+          "make_manifold": {
+            "description": "穴埋め/重複マージ/loose 除去で manifold 化",
+            "type": "boolean"
+          },
+          "make_single_user": {
+            "default": false,
+            "description": "共有mesh時に単一ユーザ化を許可",
+            "type": "boolean"
+          },
+          "recalc_normals": {
+            "description": "面法線を一貫化",
+            "type": "boolean"
+          },
+          "remove_degenerate": {
+            "description": "退化面/辺を除去",
+            "type": "boolean"
+          },
+          "targets": {
+            "description": "対象（name|regex）",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targets"
+        ],
+        "title": "print-repair",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "3Dプリント向けに mesh を best-effort 修復する（make-manifold/recalc-normals/remove-degenerate）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "print-setup",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "3Dプリント向けにシーンの表示単位を設定する（mm/m・geometry 非破壊）",
+        "properties": {
+          "scene": {
+            "description": "対象シーン名（省略時は active）",
+            "type": "string"
+          },
+          "unit": {
+            "default": "mm",
+            "description": "表示単位（既定 mm）",
+            "enum": [
+              "mm",
+              "m"
+            ],
+            "type": "string"
+          }
+        },
+        "title": "print-setup",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "3Dプリント向けにシーンの表示単位を設定する（mm/m・geometry 非破壊）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "redo",
+      "required_mode": "ANY",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "元に戻した操作をやり直す（グローバル undo スタックを steps 段進める・GUI 必須）",
+        "properties": {
+          "steps": {
+            "default": 1,
+            "description": "進める段数（1〜100・既定 1）",
+            "type": "integer"
+          }
+        },
+        "title": "redo",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "元に戻した操作をやり直す（グローバル undo スタックを steps 段進める・GUI 必須）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": false,
+      "name": "request-status",
+      "required_mode": "ANY",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "リクエストの決着状態を取得（タイムアウト後の後追い回収）",
+        "properties": {
+          "id": {
+            "description": "リクエストID(UUIDv4)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "request-status",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "リクエストの決着状態を取得（タイムアウト後の後追い回収）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "save",
+      "required_mode": "ANY",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": ".blend ファイルに保存する（上書きは既定でバックアップ .blend1 を残す）",
+        "properties": {
+          "backup": {
+            "default": true,
+            "description": "上書き時に .blend1 backup を残す（既定 on）",
+            "type": "boolean"
+          },
+          "path": {
+            "description": "保存先 .blend（省略時は現在のファイル・未保存なら要指定）",
+            "type": "string"
+          }
+        },
+        "title": "save",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": ".blend ファイルに保存する（上書きは既定でバックアップ .blend1 を残す）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": false,
+      "name": "scene-info",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "シーン階層/オブジェクト一覧/単位設定を取得（大きい場合はファイル退避）",
+        "properties": {
+          "depth": {
+            "default": 1,
+            "description": "階層の深さ",
+            "type": "integer"
+          }
+        },
+        "title": "scene-info",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "シーン階層/オブジェクト一覧/単位設定を取得（大きい場合はファイル退避）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "select",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "オブジェクトを選択し active を設定する（name|regex / type フィルタ）",
+        "properties": {
+          "active": {
+            "description": "active にする対象名（省略時は先頭）",
+            "type": "string"
+          },
+          "targets": {
+            "description": "対象（name|regex）",
+            "type": "string"
+          },
+          "type": {
+            "description": "型フィルタ（MESH/CURVE/... 大小無視）",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targets"
+        ],
+        "title": "select",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "オブジェクトを選択し active を設定する（name|regex / type フィルタ）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "set-origin",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "オブジェクトの原点を指定方法で変更する",
+        "properties": {
+          "center": {
+            "description": "geometry時の中心",
+            "enum": [
+              "median",
+              "bounds"
+            ],
+            "type": "string"
+          },
+          "make_single_user": {
+            "default": false,
+            "description": "共有mesh時に明示許可",
+            "type": "boolean"
+          },
+          "targets": {
+            "description": "対象（name|regex|session_uid）",
+            "type": "string"
+          },
+          "to": {
+            "description": "原点の決め方",
+            "enum": [
+              "geometry",
+              "cursor",
+              "world"
+            ],
+            "type": "string"
+          },
+          "x": {
+            "description": "world時のX",
+            "type": "number"
+          },
+          "y": {
+            "description": "world時のY",
+            "type": "number"
+          },
+          "z": {
+            "description": "world時のZ",
+            "type": "number"
+          }
+        },
+        "required": [
+          "targets",
+          "to"
+        ],
+        "title": "set-origin",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "オブジェクトの原点を指定方法で変更する"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "straighten",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "オブジェクトを直立補正する（reset/world-align/pca/floor/angle/align-vector/reference）",
+        "properties": {
+          "axis": {
+            "description": "world-align/reference=合わせる local 軸 / angle=回転する world 軸",
+            "enum": [
+              "X",
+              "Y",
+              "Z"
+            ],
+            "type": "string"
+          },
+          "bake_rotation": {
+            "default": false,
+            "description": "回転を mesh データへ焼き込む",
+            "type": "boolean"
+          },
+          "degrees": {
+            "description": "angle: 回転量（度・符号で向き）",
+            "type": "number"
+          },
+          "dry_run": {
+            "default": false,
+            "description": "適用せず計画（回転/傾き角）のみ返す",
+            "type": "boolean"
+          },
+          "from_dir": {
+            "description": "align-vector: 揃えたい現在の world 方向(x,y,z)",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "make_single_user": {
+            "default": false,
+            "description": "bake時に共有mesh単一ユーザ化を許可",
+            "type": "boolean"
+          },
+          "method": {
+            "description": "補正方法: reset|world-align|pca|floor|angle|align-vector|reference",
+            "enum": [
+              "reset",
+              "world-align",
+              "pca",
+              "floor",
+              "angle",
+              "align-vector",
+              "reference"
+            ],
+            "type": "string"
+          },
+          "ref_axis": {
+            "description": "reference: 参照側の signed local 軸（省略時は up_axis）",
+            "enum": [
+              "+Z",
+              "-Z",
+              "+Y",
+              "-Y",
+              "+X",
+              "-X"
+            ],
+            "type": "string"
+          },
+          "reference": {
+            "description": "reference: 基準にする別オブジェクト名",
+            "type": "string"
+          },
+          "targets": {
+            "description": "対象（name|regex）",
+            "type": "string"
+          },
+          "to_dir": {
+            "description": "align-vector: 目標 world 方向(x,y,z・省略時は up)",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "up_axis": {
+            "default": "+Z",
+            "description": "up 方向（既定 +Z）",
+            "enum": [
+              "+Z",
+              "-Z",
+              "+Y",
+              "-Y",
+              "+X",
+              "-X"
+            ],
+            "type": "string"
+          },
+          "up_hint": {
+            "description": "pca の符号決定: auto(重心)|current(現在 up 寄り=反転防止)",
+            "enum": [
+              "auto",
+              "current"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "targets",
+          "method"
+        ],
+        "title": "straighten",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "オブジェクトを直立補正する（reset/world-align/pca/floor/angle/align-vector/reference）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "transform",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "位置/回転/拡縮を設定または相対適用する（delta: loc/rot は加算・scale は乗算）",
+        "properties": {
+          "location": {
+            "description": "位置 x,y,z",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "mode": {
+            "default": "set",
+            "description": "設定/相対",
+            "enum": [
+              "set",
+              "delta"
+            ],
+            "type": "string"
+          },
+          "rotation": {
+            "description": "回転 x,y,z（度）",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "scale": {
+            "description": "拡縮 x,y,z",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "targets": {
+            "description": "対象",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targets"
+        ],
+        "title": "transform",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "位置/回転/拡縮を設定または相対適用する（delta: loc/rot は加算・scale は乗算）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "undo",
+      "required_mode": "ANY",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "直前の操作を元に戻す（グローバル undo スタックを steps 段戻す・GUI 必須）",
+        "properties": {
+          "steps": {
+            "default": 1,
+            "description": "戻す段数（1〜100・既定 1）",
+            "type": "integer"
+          }
+        },
+        "title": "undo",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "直前の操作を元に戻す（グローバル undo スタックを steps 段戻す・GUI 必須）"
+    }
+  ],
+  "note": "SSOT（bli-core definitions）から生成。手で編集しない。再生成: uv run python scripts/generate_cli_schema.py",
+  "schema_hash": "3e5f668d0d9a025d1a652854df92997d0c76ee401dab620cf67821744eceb87c"
+}
