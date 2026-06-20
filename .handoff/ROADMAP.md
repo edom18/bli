@@ -24,8 +24,8 @@
 | M7 | メッシュ編集（mesh --op: bmesh 一次 + heavy は modifier 経由） | ✅ | PR #7–#9 |
 | **M8** | **3シナリオ中核価値（set-origin / straighten / print-*）+ 実地フィードバック対応** | ✅ **完了**（PR #10–#18, #20） | 下記 §M8 |
 | **M9** | ファイルI/O（export / import / save / open・3mf 不可→CAPABILITY） | ✅ **完了**: T9.1 export(#21)/T9.2 import(#22)/T9.3 save(#23)/T9.4 open(#25) | 確定要約 HANDOFF §6i / GT research §E9・§E10・§E11 |
-| **M10** | 非同期job & フリーズ対策（job 化 / render busy / watchdog） | 🔶 **進行中**: T10.1 job 化(#27) ✅・T10.2 render busy(#28) ✅・**残り T10.3 watchdog** | 確定要約 HANDOFF §6j / 着手書 NEXT-M10.md（--dry-run は M13 繰越） |
-| M11 | exec-python（既定 off・audited/trusted は設定昇格） | ⬜ 未着手 | |
+| **M10** | 非同期job & フリーズ対策（job 化 / render busy / watchdog） | ✅ **完了**: T10.1 job 化(#27)・T10.2 render busy(#28)・T10.3 watchdog(#30) | 確定要約 HANDOFF §6j / GT research §E12・§E13（--dry-run は M13 繰越） |
+| **M11** | exec-python（既定 off・`EXEC_DISABLED` / audited / trusted は設定昇格・AST flag・監査） | ⬜ **次** | 着手書 NEXT-M11.md |
 | M12 | Skill 同梱 & スキーマ同期（`.claude/skills/bli/` + help --json 生成 + schema_hash） | ⬜ 未着手 | D12 |
 | M13 | テスト網羅 & CI 仕上げ | ⬜ 未着手 | |
 | M14 | ドキュメント & 配布（addon zip ビルド・vendoring テスト） | ⬜ 未着手 | |
@@ -59,7 +59,7 @@
 | PR-4 | 基準指定整列（#4 straighten に angle/align-vector/reference 追加・支柱問題） | ✅ PR #17 |
 | PR-5 | undo/redo 公開（#3 `bli undo`/`redo`・GUI 必須・スタック端 RuntimeError 頑健化） | ✅ PR #18 |
 
-→ **M8 完了（実地FB PR-1〜5 + T8.5 print-export #20）。M9 完了: T9.1 export(#21)/T9.2 import(#22)/T9.3 save(#23)/T9.4 open(#25)。次は M10（非同期job）**。
+→ **M8 完了（実地FB PR-1〜5 + T8.5 print-export #20）。M9 完了: T9.1 export(#21)/T9.2 import(#22)/T9.3 save(#23)/T9.4 open(#25)。M10 完了: T10.1 job 化(#27)/T10.2 render busy(#28)/T10.3 watchdog(#30)。次は M11（exec-python）**。
 ※ FB #4 の「部分ジオメトリ PCA（頂点サブセット基準）」は部分指定方法の決定が要るため別 PR 繰越（PR-4 では angle/align-vector/reference で支柱問題に実用解を提供済み）。
 
 ---

@@ -1,8 +1,10 @@
-# 次の作業 — M10「非同期job & フリーズ対策」: **T10.1/T10.2 完了**／次は **T10.3 watchdog**
+# 【履歴】M10「非同期job & フリーズ対策」: **T10.1/T10.2/T10.3 全完了 ✅（M10 完了）**
 
-最終更新: 2026-06-20 / 前提: **M0–M9 完了 + M10 T10.1 完了（PR #27 マージ済み・非同期 job 化）+ T10.2 完了（PR #28 マージ待ち・render busy）**。出典: `plan.md §M10` / `spec.md §7 重量処理`（観測性で守る）/ §エラー（`BUSY_RENDERING`/`MAIN_THREAD_UNRESPONSIVE`/`TIMEOUT`）/ §終了コード（`2=TIMEOUT_PENDING`）。**土台は M4**（settle/RUNNING/request-status/RequestRegistry＝HANDOFF §6b）+ **T10.1 で追加した job 機構**（§1.5）+ **T10.2 で追加した render_state**（§1.6）。全体俯瞰 `.handoff/ROADMAP.md`。
+> このファイルは履歴。**次の作業は M11 exec-python = `.handoff/NEXT-M11.md`**。M10 の確定要約は `HANDOFF.md §6j`、GT は `research.md §E12`（render busy）/`§E13`（watchdog）。
 
-> キックオフ判断 D-A〜D-E は **§2 で確定済み**。T10.1 は実装完了（§1.5）・T10.2 も完了（§1.6・R-A/R-B 確定）。**残りは T10.3（watchdog）。着手書は §3-2（GUI スパイク）/ §4 T10.3（実装手順）/ §4.5 R-C〜R-E（キックオフ判断）**。GUI スパイク必須（watchdog timer は `--background` で発火しない）。
+最終更新: 2026-06-20 / 状態: **M10 完了** — T10.1 job 化（PR #27）/ T10.2 render busy（PR #28）/ T10.3 watchdog（PR #30）。出典: `plan.md §M10` / `spec.md §7 重量処理`（観測性で守る）/ §エラー（`BUSY_RENDERING`/`MAIN_THREAD_UNRESPONSIVE`/`TIMEOUT`）/ §終了コード（`2=TIMEOUT_PENDING`）。土台は M4（settle/RUNNING/request-status/RequestRegistry＝HANDOFF §6b）。全体俯瞰 `.handoff/ROADMAP.md`。
+
+> 以下は M10 着手時の計画・キックオフ判断・スパイク手順の記録（履歴）。T10.1=§1.5 / T10.2=§1.6 / T10.3 の確定は HANDOFF §6j。キックオフ判断 D-A〜D-E（§2）・R-A/R-B（T10.2）・R-C〜R-E（T10.3）はすべて確定済み。
 
 ## 0. M10 の本質（最初に共有・誤解しやすい）
 - **bpy はメインスレッド直列**。重量ネイティブ処理（importer/exporter/boolean/decimate/print-check の C 内部）は **1回の blocking 呼び出しで、中断もチャンク化もできない**（spec §7 line 338 の残存リスク）。
@@ -14,7 +16,7 @@
 |---|---|:--:|
 | T10.1 | heavy コマンドの job 化（job_id 採番・`accepted` 即返・`job-status`/`job-wait`） | ✅ **PR #27**（§1.5） |
 | T10.2 | render busy 拒否（`render_init`/`render_complete`/`render_cancel` handler・`BUSY_RENDERING` 即拒否） | ✅ **PR #28**（§1.6） |
-| T10.3 | heartbeat watchdog（`MAIN_THREAD_UNRESPONSIVE` 検知・通知） | ⬜ **次** |
+| T10.3 | heartbeat watchdog（`MAIN_THREAD_UNRESPONSIVE` 検知・通知） | ✅ **PR #30**（HANDOFF §6j・研究 §E13） |
 | ~~T10.4~~ | ~~`--dry-run` 一般化~~ | **M13 へ繰越（M10 スコープ外・確定）** |
 - **DoD（plan）**: 重量 import 中も接続が塞がらない（L3 で検証）→ **T10.1 で達成**（`test_e2e_jobs.py`）。
 
@@ -84,8 +86,8 @@ PYTHONUTF8=1 uv run python scripts/check_no_raw_bpy_ops.py packages/bli-addon/sr
 ### T10.2 render busy ✅ 完了（PR #28・要約は §1.6）
 - ~~スパイク/render_state/server/CLI/テスト/smoke~~ 完了。GUI スパイク `render_spike.py`（研究 §E12）で render handler が**レンダスレッド（Dummy-N）から発火**＝busy は `threading.Event`、`@persistent` で open 跨ぎ生存（background smoke で裏付け）を確定。独立3視点セルフレビュー P1 なし・P2/P3 解消（install 冪等化 / smoke の未登録vs消失分離 / mesh docstring 訂正 / load_definitions 冪等ロード / 未知メソッド非 BUSY テスト / spec 終了コード表 exit2 注記）。pytest 331・両版 OPS SMOKE OK。**T10.3 でも「観測系は lock-free で受信スレッド処理」を踏襲**（busy フラグ同様、watchdog 状態も受信スレッドが読む）。
 
-### T10.3 watchdog（**次**・spec §7 line 337）
-重量処理でメインスレッドが固まったことを検知して通知する（実行は止めない・観測性のみ）。
+### T10.3 watchdog ✅ 完了（PR #30・確定要約は HANDOFF §6j・研究 §E13）
+重量処理でメインスレッドが固まったことを検知して通知する（実行は止めない・観測性のみ）。**実装の現実**（着手時計画との差分）: 監視スレッドに加え `snapshot()` が**読み取り時にも**判定する二段構え（監視ポーリングに依存しない堅牢化）。露出は request-status（→job-status/job-wait）+ doctor に加え、**auto-wait/job-wait のポーリング中に固まりを一度だけ stderr 通知**（既定 auto-wait でも可視化＝セルフレビュー P1）。閾値 60s は実 decimate(1.3M面<1s)で誤検知しないことを GUI スパイクで実測。以下は着手時の計画（履歴）。
 - **A. 着手前 GUI スパイク必須**（§3-2）: pump タイマが毎 tick で生存印（`last_pump_ts`）を更新 → 別スレッドが「今 − last_pump_ts > 閾値」で `MAIN_THREAD_UNRESPONSIVE` 判定。重量 op 中に **pump タイマが止まる**（=last_pump_ts が進まない）ことを GUI 実機で確認。`background` は timer 非発火なので **GUI スパイク必須**。閾値は `DISPATCH_TIMEOUT`(30s) と整合（誤検知しない・短すぎない）。research.md §E12 に追記。
 - **B. addon**: dispatcher（または `__init__`）が `last_pump_ts` を更新（pump tick / install_timer 内）。別スレッド watchdog が定期チェックし、応答不能を**フラグ/状態**に載せる（通知のみ＝実行は止めない・kill しない）。
 - **C. 露出**: `MAIN_THREAD_UNRESPONSIVE` を **lock-free な観測系**で読めるようにする（例: `request-status`/`job-status`/`doctor` の応答に `main_thread_responsive`/`unresponsive_since` を載せる＝受信スレッドが busy フラグ同様に読む・メインを待たない）。これがエージェントの「固まっている」可視化。
