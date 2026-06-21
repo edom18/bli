@@ -47,3 +47,8 @@ jobs:
           grep -q "OPS SMOKE OK" smoke.log || { echo "::error::OPS SMOKE が OK で終わっていない"; exit 1; }
       - name: bl_rna 契約テスト (operator 実在・引数 / M13 T13.2)
         run: blender --background --python packages/bli-addon/spikes/contract_check.py
+      - name: Vendored 配布スモーク (zip ビルド→展開→vendored bli_core で実機疎通 / M14 T14.2)
+        shell: bash
+        run: |
+          blender --background --python packages/bli-addon/spikes/vendored_smoke.py 2>&1 | tee vendored.log
+          grep -q "VENDORED SMOKE OK" vendored.log || { echo "::error::VENDORED SMOKE が OK で終わっていない"; exit 1; }
