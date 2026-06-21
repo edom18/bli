@@ -359,12 +359,35 @@ def ping(
     _emit(json_out, human, payload)
 
 
+def _doctor_guidance(connection_exists: bool, reachable: bool) -> list[str]:
+    """アドオン未到達時の導入ガイドを返す（到達時は空）。
+
+    接続情報の有無で状況を切り分ける。情報なし＝未導入の可能性なので zip 導入手順を、
+    情報あり＝待受停止の可能性なので Blender/アドオンの稼働確認を案内する。
+    """
+    if reachable:
+        return []
+    if not connection_exists:
+        return [
+            "アドオン未到達（接続情報なし＝未導入の可能性）:",
+            "  1. 配布 zip をビルド: uv run python scripts/build_addon.py",
+            "  2. Blender > Edit > Preferences > Add-ons > Install from Disk… で",
+            "     dist/bli_server-<ver>.zip を選び、チェックを入れて有効化する。",
+            "  3. 有効化で 127.0.0.1 待受 + 接続情報が書き出される。再度 `bli doctor`。",
+        ]
+    return [
+        "アドオン未到達（接続情報あり＝待受が停止している可能性）:",
+        "  - Blender が起動中か、アドオンが有効か確認する（終了/無効化で待受は止まる）。",
+        "  - 接続情報は前回値。Blender 再起動か再有効化で更新される。",
+    ]
+
+
 @app.command()
 def doctor(
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
-    """環境診断（connection.json/token の有無・アドオン到達性）。"""
+    """環境診断（connection.json/token の有無・アドオン到達性・導入ガイド）。"""
     from bli_core import runtime
 
     cp = runtime.connection_path()
@@ -396,6 +419,7 @@ def doctor(
             pass
 
     main_responsive = watchdog.get("responsive") if watchdog else None
+    guidance = _doctor_guidance(cp.exists(), reachable)
     payload = {
         "connection_json": cp.exists(),
         "connection_path": str(cp),
@@ -405,6 +429,7 @@ def doctor(
         "main_thread_responsive": main_responsive,
         "watchdog": watchdog,
         "detail": detail,
+        "guidance": guidance,
     }
     if main_responsive is None:
         wd_line = "不明" if reachable else "—（未到達）"
@@ -421,6 +446,7 @@ def doctor(
             f"  メインスレッド   : {wd_line}",
         ]
         + ([f"  詳細            : {detail}"] if detail else [])
+        + (["", *guidance] if guidance else [])
     )
     _emit(json_out, human, payload)
 
