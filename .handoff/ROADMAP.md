@@ -28,7 +28,7 @@
 | **M11** | exec-python（既定 off・`EXEC_DISABLED` / audited=許可ハッシュ自走 / trusted・AST flag・監査） | ✅ **完了**: T11.1 mode ゲート / T11.2 AST flag / T11.3 監査+許可ハッシュ（**PR #32**・base main） | 確定要約 HANDOFF §6k / GT research §E14 |
 | **M12** | Skill 同梱 & スキーマ同期（`.claude/skills/bli/` + cli-schema.json 生成 + schema_hash） | ✅ **完了**（**PR #33**・stacked on #32） | 確定要約 HANDOFF §6l / D12 |
 | **M13** | テスト網羅 & CI 仕上げ（bl_rna 契約 / L2 Blender マトリクス / golden / L3 / snapshot） | ✅ **完了**（**PR #34**・stacked on #33） | 確定要約 HANDOFF §6m |
-| **M14** | ドキュメント & 配布（addon zip ビルド・vendoring テスト・README） | ⬜ **次** | 着手書 NEXT-M14.md |
+| **M14** | ドキュメント & 配布（addon zip ビルド・vendoring 検証・README・doctor 導入支援・mistakes-memo） | ✅ **実装完了**（**PR #36**・base main・マージ待ち） | 確定要約 HANDOFF §6n / DoD=クリーン環境で導入→ping→3シナリオ |
 
 ★ = walking skeleton。✅=完了 / 🔶=進行中 / ⬜=未着手。
 
@@ -59,7 +59,7 @@
 | PR-4 | 基準指定整列（#4 straighten に angle/align-vector/reference 追加・支柱問題） | ✅ PR #17 |
 | PR-5 | undo/redo 公開（#3 `bli undo`/`redo`・GUI 必須・スタック端 RuntimeError 頑健化） | ✅ PR #18 |
 
-→ **M8/M9/M10 完了（main マージ済み）。M11 exec-python（PR #32）/ M12 Skill 同梱（PR #33）/ M13 テスト網羅&CI（PR #34）は実装完了＝スタックでマージ待ち。次は M14（ドキュメント&配布）= `.handoff/NEXT-M14.md`**。
+→ **M8〜M13 完了（main マージ済み・PR #10〜#35）。M14 ドキュメント&配布は実装完了＝PR #36 マージ待ち（確定要約 HANDOFF §6n）。これで v1 全マイルストーン（M0–M14）実装完了。** 残るは GUI 実機での zip 導入→`bli ping` の手動確認（headless 不可・README 記載）と任意の配布公開（Extensions/PyPI は後続）。
 ※ FB #4 の「部分ジオメトリ PCA（頂点サブセット基準）」は部分指定方法の決定が要るため別 PR 繰越（PR-4 では angle/align-vector/reference で支柱問題に実用解を提供済み）。
 
 ---
