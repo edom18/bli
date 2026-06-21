@@ -1,10 +1,10 @@
 # bli (Blender CLI) — 引き継ぎ資料 (HANDOFF)
 
-最終更新: 2026-06-21 / 状態: **PR #1–#31 マージ済み（origin/main=3d6cc02）。M0–M10 完了。M11 exec-python ✅ / M12 Skill 同梱 ✅ / M13 テスト網羅&CI ✅ を実装完了＝サブPR #32（M11・base main）/ #33（M12・stacked on m11）/ #34（M13・stacked on m12）がオープン中（マージ待ち・スタック）。M11 確定要約は §6k・M12 は §6l・M13 は §6m・GT research §E14。**次は M14 ドキュメント&配布（着手書 `.handoff/NEXT-M14.md`）**。俯瞰 `.handoff/ROADMAP.md`**。
+最終更新: 2026-06-21 / 状態: **PR #1–#35 マージ済み（origin/main=efc6cb8）。M0–M13 完了。M14 ドキュメント&配布 ✅ を実装完了＝サブPR #36（base main）がオープン中（マージ待ち）。M11 確定要約は §6k・M12 は §6l・M13 は §6m・M14 は §6n・GT research §E14。**M14 マージで v1 全マイルストーン（M0–M14）完成。**俯瞰 `.handoff/ROADMAP.md`**。
 
 > 新規セッションはこの1枚を読めば再開できる。詳細は `specs/blender-cli-core/` を参照。
-> **全体俯瞰は `.handoff/ROADMAP.md`。M11–M13 は実装完了（PR #32–#34 マージ待ち）。次の作業は M14 ドキュメント&配布＝着手書 `.handoff/NEXT-M14.md`**（このファイルは全体史 + 規約・§6h=実地FB確定要約・§6i=M9・§6j=M10・§6k=M11・§6l=M12・§6m=M13 確定要約）。
-> **重要（スタックPR）**: #32→#33→#34 はこの順でスタックしている。マージは #32→#33→#34 の順で行う（GitHub は先行マージ後に base を自動 retarget する）。handoff docs PR はこのスタックとは別に main から出している。
+> **全体俯瞰は `.handoff/ROADMAP.md`。M0–M14 は実装完了（M14=PR #36 マージ待ち / M11–M13 は main マージ済み）。これで v1 全マイルストーン実装完了**（このファイルは全体史 + 規約・§6h=実地FB確定要約・§6i=M9・§6j=M10・§6k=M11・§6l=M12・§6m=M13・§6n=M14 確定要約）。
+> **M14 後の動き**: マージで main の handoff/README が最新化される。残るは **GUI 実機での zip 導入→`bli ping` の手動確認**（headless 不可・README/§6n 記載）と任意の配布公開（PyPI/Extensions は後続）。
 
 ---
 
@@ -70,9 +70,9 @@
 | **M11** exec-python（既定 off・audited/trusted 昇格・AST flag・監査） | ✅ **完了**（§6k・PR #32）: T11.1 mode ゲート / T11.2 AST flag / T11.3 監査+許可ハッシュ | pytest 433 + 5.0/4.4 実機 smoke OK + exec_spike OK |
 | **M12** Skill 同梱 & スキーマ同期（`.claude/skills/bli/` + help --json 生成 + schema_hash） | ✅ **完了**（§6l・PR #33・stacked on #32） | pytest 438（sync テスト 5件）+ 両版 smoke skill_schema_sync_ok |
 | **M13** テスト網羅 & CI 仕上げ（bl_rna 契約 / L2 マトリクス / golden / L3 / snapshot） | ✅ **完了**（§6m・PR #34・stacked on #33） | pytest 438 + 両版 contract OK・smoke OK |
-| **M14** ドキュメント & 配布（addon zip ビルド・vendoring テスト・README） | ⬜ **次**（着手書 `.handoff/NEXT-M14.md`） | — |
+| **M14** ドキュメント & 配布（addon zip ビルド・vendoring 検証・README・doctor 導入支援・mistakes-memo） | ✅ **実装完了**（§6n・PR #36・base main・マージ待ち） | pytest 446 + 両版 vendored smoke OK |
 
-**状態（M11–M13 実装完了＝PR #32–#34 マージ待ち・docs ブランチ基準は main=M10）: `uv run pytest` = 438 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright = 0 errors。Blender 5.0.1/4.4.3 両版 background smoke OPS SMOKE OK（exec mode ゲート + AST flag + 監査 + skill_schema_sync）+ bl_rna 契約テスト両版 CONTRACT OK + exec_spike 両版 OK。`uv run` の Python は 3.12.10（tomllib あり）。**
+**状態（M0–M14 実装完了＝M14 は PR #36 マージ待ち・M11–M13 は main マージ済み）: `uv run pytest` = 446 passed / `ruff check` = 緑 / `ruff format --check` = 緑 / AST guard = OK / pyright = 0 errors。Blender 5.0.1/4.4.3 両版 background smoke OPS SMOKE OK + bl_rna 契約テスト両版 CONTRACT OK + exec_spike 両版 OK + **vendored 配布スモーク両版 VENDORED SMOKE OK**（zip ビルド→展開→workspace 非経由で実 bpy 疎通）。`uv run` の Python は 3.12.10（tomllib あり）。**
 
 > PR #1 の Codex レビュー対応で M4 を追補（§6b 参照）: ①request-status のロック迂回（限定セッション）②タイムアウト後の registry 後追い更新（settle）③発見系を implemented 済みに限定 ④サーバ/クライアントのタイムアウト整合（DISPATCH_TIMEOUT < CLIENT_READ_TIMEOUT）⑤TIMEOUT 時に request id を提示。
 
@@ -342,6 +342,18 @@ AIエージェントが bli を発見・利用できるよう Claude Code Skill 
 - **T13.2 bl_rna 契約テスト**: `spikes/contract_check.py`（本番 capability モジュール使用・pytest 非収集＝Blender 実行）。bli が依存する operator の実在（get_rna_type）+ 引数（プロパティ）を検証し版差での破壊を CI 早期検知。FBX import 版差（5.0=wm.fbx_import / 4.4=import_scene.fbx）・3mf 不在も契約化。両版 CONTRACT OK。
 - **T13.3** golden 数値検証 = 既存 `smoke_ops.py`（3シナリオ + 主要編集 golden）を CI で grep ゲート。**T13.4** L3 プロトコル E2E = 既存で網羅済み（test_e2e_ping/jobs: handshake/auth/SESSION_BUSY/冪等/TIMEOUT/framing・test_protocol: フレーミング）。**T13.5** schema snapshot = M12 の sync テストで実装済み。
 
+## 6n. M14 ドキュメント & 配布（✅ 実装完了・PR #36・base main・マージ待ち）
+v1 の総仕上げ＝クリーン環境で「導入 → ping → 3シナリオ」が再現できる状態にする（DoD）。最大の論点は **vendoring**（アドオンは Blender 埋め込み Python で動くため `bli-core` を同梱しないと `import bli_core` が解決できない）。キックオフ確定: **R-A**=build 時に `bli-core` を `vendored/bli_core/` へコピー + `_ensure_bli_core_on_path()` で `sys.path` 注入（import は書き換えない・既存スキャフォールド踏襲）/ **R-B**=legacy bl_info zip 一次（「Install from Disk」で 4.4/5.0 両対応・`blender_manifest.toml` は zip 非同梱＝5.0 の Extension 誤認回避・Extensions は後続）/ 単一PR / **R-C**=build スクリプト + 検証のみ（CI artifact 化は後続）。独立3視点セルフレビュー反映済み・**P1 なし**。
+- **T14.2 addon zip ビルド（最大の論点）**: `scripts/build_addon.py`（純Python・stdlib のみ）。`bli-addon/src/bli_addon/` を集め、`bli-core/src/bli_core/` を `bli_addon/vendored/bli_core/` へ同梱して **legacy zip**（top-level `bli_addon/`）を出力。**決定的**（arcname を sort・mtime 固定 (1980,1,1)・権限固定）＝同一入力で同一バイト列。`__pycache__`/`.pyc`/`blender_manifest.toml` は非同梱。`dist/bli_server-<ver>.zip`（25 ファイル・うち vendored 9）。
+  - **vendoring 隔離テスト** `packages/bli-addon/tests/test_build_addon.py`: `python -S`（site なし＝workspace の editable `bli_core` を隠す）で展開 zip を import し、`bli_core` が **`vendored/` 経由のみ**で解決されることを確認。前提検証（`-S` だと workspace `bli_core` を import できない＝隔離が本物）/ 決定的ビルドのバイト一致 / キャッシュ・manifest 非同梱 / 全 bli_core モジュール網羅。
+  - **実 bpy 疎通スパイク** `packages/bli-addon/spikes/vendored_smoke.py`: zip をビルド→展開し **workspace を `sys.path` に載せず**（=Blender 埋め込み Python の実配布条件）`ops.dispatch` を駆動。scene-info → set-origin world(1,0,0) → object-info → set-origin geometry median の往復を実 bpy で検証。**5.0.1 / 4.4.3 両版 VENDORED SMOKE OK**。GUI からの zip 導入の headless 近似。
+  - **CI**: `test-blender.yml` の L2 マトリクスに vendored 配布スモークを追加（grep `VENDORED SMOKE OK`）＝配布経路を毎回ゲート。5.0 必須 / 4.4 best-effort。
+- **T14.1 README**: インストール章を新設。CLI=`uv tool install --from packages/bli-cli bli-cli`（**pipx は未公開の workspace 依存を解決できないため uv tool install を採用**＝plan R5 からの正当な変更・pipx は PyPI 公開後の将来手段）。アドオン=zip ビルド→**Edit > Preferences > Add-ons > Install from Disk…**→有効化で 127.0.0.1 待受 + 接続情報。Skill 同梱（M12）と状態（M0–M13）を反映。
+- **T14.3 doctor 導入支援**: `_doctor_guidance(connection_exists, reachable)`。アドオン未到達時に状況別ガイド（接続情報なし＝未導入の可能性→zip ビルド+Install from Disk / 接続情報あり＝待受停止の可能性→Blender/アドオンの稼働確認）。`payload.guidance`（list[str]）も追加＝エージェント向けに構造化。単体テスト `test_doctor_guidance.py`。
+- **T14.4 mistakes-memo 運用開始**: `.claude/mistakes-memo.md`（規約 `mistakes.md`）。M0–M14 で実際に踏んだ罠 11 件を Case/状況/対策 で初期化（operator 実在は get_rna_type / background timer 非発火 / is_dirty 不信 / stl_export 永続選択 / GLTF_EMBEDDED 不在 / undo 端の RuntimeError / vendoring / tomllib 版差 / help 端末幅 / setup-blender 5.0 解決 / Windows RST）。
+- **検証**: pytest 446（+8: build 5・doctor 3）/ ruff・format・AST guard・pyright 全緑 / 両版 vendored smoke OK。
+- **残点（v1 許容）**: DoD の literal な最後の1手＝「GUI で zip を Install from Disk → `bli ping`」は headless 不可で**手動**（register/dispatch は vendored_smoke で実 bpy 代替確認済み・手順は README 記載）。Extensions 形式配布・PyPI 公開・CI artifact 化は後続。
+
 ## 6e. M6 で確立した再利用パターン（T6.2 以降で踏襲）
 - **破壊的 mesh 操作は共有ガード**: `ops._guard_shared_mesh(gateway, obj, params)` を呼ぶ（delete も対象になり得る）。`--make-single-user` 無しで users>=2 は `E_PRECONDITION`。
 - **bpy 到達前の入力検証**: `ops._require_input(cond, symptom, remediation)` で USER_INPUT を投げる（pytest が bpy 無しで到達できる＝テスト容易）。param/前提チェックは `from . import gateway` より前に。
@@ -409,4 +421,4 @@ packages/{bli-core, bli-cli, bli-addon}（uv workspace）。
 - M11: **完了**（T11.1 mode ゲート / T11.2 AST flag / T11.3 監査+許可ハッシュ・確定要約 §6k・GT research §E14・PR #32）。M11 繰越: audited の監査失敗を fail-closed にするか（v1 best-effort）/ policy.toml 権限検証 / BLI_STATE_DIR env で policy 差し替わる点 / exec は job 化せずメイン同期占有し得る。
 - M12: **完了**（Skill 同梱 + cli-schema.json 生成 + schema_hash sync・確定要約 §6l・PR #33）。
 - M13: **完了**（bl_rna 契約テスト + L2 Blender マトリクス CI + golden/L3/snapshot・確定要約 §6m・PR #34）。
-- **M14: 次**（ドキュメント & 配布＝addon zip ビルド・vendoring テスト・README 整備）。着手書 `.handoff/NEXT-M14.md`。
+- M14: **実装完了**（addon zip ビルド `scripts/build_addon.py` + vendoring 隔離テスト + 両版 vendored smoke + doctor 導入支援 + README + mistakes-memo・確定要約 §6n・PR #36 マージ待ち）。M14 繰越: **GUI 実機の zip 導入→`bli ping` は手動**（headless 不可）/ Extensions 形式配布（`blender_manifest.toml` は予約済み）/ PyPI 公開で pipx 対応 / CI artifact 化。**これで v1 全マイルストーン（M0–M14）実装完了**。
