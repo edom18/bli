@@ -47,6 +47,14 @@ def _validate(cmd: Command, params: dict[str, Any]) -> None:
         raise JsonRpcError(RPC_INVALID_PARAMS, ErrorCode.INVALID_PARAMS, errors[0])
 
 
+# required_mode -> `bli mode --to <...>` の案内文（P1-2: mode コマンド新設に伴い、GUI操作でしか
+# 戻れなかった E_MODE_MISMATCH の remediation を具体的な復帰コマンドへ更新・U9対策）。
+_MODE_CLI_HINT: dict[Mode, str] = {
+    Mode.OBJECT: "bli mode --to object",
+    Mode.EDIT: "bli mode --to edit",
+}
+
+
 def _check_mode(cmd: Command, current: str) -> None:
     """required_mode を検証する。不一致は自動遷移せず E_MODE_MISMATCH。"""
     req = cmd.required_mode
@@ -56,6 +64,7 @@ def _check_mode(cmd: Command, current: str) -> None:
         req is Mode.EDIT and current.startswith("EDIT")
     )
     if not ok:
+        hint = _MODE_CLI_HINT.get(req, f"{req.value} モードに切り替えて")
         raise JsonRpcError(
             RPC_BUSINESS_ERROR,
             ErrorCode.E_MODE_MISMATCH,
@@ -64,7 +73,7 @@ def _check_mode(cmd: Command, current: str) -> None:
                 category=ErrorCategory.PRECONDITION,
                 retryable=False,
                 symptom=f"必要モード {req.value}（現在 {current}）",
-                remediation=f"{req.value} モードに切り替えてください（自動遷移はしません）",
+                remediation=f"{hint} を実行してください（自動遷移はしません）",
             ),
         )
 
@@ -523,6 +532,157 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         "modifiers": gateway.list_modifiers(obj),
     }
     return _ok("modifier", data, fingerprint=gateway.modifiers_fingerprint(obj))
+
+
+# ---- シーングラフ生成 / モード切替 / 改名 / 親子 / コレクション（P1-2）----
+
+
+def _add(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("add")
+    _validate(cmd, params)
+    add_type = str(params["type"])
+    light_type = params.get("light_type")
+    # light_type は type=light 専用（presence-sensitive・_MODIFIER_TYPE_PARAMS と同じ流儀）。
+    _require_input(
+        add_type == "light" or light_type is None,
+        symptom="--light-type は --type light のときのみ有効です",
+        remediation="--type light で使うか --light-type を外してください",
+    )
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    data = gateway.add_object(
+        add_type,
+        name=params.get("name"),
+        location=params.get("location"),
+        rotation=params.get("rotation"),
+        scale=params.get("scale"),
+        light_type=str(light_type) if light_type is not None else None,
+        message=f"add {add_type}",
+    )
+    return _ok("add", data, fingerprint=gateway.state_fingerprint(data))
+
+
+def _mode(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("mode")
+    _validate(cmd, params)
+    to = str(params["to"])
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    targets = params.get("targets")
+    data = gateway.set_object_mode(
+        to,
+        targets=str(targets) if targets is not None else None,
+        regex=bool(params.get("regex", False)),
+        message=f"mode {to}",
+    )
+    return _ok("mode", data, fingerprint=gateway.state_fingerprint(data))
+
+
+def _rename(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("rename")
+    _validate(cmd, params)
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    obj = gateway.require_single(str(params["targets"]), regex=bool(params.get("regex", False)))
+    data = gateway.rename_object(
+        obj, str(params["name"]), with_data=bool(params.get("with_data", False)), message="rename"
+    )
+    return _ok("rename", data, fingerprint=gateway.object_fingerprint(obj))
+
+
+def _parent(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("parent")
+    _validate(cmd, params)
+    to = params.get("to")
+    clear = bool(params.get("clear", False))
+    # --to と --clear は排他でどちらか一方が必須（bpy 到達前に検証）。
+    _require_input(
+        (to is not None) != clear,
+        symptom="--to（親にするオブジェクト）と --clear はどちらか一方が必要です",
+        remediation="--to <object> または --clear のどちらか一方を指定してください",
+    )
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+    children = gateway.require_targets(
+        str(params["targets"]), regex=bool(params.get("regex", False))
+    )
+    keep_transform = bool(params.get("keep_transform", True))
+
+    if clear:
+        results = gateway.parent_clear(
+            children, keep_transform=keep_transform, message="parent clear"
+        )
+        action = "clear"
+    else:
+        parent_obj = gateway.require_single(str(to))
+        results = gateway.parent_set(
+            children, parent_obj, keep_transform=keep_transform, message="parent set"
+        )
+        action = "set"
+
+    data = {"action": action, "results": results}
+    return _ok("parent", data, fingerprint=gateway.parent_fingerprint(results))
+
+
+def _collection(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
+    cmd = _command("collection")
+    _validate(cmd, params)
+    action = str(params["action"])
+    name = params.get("name")
+    targets = params.get("targets")
+
+    # name は list 以外で必須・targets は move/link/unlink でのみ有効（presence-sensitive・
+    # material/modifier の action 別検証と同じ流儀）。
+    _require_input(
+        action == "list" or name is not None,
+        symptom=f"{action} には --name（collection 名）が必要です",
+        remediation="--name を指定してください",
+    )
+    if action in ("move", "link", "unlink"):
+        _require_input(
+            targets is not None,
+            symptom=f"{action} には --targets（対象オブジェクト）が必要です",
+            remediation="--targets を指定してください",
+        )
+    else:
+        _require_input(
+            targets is None,
+            symptom=f"--targets は move/link/unlink のときのみ有効です（action={action}）",
+            remediation="--targets を外すか move/link/unlink を使ってください",
+        )
+
+    from . import gateway  # lazy: bpy 依存
+
+    _check_mode(cmd, gateway.current_mode())
+
+    if action == "list":
+        data = {"action": "list", "collections": gateway.list_collections()}
+        return _ok("collection", data, fingerprint=gateway.collections_fingerprint())
+
+    if action == "create":
+        result = gateway.create_collection(str(name), message="collection create")
+        data = {"action": "create", **result}
+        return _ok("collection", data, fingerprint=gateway.collections_fingerprint())
+
+    collection = gateway.require_collection(str(name))
+    children = gateway.require_targets(str(targets), regex=bool(params.get("regex", False)))
+    if action == "move":
+        results = gateway.move_to_collection(children, collection, message="collection move")
+    elif action == "link":
+        results = gateway.link_to_collection(children, collection, message="collection link")
+    else:  # unlink
+        results = gateway.unlink_from_collection(children, collection, message="collection unlink")
+
+    data = {"action": action, "collection": collection.name, "results": results}
+    return _ok("collection", data, fingerprint=gateway.collections_fingerprint())
 
 
 # op 別に有効な追加パラメータ（これ以外が来たら USER_INPUT で弾く・modifier と同じ流儀）。
@@ -1817,6 +1977,11 @@ _BPY_HANDLERS: dict[str, Callable[[dict[str, Any], ServerInfo], dict[str, Any]]]
     "delete": _delete,
     "material": _material,
     "modifier": _modifier,
+    "add": _add,
+    "mode": _mode,
+    "rename": _rename,
+    "parent": _parent,
+    "collection": _collection,
     "mesh": _mesh,
     "set-origin": _set_origin,
     "straighten": _straighten,

@@ -516,6 +516,157 @@ command(
     required_mode=Mode.OBJECT,
 )
 
+# ---- シーングラフ・生成（P1-2・欠落プリミティブ第1弾: 設計レビュー 2026-07-11 G1/G2/G3）----
+# U4（樽の作成）が「add cylinder → mesh 編集 → material」の構造化コマンド列だけで開始できる
+# ようにする add と、U9（Edit モード放置の .blend）から復帰する手段が無かった mode を筆頭に、
+# rename/parent/collection でシーングラフ操作の欠落を埋める（レビュー §4 P1-2）。
+command(
+    "add",
+    "オブジェクトを生成する（mesh primitive / empty / light / camera / text）",
+    # light_type は type=light 専用の presence-sensitive param（他 type に渡すと INVALID_PARAMS・
+    # _MODIFIER_TYPE_PARAMS と同じ流儀）。location のみ生成 operator の引数で渡し、name/rotation/
+    # scale は生成後に直接プロパティへ反映する（primitive 系 operator の rotation/scale 引数は
+    # 版/type で挙動が割れるため避ける）。
+    params=(
+        p(
+            "type",
+            ParamType.ENUM,
+            required=True,
+            choices=[
+                "cube",
+                "uv-sphere",
+                "ico-sphere",
+                "cylinder",
+                "cone",
+                "plane",
+                "torus",
+                "empty",
+                "light",
+                "camera",
+                "text",
+            ],
+            help="生成する種類",
+        ),
+        p("name", ParamType.STR, help="生成後の名前（衝突時は Blender が .001 等を付与）"),
+        p("location", ParamType.VEC3, help="生成位置 x,y,z"),
+        p("rotation", ParamType.VEC3, help="生成後の回転 x,y,z（度）"),
+        p("scale", ParamType.VEC3, help="生成後の拡縮 x,y,z"),
+        p(
+            "light_type",
+            ParamType.ENUM,
+            choices=["POINT", "SUN", "SPOT", "AREA"],
+            help="type=light 専用: ライト種別（既定 POINT）",
+        ),
+    ),
+    mutates=True,
+    required_mode=Mode.OBJECT,
+)
+command(
+    "mode",
+    "編集モードを切り替える（object/edit/sculpt/vertex-paint/weight-paint）",
+    # targets 省略時は現在の active を対象にする（先に select 済みの前提でも呼べる）。他モードから
+    # でも呼べる必要があるのがこのコマンドの存在意義そのもの（U9: Edit モード放置からの復帰手段が
+    # 無かった）のため required_mode=Mode.ANY。
+    params=(
+        p(
+            "to",
+            ParamType.ENUM,
+            required=True,
+            choices=["object", "edit", "sculpt", "vertex-paint", "weight-paint"],
+            help="切り替え先モード",
+        ),
+        p(
+            "targets",
+            ParamType.STR,
+            help="対象名（省略時は現在の active・完全一致・--regex で正規表現）",
+        ),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
+    ),
+    mutates=True,
+    required_mode=Mode.ANY,
+)
+command(
+    "rename",
+    "オブジェクトを改名する（--with-data で obj.data も同名に変更）",
+    params=(
+        p("targets", ParamType.STR, required=True, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
+        p(
+            "name",
+            ParamType.STR,
+            required=True,
+            help="新しい名前（衝突時は Blender が .001 等を付与）",
+        ),
+        p("with_data", ParamType.BOOL, default=False, help="obj.data も同名に変更する"),
+    ),
+    mutates=True,
+    required_mode=Mode.OBJECT,
+)
+command(
+    "parent",
+    "親子関係を設定/解除する（--to と --clear は排他でどちらか必須）",
+    # keep_transform は set/clear 両方で見た目のワールド transform を保つかどうか（既定 on）。
+    params=(
+        p(
+            "targets",
+            ParamType.STR,
+            required=True,
+            help="対象名（複数可・完全一致・--regex で正規表現）",
+        ),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
+        p("to", ParamType.STR, help="親にするオブジェクト名（--clear と排他）"),
+        p("clear", ParamType.BOOL, default=False, help="親子関係を解除する（--to と排他）"),
+        p(
+            "keep_transform",
+            ParamType.BOOL,
+            default=True,
+            help="見た目のワールド transform を保つ（既定 on）",
+        ),
+    ),
+    mutates=True,
+    required_mode=Mode.OBJECT,
+)
+command(
+    "collection",
+    "コレクションを作成/移動/link/unlink/一覧する",
+    # name は list 以外で必須・targets は move/link/unlink で必須（いずれも presence-sensitive・
+    # schema 上は任意にし ops 側で action 別に検証する。material/modifier と同じ流儀）。
+    params=(
+        p(
+            "action",
+            ParamType.ENUM,
+            required=True,
+            choices=["create", "move", "link", "unlink", "list"],
+            help="操作: create|move|link|unlink|list",
+        ),
+        p("name", ParamType.STR, help="collection 名（list 以外は必須）"),
+        p("targets", ParamType.STR, help="対象オブジェクト名（move/link/unlink で必須）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
+    ),
+    mutates=True,
+    required_mode=Mode.OBJECT,
+)
+
 # ---- メッシュ編集（bmesh 一次 / M7 T7.1–7.3）----
 command(
     "mesh",
