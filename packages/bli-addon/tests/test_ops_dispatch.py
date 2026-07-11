@@ -412,6 +412,238 @@ def test_modifier_apply_with_type_param_invalid_params():
     assert ei.value.data.category == "USER_INPUT"
 
 
+# ---- P1-2: E_MODE_MISMATCH の remediation が具体的な復帰コマンドを案内する ----
+
+
+def test_check_mode_mismatch_remediation_points_to_mode_command():
+    # mode コマンド新設（U9対策）に伴い、remediation は「OBJECT モードに切り替えてください」という
+    # 趣旨の文言だけでなく、具体的な復帰コマンド（bli mode --to object）を案内するようにした。
+    from bli_core.commands import get_command, load_definitions
+
+    load_definitions()
+    cmd = get_command("select")  # required_mode=Mode.OBJECT の代表コマンド
+    with pytest.raises(JsonRpcError) as ei:
+        ops._check_mode(cmd, "EDIT_MESH")
+    assert ei.value.message == ErrorCode.E_MODE_MISMATCH
+    assert "bli mode --to object" in ei.value.data.remediation
+
+
+# ---- P1-2 add（生成）の param 検証（bpy 不要）----
+
+
+def test_add_missing_type_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("add", {}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_add_bad_type_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("add", {"type": "sphere"}, INFO)  # 正しくは uv-sphere/ico-sphere
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_add_light_type_on_non_light_invalid_params():
+    # light_type は type=light 専用（presence-sensitive）。他 type に渡すと弾く（bpy 到達前）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("add", {"type": "cube", "light_type": "SUN"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_add_bad_light_type_enum_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("add", {"type": "light", "light_type": "BOGUS"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_add_bad_location_vec3_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("add", {"type": "cube", "location": [1, 2]}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_add_valid_params_reach_bpy():
+    # 妥当な params は USER_INPUT で弾かれず bpy の遅延 import まで到達する（退行ガード）。
+    cases = [
+        {"type": "cube"},
+        {"type": "cube", "name": "Barrel", "location": [1.0, 2.0, 3.0]},
+        {"type": "cylinder", "rotation": [0.0, 0.0, 45.0], "scale": [1.0, 1.0, 2.0]},
+        {"type": "light", "light_type": "SUN"},
+        {"type": "empty"},
+        {"type": "camera"},
+        {"type": "text"},
+    ]
+    for params in cases:
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("add", params, INFO)
+
+
+# ---- P1-2 mode（モード切替）の param 検証（bpy 不要）----
+
+
+def test_mode_missing_to_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mode", {}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_mode_bad_to_enum_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("mode", {"to": "bogus"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_mode_valid_params_reach_bpy():
+    # targets 省略（現在の active を対象）でも到達できる＝ U9（Edit モード放置）復帰の要件。
+    for params in (
+        {"to": "object"},
+        {"to": "edit", "targets": "Cube"},
+        {"to": "sculpt"},
+        {"to": "vertex-paint"},
+        {"to": "weight-paint", "targets": "^Cube", "regex": True},
+    ):
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("mode", params, INFO)
+
+
+# ---- P1-2 rename の param 検証（bpy 不要）----
+
+
+def test_rename_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("rename", {"name": "Barrel"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_rename_missing_name_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("rename", {"targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_rename_valid_params_reach_bpy():
+    for params in (
+        {"targets": "Cube", "name": "Barrel"},
+        {"targets": "Cube", "name": "Barrel", "with_data": True},
+    ):
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("rename", params, INFO)
+
+
+# ---- P1-2 parent の param 検証（bpy 不要・--to/--clear 排他）----
+
+
+def test_parent_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("parent", {"to": "Empty"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_parent_neither_to_nor_clear_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("parent", {"targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_parent_both_to_and_clear_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("parent", {"targets": "Cube", "to": "Empty", "clear": True}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_parent_valid_params_reach_bpy():
+    for params in (
+        {"targets": "Cube", "to": "Empty"},
+        {"targets": "Cube", "clear": True},
+        {"targets": "Cube", "to": "Empty", "keep_transform": False},
+        {"targets": "^Cube", "regex": True, "clear": True},
+    ):
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("parent", params, INFO)
+
+
+# ---- P1-2 collection の param 検証（bpy 不要・action 別必須）----
+
+
+def test_collection_missing_action_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("collection", {"name": "Props"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_collection_bad_action_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("collection", {"action": "bogus", "name": "Props"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_collection_create_missing_name_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("collection", {"action": "create"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_collection_list_does_not_require_name():
+    # list は name 不要（presence-sensitive で他 action のみ必須）→ bpy まで到達する。
+    with pytest.raises(ModuleNotFoundError):
+        ops.dispatch("collection", {"action": "list"}, INFO)
+
+
+def test_collection_move_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("collection", {"action": "move", "name": "Props"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_collection_link_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("collection", {"action": "link", "name": "Props"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_collection_unlink_missing_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("collection", {"action": "unlink", "name": "Props"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_collection_create_with_targets_invalid_params():
+    # targets は move/link/unlink 専用。create/list に渡すと silent ignore せず弾く。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("collection", {"action": "create", "name": "Props", "targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_collection_list_with_targets_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch("collection", {"action": "list", "targets": "Cube"}, INFO)
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_collection_valid_params_reach_bpy():
+    for params in (
+        {"action": "create", "name": "Props"},
+        {"action": "move", "name": "Props", "targets": "Cube"},
+        {"action": "link", "name": "Props", "targets": "^Cube", "regex": True},
+        {"action": "unlink", "name": "Props", "targets": "Cube"},
+        {"action": "list"},
+    ):
+        with pytest.raises(ModuleNotFoundError):
+            ops.dispatch("collection", params, INFO)
+
+
 # ---- M7 T7.1 mesh（recalc-normals / merge-by-distance）の param 検証（bpy 不要）----
 
 

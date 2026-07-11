@@ -53,6 +53,13 @@ class _FakeMatrixWorld:
     def __init__(self, translation: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> None:
         self.translation = _FakeVec3(*translation)
 
+    def copy(self) -> _FakeMatrixWorld:
+        return _FakeMatrixWorld((self.translation.x, self.translation.y, self.translation.z))
+
+    def inverted(self) -> _FakeMatrixWorld:
+        # parent_set の keep_transform 分岐が呼べればよい（値の正しさは smoke/実機で検証）。
+        return _FakeMatrixWorld((self.translation.x, self.translation.y, self.translation.z))
+
 
 class _FakeMaterial:
     def __init__(self, name: str, diffuse_color: tuple[float, ...] = (0.8, 0.8, 0.8, 1.0)) -> None:
@@ -89,6 +96,8 @@ class _FakeObj:
         self.material_slots = list(material_slots)
         self.bound_box = [(0.0, 0.0, 0.0)] * 8
         self.data = None
+        self.parent = None  # rename/parent（P1-2）テスト用（既定は無親）
+        self.users_collection: list[Any] = []  # collection（P1-2）テスト用（既定は無所属）
 
 
 class _FakeOperator:
@@ -118,9 +127,13 @@ class _FakeOperator:
         return self._result
 
 
-def _make_fake_bpy(objects: tuple[Any, ...] = ()) -> types.ModuleType:
+def _make_fake_bpy(
+    objects: tuple[Any, ...] = (), collections: tuple[Any, ...] = ()
+) -> types.ModuleType:
     bpy_mod = types.ModuleType("bpy")
-    bpy_mod.data = types.SimpleNamespace(objects=_FakeObjects(objects))  # type: ignore[attr-defined]
+    bpy_mod.data = types.SimpleNamespace(  # type: ignore[attr-defined]
+        objects=_FakeObjects(objects), collections=_FakeObjects(collections)
+    )
 
     class _FakeContext:
         def __init__(self) -> None:
@@ -163,8 +176,8 @@ def make_gateway(monkeypatch):
     「bpy 無し＝ModuleNotFoundError」前提を壊さないため）。
     """
 
-    def _factory(objects: tuple[Any, ...] = ()) -> Any:
-        fake_bpy = _make_fake_bpy(objects)
+    def _factory(objects: tuple[Any, ...] = (), collections: tuple[Any, ...] = ()) -> Any:
+        fake_bpy = _make_fake_bpy(objects, collections=collections)
         monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
         _forget_gateway_module()
         return importlib.import_module("bli_addon.gateway")
@@ -326,3 +339,221 @@ def test_save_blend_success_toggles_save_version_and_restores(make_gateway):
     gw.save_blend("/tmp/x.blend", backup=False)
     assert seen["during"] == 0  # backup=False の間は 0 に一時上書き
     assert gw.bpy.context.preferences.filepaths.save_version == 999  # 復元済み
+
+
+# ---- P1-2: rename 衝突実名 / parent 自己参照・循環・keep_transform / collection unlink 所属0・
+# create 重複拒否（純ロジック部分・bpy operator 非依存）----
+
+
+class _FakeNameRegistry:
+    """bpy.data.objects の名前空間を模す最小レジストリ（衝突時 Blender の `.001` 付与を再現）。"""
+
+    def __init__(self) -> None:
+        self._used: set[str] = set()
+
+    def claim(self, requested: str, *, previous: str | None = None) -> str:
+        if previous is not None:
+            self._used.discard(previous)
+        if requested not in self._used:
+            self._used.add(requested)
+            return requested
+        i = 1
+        while f"{requested}.{i:03d}" in self._used:
+            i += 1
+        final = f"{requested}.{i:03d}"
+        self._used.add(final)
+        return final
+
+
+class _FakeRenamableObj(_FakeObj):
+    """rename の「衝突時は実名（.001 等）を報告する」契約を検証するための obj.name=... 実装。
+
+    通常の _FakeObj.name は素の属性のため衝突を再現できない。ここでは name をプロパティにし、
+    共有 _FakeNameRegistry 経由で Blender の自動サフィックス付与を模す。
+    """
+
+    def __init__(self, name: str, registry: _FakeNameRegistry) -> None:
+        self._registry = registry
+        self._name: str | None = None
+        super().__init__(name)
+
+    @property
+    def name(self) -> str:
+        return self._name  # type: ignore[return-value]
+
+    @name.setter
+    def name(self, value: str) -> None:
+        self._name = self._registry.claim(value, previous=self._name)
+
+
+class _FakeCollectionObjects:
+    """collection.objects の最小スタブ（link/unlink 呼び出しの記録のみ）。"""
+
+    def __init__(self) -> None:
+        self.unlinked: list[Any] = []
+        self.linked: list[Any] = []
+
+    def link(self, obj: Any) -> None:
+        self.linked.append(obj)
+
+    def unlink(self, obj: Any) -> None:
+        self.unlinked.append(obj)
+
+
+class _FakeCollection:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.objects = _FakeCollectionObjects()
+        self.children: list[Any] = []
+
+
+# ---- rename: 衝突時は実名（.001 等）を報告する ----
+
+
+def test_rename_object_reports_requested_name_when_free(make_gateway):
+    gw = make_gateway()
+    obj = _FakeObj("Cube")
+    data = gw.rename_object(obj, "Barrel")
+    assert data == {"old_name": "Cube", "new_name": "Barrel", "data_renamed": False}
+    assert obj.name == "Barrel"
+
+
+def test_rename_object_collision_reports_actual_suffixed_name(make_gateway):
+    registry = _FakeNameRegistry()
+    cube = _FakeRenamableObj("Cube", registry)
+    _FakeRenamableObj("Sphere", registry)  # 既に "Sphere" を占有
+    gw = make_gateway()
+    data = gw.rename_object(cube, "Sphere")
+    # 要求名 "Sphere" は衝突するため、Blender と同様に実名は "Sphere.001" になる。
+    assert data == {"old_name": "Cube", "new_name": "Sphere.001", "data_renamed": False}
+    assert cube.name == "Sphere.001"
+
+
+def test_rename_object_with_data_renames_data_too(make_gateway):
+    gw = make_gateway()
+    obj = _FakeObj("Cube")
+    obj.data = types.SimpleNamespace(name="CubeMesh")
+    data = gw.rename_object(obj, "Barrel", with_data=True)
+    assert data["data_renamed"] is True
+    assert obj.data.name == "Barrel"
+
+
+def test_rename_object_without_data_flag_leaves_data_name(make_gateway):
+    gw = make_gateway()
+    obj = _FakeObj("Cube")
+    obj.data = types.SimpleNamespace(name="CubeMesh")
+    data = gw.rename_object(obj, "Barrel", with_data=False)
+    assert data["data_renamed"] is False
+    assert obj.data.name == "CubeMesh"
+
+
+# ---- parent: 自己参照 / 循環 は E_PRECONDITION（事前拒否・状態を汚さない）----
+
+
+def test_parent_set_self_parent_is_precondition(make_gateway):
+    gw = make_gateway()
+    cube = _FakeObj("Cube")
+    with pytest.raises(JsonRpcError) as ei:
+        gw.parent_set([cube], cube)
+    assert ei.value.message == ErrorCode.E_PRECONDITION
+    assert ei.value.data.category == "PRECONDITION"
+    assert cube.parent is None  # 拒否前に状態を変えない
+
+
+def test_parent_set_circular_is_precondition(make_gateway):
+    gw = make_gateway()
+    a = _FakeObj("A")
+    b = _FakeObj("B")
+    b.parent = a  # B は既に A の子
+    with pytest.raises(JsonRpcError) as ei:
+        gw.parent_set([a], b)  # A を B の子にしようとする → 循環
+    assert ei.value.message == ErrorCode.E_PRECONDITION
+    assert a.parent is None  # 事前拒否＝実際には親子付けしない
+
+
+def test_parent_set_assigns_parent_and_returns_results(make_gateway):
+    gw = make_gateway()
+    child = _FakeObj("Child")
+    parent_obj = _FakeObj("Parent")
+    results = gw.parent_set([child], parent_obj, keep_transform=False)
+    assert child.parent is parent_obj
+    assert results == [{"name": "Child", "parent": "Parent"}]
+
+
+def test_parent_clear_keep_transform_restores_world(make_gateway):
+    gw = make_gateway()
+    child = _FakeObj("Child")
+    parent_obj = _FakeObj("Parent")
+    child.parent = parent_obj
+    child.matrix_world = _FakeMatrixWorld((1.0, 2.0, 3.0))
+    results = gw.parent_clear([child], keep_transform=True)
+    assert child.parent is None
+    assert results == [{"name": "Child", "parent": None}]
+    restored = child.matrix_world.translation
+    assert (restored.x, restored.y, restored.z) == (1.0, 2.0, 3.0)
+
+
+def test_parent_clear_without_keep_transform_does_not_restore(make_gateway):
+    gw = make_gateway()
+    child = _FakeObj("Child")
+    parent_obj = _FakeObj("Parent")
+    child.parent = parent_obj
+    original = _FakeMatrixWorld((5.0, 6.0, 7.0))
+    child.matrix_world = original  # keep_transform=False なら再代入されず同一オブジェクトのまま
+    gw.parent_clear([child], keep_transform=False)
+    assert child.parent is None
+    assert child.matrix_world is original
+
+
+# ---- collection: unlink で所属0になる対象は全体を E_PRECONDITION（部分失敗させない）----
+
+
+def test_unlink_from_collection_would_empty_membership_is_precondition(make_gateway):
+    gw = make_gateway()
+    col = _FakeCollection("Props")
+    obj = _FakeObj("Cube")
+    obj.users_collection = [col]  # 唯一の所属 collection
+    with pytest.raises(JsonRpcError) as ei:
+        gw.unlink_from_collection([obj], col)
+    assert ei.value.message == ErrorCode.E_PRECONDITION
+    assert col.objects.unlinked == []  # 全対象を検証してから外す＝部分的に状態を汚さない
+
+
+def test_unlink_from_collection_succeeds_with_other_membership(make_gateway):
+    gw = make_gateway()
+    col = _FakeCollection("Props")
+    other = _FakeCollection("Other")
+    obj = _FakeObj("Cube")
+    obj.users_collection = [col, other]
+    results = gw.unlink_from_collection([obj], col)
+    assert results == [{"name": "Cube", "unlinked": True}]
+    assert col.objects.unlinked == [obj]
+
+
+def test_unlink_from_collection_non_member_is_skipped_not_error(make_gateway):
+    gw = make_gateway()
+    col = _FakeCollection("Props")
+    other = _FakeCollection("Other")
+    obj = _FakeObj("Cube")
+    obj.users_collection = [other]  # col には所属していない
+    results = gw.unlink_from_collection([obj], col)
+    assert results == [{"name": "Cube", "unlinked": False}]
+    assert col.objects.unlinked == []
+
+
+# ---- collection: create の重複拒否 ----
+
+
+def test_create_collection_duplicate_is_precondition(make_gateway):
+    gw = make_gateway(collections=(_FakeCollection("Props"),))
+    with pytest.raises(JsonRpcError) as ei:
+        gw.create_collection("Props")
+    assert ei.value.message == ErrorCode.E_PRECONDITION
+
+
+def test_require_collection_missing_is_target_not_found(make_gateway):
+    gw = make_gateway()
+    with pytest.raises(JsonRpcError) as ei:
+        gw.require_collection("NoSuchCollection")
+    assert ei.value.message == ErrorCode.E_TARGET_NOT_FOUND
+    assert ei.value.data.category == "USER_INPUT"

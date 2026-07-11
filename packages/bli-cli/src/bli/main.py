@@ -1642,6 +1642,185 @@ def modifier(
 
 
 @app.command()
+def add(
+    type_: str = typer.Option(
+        ...,
+        "--type",
+        help="生成する種類: cube|uv-sphere|ico-sphere|cylinder|cone|plane|torus|empty|light|camera|text",
+    ),
+    name: str | None = typer.Option(None, "--name", help="生成後の名前"),
+    location: str | None = typer.Option(None, "--location", help="生成位置 x,y,z"),
+    rotation: str | None = typer.Option(None, "--rotation", help="生成後の回転 x,y,z（度）"),
+    scale: str | None = typer.Option(None, "--scale", help="生成後の拡縮 x,y,z"),
+    light_type: str | None = typer.Option(
+        None, "--light-type", help="type=light 専用: POINT|SUN|SPOT|AREA（既定 POINT）"
+    ),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """オブジェクトを生成する（mesh primitive / empty / light / camera / text）。"""
+    params: dict[str, Any] = {"type": type_}
+    if name is not None:
+        params["name"] = name
+    if light_type is not None:
+        params["light_type"] = light_type
+    try:
+        if location is not None:
+            params["location"] = _parse_vec("location", location, 3)
+        if rotation is not None:
+            params["rotation"] = _parse_vec("rotation", rotation, 3)
+        if scale is not None:
+            params["scale"] = _parse_vec("scale", scale, 3)
+    except ValueError as e:
+        _emit_error(json_out, ErrorCode.INVALID_PARAMS, str(e))
+        raise typer.Exit(int(ExitCode.INPUT)) from None
+
+    def human(data: dict[str, Any]) -> str:
+        return f"added {data.get('type')}: {data.get('name')} loc={data.get('location')}"
+
+    _rpc("add", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command()
+def mode(
+    to: str = typer.Option(
+        ..., "--to", help="切替先: object|edit|sculpt|vertex-paint|weight-paint"
+    ),
+    targets: str | None = typer.Option(
+        None,
+        "--targets",
+        "--target",
+        help="対象名（省略時は現在の active・完全一致・--regex で正規表現）",
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
+    ),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """編集モードを切り替える（object/edit/sculpt/vertex-paint/weight-paint）。"""
+    params: dict[str, Any] = {"to": to}
+    if targets is not None:
+        params["targets"] = targets
+    if regex:
+        params["regex"] = True
+
+    def human(data: dict[str, Any]) -> str:
+        return (
+            f"mode {data.get('from_mode')} -> {data.get('to_mode')} (active={data.get('active')})"
+        )
+
+    _rpc("mode", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command()
+def rename(
+    targets: str = typer.Option(
+        ..., "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
+    ),
+    name: str = typer.Option(..., "--name", help="新しい名前"),
+    with_data: bool = typer.Option(False, "--with-data", help="obj.data も同名に変更する"),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """オブジェクトを改名する（--with-data で obj.data も同名に変更）。"""
+    params: dict[str, Any] = {"targets": targets, "name": name}
+    if regex:
+        params["regex"] = True
+    if with_data:
+        params["with_data"] = True
+
+    def human(data: dict[str, Any]) -> str:
+        return (
+            f"renamed '{data.get('old_name')}' -> '{data.get('new_name')}' "
+            f"(data_renamed={data.get('data_renamed')})"
+        )
+
+    _rpc("rename", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command()
+def parent(
+    targets: str = typer.Option(
+        ...,
+        "--targets",
+        "--target",
+        help="対象オブジェクト（複数可・完全一致・--regex で正規表現）",
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
+    ),
+    to: str | None = typer.Option(None, "--to", help="親にするオブジェクト名（--clear と排他）"),
+    clear: bool = typer.Option(False, "--clear", help="親子関係を解除する（--to と排他）"),
+    keep_transform: bool = typer.Option(
+        True,
+        "--keep-transform/--no-keep-transform",
+        help="見た目のワールド transform を保つ（既定 on）",
+    ),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """親子関係を設定/解除する（--to と --clear は排他）。"""
+    params: dict[str, Any] = {"targets": targets, "keep_transform": keep_transform}
+    if regex:
+        params["regex"] = True
+    if to is not None:
+        params["to"] = to
+    if clear:
+        params["clear"] = True
+
+    def human(data: dict[str, Any]) -> str:
+        results = data.get("results") or []
+        summary = ", ".join(f"{r['name']}->{r['parent']}" for r in results)
+        return f"parent {data.get('action')}: {summary}"
+
+    _rpc("parent", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command()
+def collection(
+    action: str = typer.Option(..., "--action", help="create|move|link|unlink|list"),
+    name: str | None = typer.Option(None, "--name", help="collection 名（list 以外は必須）"),
+    targets: str | None = typer.Option(
+        None, "--targets", "--target", help="対象オブジェクト（move/link/unlink で必須）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
+    ),
+    request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
+    json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """コレクションを作成/移動/link/unlink/一覧する。"""
+    params: dict[str, Any] = {"action": action}
+    if name is not None:
+        params["name"] = name
+    if targets is not None:
+        params["targets"] = targets
+    if regex:
+        params["regex"] = True
+
+    def human(data: dict[str, Any]) -> str:
+        if data.get("action") == "list":
+            cols = ", ".join(f"{c['name']}({c['objects']})" for c in data.get("collections", []))
+            return f"collections [{cols}]"
+        if data.get("action") == "create":
+            return f"created collection '{data.get('name')}'"
+        results = data.get("results") or []
+        names = ", ".join(r["name"] for r in results)
+        return f"{data.get('action')} '{data.get('collection')}': {names}"
+
+    _rpc("collection", params, json_out=json_out, port=port, human=human, request_id=request_id)
+
+
+@app.command()
 def mesh(
     op: str = typer.Option(
         ..., "--op", help="recalc-normals|merge-by-distance|extrude|bevel|inset|boolean|decimate"

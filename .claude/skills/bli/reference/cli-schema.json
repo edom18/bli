@@ -6,6 +6,87 @@
       "implemented": true,
       "is_heavy": false,
       "mutates": true,
+      "name": "add",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "オブジェクトを生成する（mesh primitive / empty / light / camera / text）",
+        "properties": {
+          "light_type": {
+            "description": "type=light 専用: ライト種別（既定 POINT）",
+            "enum": [
+              "POINT",
+              "SUN",
+              "SPOT",
+              "AREA"
+            ],
+            "type": "string"
+          },
+          "location": {
+            "description": "生成位置 x,y,z",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "name": {
+            "description": "生成後の名前（衝突時は Blender が .001 等を付与）",
+            "type": "string"
+          },
+          "rotation": {
+            "description": "生成後の回転 x,y,z（度）",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "scale": {
+            "description": "生成後の拡縮 x,y,z",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "type": {
+            "description": "生成する種類",
+            "enum": [
+              "cube",
+              "uv-sphere",
+              "ico-sphere",
+              "cylinder",
+              "cone",
+              "plane",
+              "torus",
+              "empty",
+              "light",
+              "camera",
+              "text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "add",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "オブジェクトを生成する（mesh primitive / empty / light / camera / text）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
       "name": "apply-transform",
       "required_mode": "OBJECT",
       "schema": {
@@ -90,6 +171,53 @@
       },
       "stability": "stable",
       "summary": "現在の状態を画像で取得する（viewport/screen/render・PNG をファイル出力しパスを返す）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "collection",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "コレクションを作成/移動/link/unlink/一覧する",
+        "properties": {
+          "action": {
+            "description": "操作: create|move|link|unlink|list",
+            "enum": [
+              "create",
+              "move",
+              "link",
+              "unlink",
+              "list"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "description": "collection 名（list 以外は必須）",
+            "type": "string"
+          },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
+          "targets": {
+            "description": "対象オブジェクト名（move/link/unlink で必須）",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "collection",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "コレクションを作成/移動/link/unlink/一覧する"
     },
     {
       "capability_deps": [],
@@ -593,6 +721,49 @@
       "implemented": true,
       "is_heavy": false,
       "mutates": true,
+      "name": "mode",
+      "required_mode": "ANY",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "編集モードを切り替える（object/edit/sculpt/vertex-paint/weight-paint）",
+        "properties": {
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
+          "targets": {
+            "description": "対象名（省略時は現在の active・完全一致・--regex で正規表現）",
+            "type": "string"
+          },
+          "to": {
+            "description": "切り替え先モード",
+            "enum": [
+              "object",
+              "edit",
+              "sculpt",
+              "vertex-paint",
+              "weight-paint"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "to"
+        ],
+        "title": "mode",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "編集モードを切り替える（object/edit/sculpt/vertex-paint/weight-paint）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
       "name": "modifier",
       "required_mode": "OBJECT",
       "schema": {
@@ -747,6 +918,52 @@
       },
       "stability": "stable",
       "summary": ".blend ファイルを開く（シーン全体を置換・未保存変更があれば --force 必須）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "parent",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "親子関係を設定/解除する（--to と --clear は排他でどちらか必須）",
+        "properties": {
+          "clear": {
+            "default": false,
+            "description": "親子関係を解除する（--to と排他）",
+            "type": "boolean"
+          },
+          "keep_transform": {
+            "default": true,
+            "description": "見た目のワールド transform を保つ（既定 on）",
+            "type": "boolean"
+          },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
+          "targets": {
+            "description": "対象名（複数可・完全一致・--regex で正規表現）",
+            "type": "string"
+          },
+          "to": {
+            "description": "親にするオブジェクト名（--clear と排他）",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targets"
+        ],
+        "title": "parent",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "親子関係を設定/解除する（--to と --clear は排他でどちらか必須）"
     },
     {
       "capability_deps": [],
@@ -1036,6 +1253,48 @@
       },
       "stability": "stable",
       "summary": "元に戻した操作をやり直す（グローバル undo スタックを steps 段進める・GUI 必須）"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": true,
+      "name": "rename",
+      "required_mode": "OBJECT",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "オブジェクトを改名する（--with-data で obj.data も同名に変更）",
+        "properties": {
+          "name": {
+            "description": "新しい名前（衝突時は Blender が .001 等を付与）",
+            "type": "string"
+          },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
+          "targets": {
+            "description": "対象名（完全一致・--regex で正規表現）",
+            "type": "string"
+          },
+          "with_data": {
+            "default": false,
+            "description": "obj.data も同名に変更する",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "targets",
+          "name"
+        ],
+        "title": "rename",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "オブジェクトを改名する（--with-data で obj.data も同名に変更）"
     },
     {
       "capability_deps": [],
@@ -1449,5 +1708,5 @@
     }
   ],
   "note": "SSOT（bli-core definitions）から生成。手で編集しない。再生成: uv run python scripts/generate_cli_schema.py",
-  "schema_hash": "fcfaafb5c3b35642d24a4fb8b75766604765e6dc88530832313abeb9b011c1c4"
+  "schema_hash": "f82c1bfc10301ffbe677e80a2c9d1f7009790d26d11603265f735ca01d1cd4f6"
 }

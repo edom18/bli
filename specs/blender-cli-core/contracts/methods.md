@@ -55,6 +55,25 @@
 
 > `delete` は削除前の object summary を `backup` として結果に常時含める（即実行・確認フラグなし）。`.blend` への退避バックアップ（`backup.on_overwrite`）は save 依存のため **M9 へ繰越**。`duplicate --count` は 1〜1000（暴走防止の上限・`bli_core.runtime.MAX_DUPLICATE_COUNT`）。
 
+## シーングラフ生成/操作（P1-2・欠落プリミティブ第1弾: 設計レビュー 2026-07-11 §4 P1-2・G1/G2/G3）
+| method | params | result | M | Mode | St |
+|--------|--------|--------|:-:|----|:--:|
+| `add` | `--type <T>` `--name?` `--location? --rotation? --scale?` `--light-type?`(type=light専用) | 生成後 object summary | ✓ | OBJECT | s |
+| `mode` | `--to object\|edit\|sculpt\|vertex-paint\|weight-paint` `--targets?` `--regex?` | `{from_mode, to_mode, active}` | ✓ | ANY | s |
+| `rename` | `--targets` `--regex?` `--name` `--with-data?` | `{old_name, new_name, data_renamed}` | ✓ | OBJECT | s |
+| `parent` | `--targets`(複数可) `--regex?` `--to?\|--clear?` `--keep-transform?`(既定on) | `{action, results:[{name,parent}]}` | ✓ | OBJECT | s |
+| `collection` | `--action create\|move\|link\|unlink\|list` `--name?`(list以外必須) `--targets?`(move/link/unlinkで必須) `--regex?` | action別（list=`{collections:[...]}` / 他=`{action,collection?,results?}`） | ✓ | OBJECT | s |
+
+> **`add`（U4「樽の作成」対策・G1）**: `--type` は `cube`/`uv-sphere`/`ico-sphere`/`cylinder`/`cone`/`plane`/`torus`（mesh primitive）/`empty`/`light`（`--light-type POINT\|SUN\|SPOT\|AREA`・既定 POINT・presence-sensitive で他 type に渡すと `INVALID_PARAMS`）/`camera`/`text`。生成 operator（`mesh.primitive_*_add`/`object.*_add`）の実在は `capability.operator_real`（`get_rna_type()` 判定）で確認し、無ければ `CAPABILITY_UNAVAILABLE`。生成オブジェクトは **実行前後の `bpy.data.objects` 名差分**で特定する（`import` と同じ流儀・active_object 依存より決定的）。差分が1個でなければ `E_OPERATOR`（INTERNAL にしない）。`--location` のみ operator 引数で渡し、`--name`（衝突時は Blender が `.001` 等を付与し実名を返す）/`--rotation`(度)/`--scale` は生成後に直接プロパティへ反映する。
+>
+> **`mode`（U9「Edit モード放置」対策・G2）**: `bpy.ops.object.mode_set` を薄く包む。`--targets` 省略時は現在の active を対象にする。他モードからでも呼べる必要があるのがこのコマンドの存在意義そのもののため **required_mode=ANY**。active 不在・切替不能型（EMPTY へ edit 等）は `run_operator` の `poll()` が False を返し `E_PRECONDITION` に写像される（INTERNAL 化しない）。**`E_MODE_MISMATCH` の remediation はこのコマンドの実行方法（例: `bli mode --to object`）を案内する**（従来は「OBJECT モードに切り替えてください」という趣旨の文言のみで具体的な復帰手段が無かった）。
+>
+> **`rename`**: `--with-data` で `obj.data` も同名に変更する。要求名が既存と衝突した場合 Blender が `.001` 等へ実名を確定するため、結果は `old_name`/`new_name`（実名）の両方を返す。
+>
+> **`parent`（G3）**: `--to`（親名）と `--clear`（解除）は排他でどちらか必須（`INVALID_PARAMS`）。対象自身を親にしようとした場合、および親にしようとした対象が既に子孫（循環）になる場合は `E_PRECONDITION`（親の祖先チェーンを辿って検出）。`--keep-transform`（既定 on）は設定/解除いずれも見た目のワールド transform を保つ（設定時は `matrix_parent_inverse` を計算・解除時は world 行列を退避→再設定）。`targets` は複数可（`require_targets`）。
+>
+> **`collection`**: `create` は同名重複を `E_PRECONDITION` で拒否。`move` は対象を所属する全 collection から外して指定 collection のみへ link する（シーンから消えない）。`link` は既に link 済みなら静かに skip し結果で報告する（`{name, linked:false}`）。`unlink` は外すと対象の所属 collection が 0 になる場合（view layer から消える事故）を **全対象を検証してから** `E_PRECONDITION` で拒否し、remediation で `move` を促す（部分的に外して状態を汚さない）。`list` は scene の master collection 配下（子 collection）を再帰的に `{name, objects:<count>, children:[...]}` で返す。collection 名の解決は `bpy.data.collections.get`（完全一致のみ）。
+
 ## メッシュ編集（bmesh 一次 / 単一 `mesh` コマンド + `--op`）
 | method | params | result | M | H | Mode | St |
 |--------|--------|--------|:-:|:-:|----|:--:|

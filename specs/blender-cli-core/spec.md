@@ -36,6 +36,7 @@
 - 接続・診断: `init` / `doctor` / `ping`（hello handshake）/ `policy`（exec 権限の表示/編集・CLIローカル・P1-1）。
 - 情報取得: `scene-info` / `object-info` / `list-objects` / `capture`（画像・実地FB #1）。
 - 汎用編集: `select` / `transform` / `apply-transform` / `duplicate` / `modifier` / `material` / `delete`。
+- シーングラフ生成/操作（P1-2・欠落プリミティブ第1弾）: `add` / `mode` / `rename` / `parent` / `collection`。
 - 状態操作: `undo` / `redo`（実地FB #3・GUI 必須）。
 - ファイルI/O: `save` / `open` / `import` / `export`。
 - シナリオ1（原点変更）: `set-origin`。
@@ -141,6 +142,23 @@ bli <command> [--targets <name>] [--regex] [options] [--json] [--id <uuid>] [--d
 #### 主要モディファイア（`modifier --type`）
 - v1必須: `MIRROR` / `SUBSURF` / `SOLIDIFY` / `DECIMATE` / `BOOLEAN`。
 - `add`（パラメータ付き）/ `remove` / `list` / `apply` をサポート。
+
+### シーングラフ生成/操作（P1-2・欠落プリミティブ第1弾: 設計レビュー 2026-07-11 §4 P1-2）
+| コマンド | 概要 |
+|----------|------|
+| `bli add --type <T> [--name] [--location x,y,z] [--rotation x,y,z(deg)] [--scale x,y,z] [--light-type <T>]` | オブジェクト生成（mesh primitive / empty / light / camera / text。U4「樽の作成」対策） |
+| `bli mode --to object\|edit\|sculpt\|vertex-paint\|weight-paint [--targets <name>] [--regex]` | 編集モード切替（targets 省略時は現在の active。U9「Edit モード放置」対策） |
+| `bli rename --targets <name> [--regex] --name <new> [--with-data]` | 改名（--with-data で obj.data も同名に） |
+| `bli parent --targets <name> [--regex] [--to <name>\|--clear] [--keep-transform/--no-keep-transform]` | 親子関係の設定/解除（--to と --clear は排他） |
+| `bli collection --action create\|move\|link\|unlink\|list [--name <col>] [--targets <name>] [--regex]` | コレクション操作（name は list 以外必須・targets は move/link/unlink で必須） |
+
+`add --type`（v1）: `cube` / `uv-sphere` / `ico-sphere` / `cylinder` / `cone` / `plane` / `torus` / `empty` / `light`（`--light-type POINT\|SUN\|SPOT\|AREA`・既定 POINT）/ `camera` / `text`。生成オブジェクトは実行前後の `bpy.data.objects` 名差分で特定する（import と同じ流儀）。`--location` のみ生成 operator へ渡し、`--name`/`--rotation`/`--scale` は生成後に直接反映する。
+
+`mode --to`: Blender の `object.mode_set` を薄く包む。active 不在・切替不能型（EMPTY へ edit 等）は `E_PRECONDITION`（poll() 失敗を INTERNAL にしない）。`E_MODE_MISMATCH` の remediation は本コマンドの実行方法（`bli mode --to object` 等）を案内する。
+
+`parent`: `--to`（親名）と `--clear`（解除）は排他でどちらか必須。自己参照・循環（親にしようとした対象が既に子孫）は `E_PRECONDITION`。`--keep-transform`（既定 on）で見た目のワールド transform を保つ。
+
+`collection`: `create` は同名重複を `E_PRECONDITION` で拒否。`unlink` は外すと対象の所属 collection が 0 になる場合（view layer から消える）を `E_PRECONDITION` で拒否し `move` を促す。`list` は scene の master collection 配下を再帰的に返す。
 
 ### メッシュ編集（bmesh 一次 / 単一 `mesh` コマンド + `--op`）
 - **bmesh-on-data** を基本とする（`from_mesh`→`bmesh.ops`→`to_mesh`・**OBJECT モードのまま** mesh データを編集＝`bpy.ops` の context 依存を回避。5.0.1/4.4.3 で確認済み）。当面 Mode=OBJECT（EDIT モード実機は L4）。
