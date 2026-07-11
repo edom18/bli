@@ -1,0 +1,3455 @@
+{
+ "commands": {
+  "add": {
+   "help": "オブジェクトを生成する（mesh primitive / empty / light / camera / text）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "生成する種類: cube|uv-sphere|ico-sphere|cylinder|cone|plane|torus|empty|light|camera|text",
+     "is_flag": false,
+     "name": "type_",
+     "opts": [
+      "--type"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "生成後の名前",
+     "is_flag": false,
+     "name": "name",
+     "opts": [
+      "--name"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "生成位置 x,y,z",
+     "is_flag": false,
+     "name": "location",
+     "opts": [
+      "--location"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "生成後の回転 x,y,z（度）",
+     "is_flag": false,
+     "name": "rotation",
+     "opts": [
+      "--rotation"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "生成後の拡縮 x,y,z",
+     "is_flag": false,
+     "name": "scale",
+     "opts": [
+      "--scale"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "type=light 専用: POINT|SUN|SPOT|AREA（既定 POINT）",
+     "is_flag": false,
+     "name": "light_type",
+     "opts": [
+      "--light-type"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "apply-transform": {
+   "help": "オブジェクトの transform をメッシュデータに適用する（全省略時は全適用）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "位置を適用",
+     "is_flag": true,
+     "name": "location",
+     "opts": [
+      "--location"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "回転を適用",
+     "is_flag": true,
+     "name": "rotation",
+     "opts": [
+      "--rotation"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "拡縮を適用",
+     "is_flag": true,
+     "name": "scale",
+     "opts": [
+      "--scale"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "共有mesh時に単一ユーザ化を許可",
+     "is_flag": true,
+     "name": "make_single_user",
+     "opts": [
+      "--make-single-user"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "capture": {
+   "help": "現在の状態を画像で取得する（viewport/screen/render・PNG をファイル出力しパスを返す）。",
+   "params": [
+    {
+     "default": "'viewport'",
+     "help": "取得元: viewport|screen|render（既定 viewport）",
+     "is_flag": false,
+     "name": "source",
+     "opts": [
+      "--source"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "出力幅px（viewport/render・省略時既定）",
+     "is_flag": false,
+     "name": "width",
+     "opts": [
+      "--width"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    },
+    {
+     "default": "None",
+     "help": "出力高px（viewport/render・省略時既定）",
+     "is_flag": false,
+     "name": "height",
+     "opts": [
+      "--height"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    },
+    {
+     "default": "None",
+     "help": "render で使うカメラ名（省略時 active・render 専用）",
+     "is_flag": false,
+     "name": "camera",
+     "opts": [
+      "--camera"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "collection": {
+   "help": "コレクションを作成/移動/link/unlink/一覧する。",
+   "params": [
+    {
+     "default": "None",
+     "help": "create|move|link|unlink|list",
+     "is_flag": false,
+     "name": "action",
+     "opts": [
+      "--action"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "collection 名（list 以外は必須）",
+     "is_flag": false,
+     "name": "name",
+     "opts": [
+      "--name"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "対象オブジェクト（move/link/unlink で必須）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "delete": {
+   "help": "オブジェクトを削除する（削除前サマリを backup として結果に残す）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "doctor": {
+   "help": "環境診断（connection.json/token の有無・アドオン到達性・導入ガイド）。",
+   "params": [
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "duplicate": {
+   "help": "オブジェクトを複製する（count 回・world offset 累積）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "データを共有する（リンク複製）",
+     "is_flag": true,
+     "name": "linked",
+     "opts": [
+      "--linked"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "1",
+     "help": "複製数（1〜1000）",
+     "is_flag": false,
+     "name": "count",
+     "opts": [
+      "--count"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    },
+    {
+     "default": "None",
+     "help": "複製ごとの world オフセット x,y,z",
+     "is_flag": false,
+     "name": "offset",
+     "opts": [
+      "--offset"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "exec-python": {
+   "help": "構造化サブコマンドで表現できない操作の逃げ道（既定 off・restricted で自走可・サンドボックスなし）。\n\n既定では無効。サーバ側のユーザローカル policy.toml で [exec] mode を restricted（推奨・AST\nブロックリスト検査つきで自走可）/ audited / trusted にしたときだけ実行できる（`bli policy\n--action set --mode restricted` で有効化）。CLI からは mode を送れない＝CLI フラグ単体では\n昇格できない（spec §276・§459）。実行コードは同一 OS 権限で走る＝結果の security_guarantee は\n常に false（過信しないこと）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "実行する Python コード（--file と排他）",
+     "is_flag": false,
+     "name": "code",
+     "opts": [
+      "--code"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "実行するスクリプトファイル（--code と排他）",
+     "is_flag": false,
+     "name": "file",
+     "opts": [
+      "--file"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "export": {
+   "help": "シーン/選択を多形式で書き出す（obj/fbx/gltf/stl・3mf は未導入で CAPABILITY）。\n\naxis-forward/axis-up/scale/apply-unit-scale/embed-textures は **fbx 専用**（他 format に\n指定すると INVALID_PARAMS）。Unity 向けレシピは SKILL.md の「Unity 取り込みレシピ」参照。",
+   "params": [
+    {
+     "default": "None",
+     "help": "出力形式: obj|fbx|gltf|stl|3mf",
+     "is_flag": false,
+     "name": "fmt",
+     "opts": [
+      "--format"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "出力ファイルパス（gltf は .glb 必須＝GLB 単一）",
+     "is_flag": false,
+     "name": "path",
+     "opts": [
+      "--path"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "対象（完全一致・--regex で正規表現・指定時はこれを書き出す）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "現在の選択集合のみ書き出す（targets 省略時・省略でシーン全体）",
+     "is_flag": true,
+     "name": "use_selection",
+     "opts": [
+      "--use-selection"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "fbx専用: forward軸 X|Y|Z|-X|-Y|-Z（既定 -Z・Unity 取込はこの既定のまま合う）。負の軸は --axis-forward=-Z のように '=' で連結すること（'--axis-forward -Z' は -Z が別オプションと誤解釈され得る）",
+     "is_flag": false,
+     "name": "axis_forward",
+     "opts": [
+      "--axis-forward"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "fbx専用: up軸 X|Y|Z|-X|-Y|-Z（既定 Y・Unity 取込はこの既定のまま合う）。負の軸は --axis-up=-Z のように '=' で連結すること",
+     "is_flag": false,
+     "name": "axis_up",
+     "opts": [
+      "--axis-up"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "fbx専用: global_scale（既定は Blender 既定 1.0・正の値のみ）",
+     "is_flag": false,
+     "name": "scale",
+     "opts": [
+      "--scale"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "None",
+     "help": "fbx専用: シーン単位を1.0とみなして書き出す（既定は Blender 既定 on・省略時は指定しない）",
+     "is_flag": true,
+     "name": "apply_unit_scale",
+     "opts": [
+      "--apply-unit-scale"
+     ],
+     "required": false,
+     "secondary_opts": [
+      "--no-apply-unit-scale"
+     ],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "fbx専用: テクスチャを FBX に同梱する（path_mode=COPY をサーバ側で自動設定）",
+     "is_flag": true,
+     "name": "embed_textures",
+     "opts": [
+      "--embed-textures"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "job_id を即返し（既定は完了まで自動待機）",
+     "is_flag": true,
+     "name": "async_out",
+     "opts": [
+      "--async"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "help": {
+   "help": "コマンドの JSON Schema を返す（AIエージェントの発見用・SSOTから生成）。\n\n一覧は既定で実行可能なコマンドのみ。--command 指定時は未実装でも introspection 可。",
+   "params": [
+    {
+     "default": "None",
+     "help": "対象コマンド名",
+     "is_flag": false,
+     "name": "command",
+     "opts": [
+      "--command"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "未実装コマンドも含める",
+     "is_flag": true,
+     "name": "show_all",
+     "opts": [
+      "--all"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    }
+   ]
+  },
+  "import": {
+   "help": "多形式ファイルをシーンに取り込む（obj/fbx/gltf/stl・3mf は未導入で CAPABILITY）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "入力形式: obj|fbx|gltf|stl|3mf",
+     "is_flag": false,
+     "name": "fmt",
+     "opts": [
+      "--format"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "入力ファイルパス",
+     "is_flag": false,
+     "name": "path",
+     "opts": [
+      "--path"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "job_id を即返し（既定は完了まで自動待機）",
+     "is_flag": true,
+     "name": "async_out",
+     "opts": [
+      "--async"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "init": {
+   "help": "プロジェクトに .bli/ 設定雛形を作成する。",
+   "params": [
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "既存ファイルを上書き",
+     "is_flag": true,
+     "name": "force",
+     "opts": [
+      "--force"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    }
+   ]
+  },
+  "job-status": {
+   "help": "非同期 job（heavy コマンドの --async）の状態を取得する（request-status を1回問い合わせ）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "ジョブID(=request_id)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "job-wait": {
+   "help": "非同期 job の完了を待って最終結果を取得する（request-status をポーリング）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "ジョブID(=request_id)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "待機上限秒（既定 JOB_WAIT_TIMEOUT）",
+     "is_flag": false,
+     "name": "timeout",
+     "opts": [
+      "--timeout"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "False",
+     "help": "退避(output_ref)を読み込み sha256 検証して展開する",
+     "is_flag": true,
+     "name": "fetch",
+     "opts": [
+      "--fetch"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "list-commands": {
+   "help": "利用可能なコマンド一覧を返す（SSOTから生成・ローカル完結）。\n\n既定では実行可能（implemented）なコマンドのみ。未実装の定義は --all で表示する。",
+   "params": [
+    {
+     "default": "False",
+     "help": "未実装コマンドも含める",
+     "is_flag": true,
+     "name": "show_all",
+     "opts": [
+      "--all"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    }
+   ]
+  },
+  "list-objects": {
+   "help": "シーン内オブジェクトを type/名前正規表現 でフィルタして一覧する。",
+   "params": [
+    {
+     "default": "None",
+     "help": "型フィルタ（MESH/CURVE/EMPTY/LIGHT/CAMERA 等・大小無視）",
+     "is_flag": false,
+     "name": "type_filter",
+     "opts": [
+      "--type"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "名前の正規表現フィルタ（部分一致・旧名 --regex も受理）",
+     "is_flag": false,
+     "name": "name_regex",
+     "opts": [
+      "--name-regex",
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "material": {
+   "help": "マテリアルを割り当て/作成/一覧する（create は対象へ作成と同時に割り当て）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "操作: assign|create|list",
+     "is_flag": false,
+     "name": "action",
+     "opts": [
+      "--action"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "マテリアル名（assign=既存 / create=新規）",
+     "is_flag": false,
+     "name": "name",
+     "opts": [
+      "--name"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "RGBA r,g,b,a（create の Base Color）",
+     "is_flag": false,
+     "name": "color",
+     "opts": [
+      "--color"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "共有mesh時に単一ユーザ化を許可",
+     "is_flag": true,
+     "name": "make_single_user",
+     "opts": [
+      "--make-single-user"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "mesh": {
+   "help": "メッシュを編集する（法線再計算 / 距離マージ / 押し出し / ベベル / インセット / ブール / デシメート）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "recalc-normals|merge-by-distance|extrude|bevel|inset|boolean|decimate",
+     "is_flag": false,
+     "name": "op",
+     "opts": [
+      "--op"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "recalc-normals: 法線を内向きに",
+     "is_flag": true,
+     "name": "inside",
+     "opts": [
+      "--inside"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "merge-by-distance: マージ距離（既定 0.0001）",
+     "is_flag": false,
+     "name": "distance",
+     "opts": [
+      "--distance"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "None",
+     "help": "extrude: 押し出しベクトル x,y,z（world 空間・move/duplicate と同じ）",
+     "is_flag": false,
+     "name": "offset",
+     "opts": [
+      "--offset"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "bevel: ベベル幅（ローカル単位・0以上）",
+     "is_flag": false,
+     "name": "width",
+     "opts": [
+      "--width"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "None",
+     "help": "bevel: 分割数（既定1・1〜100）",
+     "is_flag": false,
+     "name": "segments",
+     "opts": [
+      "--segments"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    },
+    {
+     "default": "None",
+     "help": "inset: インセット厚み（0以上）",
+     "is_flag": false,
+     "name": "thickness",
+     "opts": [
+      "--thickness"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "None",
+     "help": "boolean: 演算 UNION|DIFFERENCE|INTERSECT",
+     "is_flag": false,
+     "name": "operation",
+     "opts": [
+      "--operation"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "boolean: 相手 mesh オブジェクト名",
+     "is_flag": false,
+     "name": "with_object",
+     "opts": [
+      "--with"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "decimate: 削減比率 0..1",
+     "is_flag": false,
+     "name": "ratio",
+     "opts": [
+      "--ratio"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "False",
+     "help": "共有mesh時に単一ユーザ化を許可",
+     "is_flag": true,
+     "name": "make_single_user",
+     "opts": [
+      "--make-single-user"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "job_id を即返し（boolean/decimate のみ・既定は自動待機）",
+     "is_flag": true,
+     "name": "async_out",
+     "opts": [
+      "--async"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "mode": {
+   "help": "編集モードを切り替える（object/edit/sculpt/vertex-paint/weight-paint）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "切替先: object|edit|sculpt|vertex-paint|weight-paint",
+     "is_flag": false,
+     "name": "to",
+     "opts": [
+      "--to"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "対象名（省略時は現在の active・完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "modifier": {
+   "help": "モディファイアを追加/削除/一覧/適用する（add は --type 必須・apply は mesh へ焼き込み）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "add|remove|list|apply",
+     "is_flag": false,
+     "name": "action",
+     "opts": [
+      "--action"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "add の種類: MIRROR|SUBSURF|SOLIDIFY|DECIMATE|BOOLEAN",
+     "is_flag": false,
+     "name": "type_",
+     "opts": [
+      "--type"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "モディファイア名（remove/apply 対象）",
+     "is_flag": false,
+     "name": "name",
+     "opts": [
+      "--name"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "MIRROR の軸: X|Y|Z",
+     "is_flag": false,
+     "name": "axis",
+     "opts": [
+      "--axis"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "SUBSURF の分割数",
+     "is_flag": false,
+     "name": "levels",
+     "opts": [
+      "--levels"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    },
+    {
+     "default": "None",
+     "help": "SOLIDIFY の厚み",
+     "is_flag": false,
+     "name": "thickness",
+     "opts": [
+      "--thickness"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "None",
+     "help": "DECIMATE の比率（0..1）",
+     "is_flag": false,
+     "name": "ratio",
+     "opts": [
+      "--ratio"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "None",
+     "help": "BOOLEAN の演算: UNION|DIFFERENCE|INTERSECT",
+     "is_flag": false,
+     "name": "operation",
+     "opts": [
+      "--operation"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "BOOLEAN の相手オブジェクト名",
+     "is_flag": false,
+     "name": "with_object",
+     "opts": [
+      "--with"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "apply 時に共有mesh単一ユーザ化を許可",
+     "is_flag": true,
+     "name": "make_single_user",
+     "opts": [
+      "--make-single-user"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "object-info": {
+   "help": "オブジェクトの寸法/頂点数/transform/材質/modifier を取得する。",
+   "params": [
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "open": {
+   "help": ".blend ファイルを開く（シーン全体を置換・未保存変更があれば --force 必須）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "開く .blend ファイル",
+     "is_flag": false,
+     "name": "path",
+     "opts": [
+      "--path"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "未保存変更を破棄して開く（既定 off）",
+     "is_flag": true,
+     "name": "force",
+     "opts": [
+      "--force"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "parent": {
+   "help": "親子関係を設定/解除する（--to と --clear は排他）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "対象オブジェクト（複数可・完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "親にするオブジェクト名（--clear と排他）",
+     "is_flag": false,
+     "name": "to",
+     "opts": [
+      "--to"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "親子関係を解除する（--to と排他）",
+     "is_flag": true,
+     "name": "clear",
+     "opts": [
+      "--clear"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "True",
+     "help": "見た目のワールド transform を保つ（既定 on）",
+     "is_flag": true,
+     "name": "keep_transform",
+     "opts": [
+      "--keep-transform"
+     ],
+     "required": false,
+     "secondary_opts": [
+      "--no-keep-transform"
+     ],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "ping": {
+   "help": "アドオンへ疎通確認する（HELLO→ping）。",
+   "params": [
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "接続ポート（既定は connection.json）",
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "policy": {
+   "help": "exec-python の実行ポリシー（policy.toml）を表示/編集する（CLIローカル・サーバへは何も送らない）。\n\n真実源はサーバ（Blender アドオン）が読むユーザローカル policy.toml。昇格はこのコマンド\n（またはエディタ）で policy.toml を書いたときだけ成立する（CLI フラグ単体では昇格できない\nという R-A の不変条件はこのコマンドでも変わらない＝RPC は一切送らない）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "show|set",
+     "is_flag": false,
+     "name": "action",
+     "opts": [
+      "--action"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "set 時の新しい exec mode: off|restricted|audited|trusted",
+     "is_flag": false,
+     "name": "mode",
+     "opts": [
+      "--mode"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "set の対話確認をスキップする",
+     "is_flag": true,
+     "name": "yes",
+     "opts": [
+      "--yes"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    }
+   ]
+  },
+  "print-check": {
+   "help": "3Dプリント健全性をチェックする（manifold/normals/degenerate・件数を返す）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "非多様体チェック",
+     "is_flag": true,
+     "name": "manifold",
+     "opts": [
+      "--manifold"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "反転法線チェック",
+     "is_flag": true,
+     "name": "normals",
+     "opts": [
+      "--normals"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "退化面チェック",
+     "is_flag": true,
+     "name": "degenerate",
+     "opts": [
+      "--degenerate"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "薄壁チェック（print3d 依存）",
+     "is_flag": true,
+     "name": "thin",
+     "opts": [
+      "--thin"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "thin の最小厚み",
+     "is_flag": false,
+     "name": "min_thickness",
+     "opts": [
+      "--min-thickness"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "False",
+     "help": "自己交差チェック（print3d 依存）",
+     "is_flag": true,
+     "name": "intersect",
+     "opts": [
+      "--intersect"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "退避(output_ref)を読み込み sha256 検証して展開する",
+     "is_flag": true,
+     "name": "fetch",
+     "opts": [
+      "--fetch"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "job_id を即返し（既定は完了まで自動待機）",
+     "is_flag": true,
+     "name": "async_out",
+     "opts": [
+      "--async"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "print-export": {
+   "help": "3Dプリント向けに mesh を STL で書き出す（3MF は未導入のため STL を hint）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "'stl'",
+     "help": "出力形式: stl|3mf（3mf 未導入時は STL を hint）",
+     "is_flag": false,
+     "name": "fmt",
+     "opts": [
+      "--format"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "出力ファイルパス",
+     "is_flag": false,
+     "name": "path",
+     "opts": [
+      "--path"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "STL を ASCII で出力（既定 binary）",
+     "is_flag": true,
+     "name": "ascii_format",
+     "opts": [
+      "--ascii"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "1.0",
+     "help": "出力スケール（global_scale・既定 1.0）",
+     "is_flag": false,
+     "name": "scale",
+     "opts": [
+      "--scale"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "True",
+     "help": "モディファイア適用後の最終形を出力（既定 on）",
+     "is_flag": true,
+     "name": "apply_modifiers",
+     "opts": [
+      "--apply-modifiers"
+     ],
+     "required": false,
+     "secondary_opts": [
+      "--no-apply-modifiers"
+     ],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "print-repair": {
+   "help": "3Dプリント向けに mesh を best-effort 修復する（全省略で全修復・完全修復は非保証）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "穴埋め/重複マージ/loose 除去で manifold 化",
+     "is_flag": true,
+     "name": "make_manifold",
+     "opts": [
+      "--make-manifold"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "面法線を一貫化",
+     "is_flag": true,
+     "name": "recalc_normals",
+     "opts": [
+      "--recalc-normals"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "退化面/辺を除去",
+     "is_flag": true,
+     "name": "remove_degenerate",
+     "opts": [
+      "--remove-degenerate"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "共有mesh時に単一ユーザ化を許可",
+     "is_flag": true,
+     "name": "make_single_user",
+     "opts": [
+      "--make-single-user"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "job_id を即返し（既定は完了まで自動待機）",
+     "is_flag": true,
+     "name": "async_out",
+     "opts": [
+      "--async"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "print-setup": {
+   "help": "3Dプリント向けにシーンの表示単位を設定する（mm/m・geometry 非破壊）。",
+   "params": [
+    {
+     "default": "'mm'",
+     "help": "表示単位: mm|m（既定 mm）",
+     "is_flag": false,
+     "name": "unit",
+     "opts": [
+      "--unit"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "対象シーン名（省略時は active）",
+     "is_flag": false,
+     "name": "scene",
+     "opts": [
+      "--scene"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)。冪等リトライで同一IDを再利用する",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "redo": {
+   "help": "元に戻した操作をやり直す（グローバル undo スタックを steps 段進める・GUI 必須）。",
+   "params": [
+    {
+     "default": "1",
+     "help": "進める段数（1〜100・既定 1）",
+     "is_flag": false,
+     "name": "steps",
+     "opts": [
+      "--steps"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)。冪等リトライで同一IDを再利用する",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "rename": {
+   "help": "オブジェクトを改名する（--with-data で obj.data も同名に変更）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "新しい名前",
+     "is_flag": false,
+     "name": "name",
+     "opts": [
+      "--name"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "obj.data も同名に変更する",
+     "is_flag": true,
+     "name": "with_data",
+     "opts": [
+      "--with-data"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "request-status": {
+   "help": "リクエストの決着状態を取得する（タイムアウト後の後追い回収）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "save": {
+   "help": ".blend ファイルに保存する（上書きは既定でバックアップ .blend1 を残す）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "保存先 .blend（省略時は現在のファイル・未保存なら要指定）",
+     "is_flag": false,
+     "name": "path",
+     "opts": [
+      "--path"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "True",
+     "help": "上書き時に .blend1 backup を残す（既定 on）",
+     "is_flag": true,
+     "name": "backup",
+     "opts": [
+      "--backup"
+     ],
+     "required": false,
+     "secondary_opts": [
+      "--no-backup"
+     ],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "scene-info": {
+   "help": "シーンのオブジェクト一覧/単位設定を取得する（大きい結果は output_ref で退避）。",
+   "params": [
+    {
+     "default": "1",
+     "help": "階層の深さ",
+     "is_flag": false,
+     "name": "depth",
+     "opts": [
+      "--depth"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    },
+    {
+     "default": "False",
+     "help": "退避(output_ref)を読み込み sha256 検証して展開する",
+     "is_flag": true,
+     "name": "fetch",
+     "opts": [
+      "--fetch"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "select": {
+   "help": "オブジェクトを選択し active を設定する。",
+   "params": [
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "型フィルタ（MESH/CURVE/...）",
+     "is_flag": false,
+     "name": "type_filter",
+     "opts": [
+      "--type"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "active にする対象名",
+     "is_flag": false,
+     "name": "active",
+     "opts": [
+      "--active"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "set-origin": {
+   "help": "オブジェクトの原点を変更する。",
+   "params": [
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "原点の決め方: geometry|cursor|world",
+     "is_flag": false,
+     "name": "to",
+     "opts": [
+      "--to"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "geometry時の中心: median|bounds",
+     "is_flag": false,
+     "name": "center",
+     "opts": [
+      "--center"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "world時のX",
+     "is_flag": false,
+     "name": "x",
+     "opts": [
+      "--x"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "None",
+     "help": "world時のY",
+     "is_flag": false,
+     "name": "y",
+     "opts": [
+      "--y"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "None",
+     "help": "world時のZ",
+     "is_flag": false,
+     "name": "z",
+     "opts": [
+      "--z"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "False",
+     "help": "共有mesh時に単一ユーザ化を許可",
+     "is_flag": true,
+     "name": "make_single_user",
+     "opts": [
+      "--make-single-user"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)。冪等リトライで同一IDを再利用する",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "straighten": {
+   "help": "オブジェクトを直立補正する（reset/world-align/pca/floor/angle/align-vector/reference）。",
+   "params": [
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "reset|world-align|pca|floor|angle|align-vector|reference",
+     "is_flag": false,
+     "name": "method",
+     "opts": [
+      "--method"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "'+Z'",
+     "help": "up 方向: +Z|-Z|+Y|-Y|+X|-X（既定 +Z）",
+     "is_flag": false,
+     "name": "up_axis",
+     "opts": [
+      "--up-axis"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "world-align/reference=合わせる local 軸 / angle=回転する world 軸: X|Y|Z",
+     "is_flag": false,
+     "name": "axis",
+     "opts": [
+      "--axis"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "pca の符号: auto|current（current=現在 up 寄り・反転防止）",
+     "is_flag": false,
+     "name": "up_hint",
+     "opts": [
+      "--up-hint"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "angle: 回転量（度・符号で向き）",
+     "is_flag": false,
+     "name": "degrees",
+     "opts": [
+      "--degrees"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "None",
+     "help": "align-vector: 揃えたい現在の world 方向 x,y,z",
+     "is_flag": false,
+     "name": "from_dir",
+     "opts": [
+      "--from-dir"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "align-vector: 目標 world 方向 x,y,z（省略時は up）",
+     "is_flag": false,
+     "name": "to_dir",
+     "opts": [
+      "--to-dir"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "reference: 基準にする別オブジェクト名",
+     "is_flag": false,
+     "name": "reference",
+     "opts": [
+      "--reference"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "reference: 参照側の signed local 軸 +X..-Z（省略時 up-axis）",
+     "is_flag": false,
+     "name": "ref_axis",
+     "opts": [
+      "--ref-axis"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "適用せず計画（回転/傾き角）のみ返す",
+     "is_flag": true,
+     "name": "dry_run",
+     "opts": [
+      "--dry-run"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "回転を mesh データへ焼き込む",
+     "is_flag": true,
+     "name": "bake_rotation",
+     "opts": [
+      "--bake-rotation"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "False",
+     "help": "bake時に共有mesh単一ユーザ化を許可",
+     "is_flag": true,
+     "name": "make_single_user",
+     "opts": [
+      "--make-single-user"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)。冪等リトライで同一IDを再利用する",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "transform": {
+   "help": "オブジェクトの位置/回転/拡縮を設定または相対適用する。",
+   "params": [
+    {
+     "default": "None",
+     "help": "対象オブジェクト（完全一致・--regex で正規表現）",
+     "is_flag": false,
+     "name": "targets",
+     "opts": [
+      "--targets",
+      "--target"
+     ],
+     "required": true,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "targets を正規表現として解釈する（既定は完全名一致）",
+     "is_flag": true,
+     "name": "regex",
+     "opts": [
+      "--regex"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": "位置 x,y,z",
+     "is_flag": false,
+     "name": "location",
+     "opts": [
+      "--location"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "回転 x,y,z（度）",
+     "is_flag": false,
+     "name": "rotation",
+     "opts": [
+      "--rotation"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "拡縮 x,y,z",
+     "is_flag": false,
+     "name": "scale",
+     "opts": [
+      "--scale"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "'set'",
+     "help": "set|delta（delta は loc/rot 加算・scale 乗算）",
+     "is_flag": false,
+     "name": "mode",
+     "opts": [
+      "--mode"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  },
+  "undo": {
+   "help": "直前の操作を元に戻す（グローバル undo スタックを steps 段戻す・GUI 必須）。",
+   "params": [
+    {
+     "default": "1",
+     "help": "戻す段数（1〜100・既定 1）",
+     "is_flag": false,
+     "name": "steps",
+     "opts": [
+      "--steps"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    },
+    {
+     "default": "None",
+     "help": "リクエストID(UUIDv4)。冪等リトライで同一IDを再利用する",
+     "is_flag": false,
+     "name": "request_id",
+     "opts": [
+      "--id"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "JSON で出力",
+     "is_flag": true,
+     "name": "json_out",
+     "opts": [
+      "--json"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
+    },
+    {
+     "default": "None",
+     "help": null,
+     "is_flag": false,
+     "name": "port",
+     "opts": [
+      "--port"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "INT"
+    }
+   ]
+  }
+ }
+}
