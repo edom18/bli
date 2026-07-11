@@ -30,6 +30,12 @@ def test_reads_trusted(state_dir):
     assert policy.read_exec_mode() == "trusted"
 
 
+def test_reads_restricted(state_dir):
+    # restricted は P1-1 で追加された4つ目の mode（fail-closed の丸め先である off とは別）。
+    _write_policy(state_dir, '[exec]\nmode = "restricted"\n')
+    assert policy.read_exec_mode() == "restricted"
+
+
 def test_reads_audited(state_dir):
     _write_policy(state_dir, '[exec]\nmode = "audited"\n')
     assert policy.read_exec_mode() == "audited"

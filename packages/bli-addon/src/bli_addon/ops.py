@@ -1005,11 +1005,32 @@ def _exec_disabled(symptom: str, remediation: str) -> JsonRpcError:
     )
 
 
+def _exec_blocked_restricted(blocked: list[str], remediation: str) -> JsonRpcError:
+    """restricted のブロックリスト検出（EXEC_BLOCKED_RESTRICTED・PRECONDITION・retryable=False）。
+
+    「何がブロックされたか」を症状文へ列挙する（scan_blocked の理由は `import:subprocess` 等の
+    自己記述形式）。修正して再実行すれば通るコードはコード修正が本筋なので、trusted 昇格の案内は
+    remediation 側に置く（P1-1・設計レビュー G0）。
+    """
+    return JsonRpcError(
+        RPC_BUSINESS_ERROR,
+        ErrorCode.EXEC_BLOCKED_RESTRICTED,
+        make_error(
+            ErrorCode.EXEC_BLOCKED_RESTRICTED,
+            category=ErrorCategory.PRECONDITION,
+            retryable=False,
+            symptom=f"exec mode=restricted: ブロック対象を検出しました: {', '.join(blocked)}",
+            remediation=remediation,
+        ),
+    )
+
+
 def _audit_exec(entry: Any) -> bool:
     """exec 監査を記録し、失敗（best-effort False）なら stderr に警告する（§280 の検知漏れを観測可能に）。
 
-    executed 経路は戻り値を `audit_ok` で応答に載せるが、rejected 経路（off / audited-unlisted）は
-    raise で終わり応答に載らないため、ここで stderr 警告して証跡欠落を必ず観測可能にする。
+    executed 経路は戻り値を `audit_ok` で応答に載せるが、rejected 経路（off / audited-unlisted /
+    restricted-blocked）は raise で終わり応答に載らないため、ここで stderr 警告して証跡欠落を必ず
+    観測可能にする。
     """
     from . import audit
 
@@ -1060,12 +1081,14 @@ def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         )
         raise _exec_disabled(
             "exec-python は無効です（既定 off・サンドボックスは提供しません）",
-            f"ユーザローカルの policy.toml（{policy.policy_path()}）で [exec] mode を trusted に "
-            "してください（リポジトリ内の config.toml では昇格できません）",
+            f"ユーザローカルの policy.toml（{policy.policy_path()}）で [exec] mode を "
+            "restricted（推奨: Blender API は自走・プロセス起動/ネットワーク/削除系は拒否）または "
+            "trusted（無制限）にしてください（`bli policy --action set --mode restricted`。"
+            "リポジトリ内の config.toml では昇格できません）",
         )
 
-    # audited/trusted: source を解決する（--file は直接 RPC 用にサーバ側でも読む。CLI は --file を
-    # CLI 側で読んで code として送る）。path はサーバ（Blender プロセス）の CWD 基準で解決される。
+    # restricted/audited/trusted: source を解決する（--file は直接 RPC 用にサーバ側でも読む。CLI は
+    # --file を CLI 側で読んで code として送る）。path はサーバ（Blender プロセス）の CWD 基準で解決される。
     if has_file:
         import os
 
@@ -1092,6 +1115,37 @@ def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     sha = audit.code_sha256(source)
     flags = ast_heuristics.scan(source)
 
+    # restricted（P1-1・設計レビュー G0）: AST ブロックリスト検査で自走可否を決める。Blender API
+    # （bpy/bmesh/mathutils 等）は全面許可・プロセス起動/ネットワーク/削除系/動的実行/書込 open を
+    # 検出したら拒否（監査に blocked を残す）。**静的検査は完全ではない**（getattr 迂回等）＝安全保証
+    # ではなく事故防止（spec §459・security_guarantee:false は不変）。
+    # blocked は「restricted の検査を通ったか」の監査証跡: None=検査対象外の経路（trusted/audited）
+    # / []=検査して通過 / 非空=拒否理由（audit.AuditEntry.blocked の契約と対）。
+    blocked: list[str] | None = None
+    if mode == "restricted":
+        from . import exec_restricted
+
+        blocked = exec_restricted.scan_blocked(source)
+        if blocked:
+            _audit_exec(
+                audit.make_entry(
+                    mode="restricted",
+                    decision="rejected:restricted-blocked",
+                    source=ref,
+                    code_sha256=sha,
+                    code_len=len(source),
+                    heuristic_flags=flags,
+                    blocked=blocked,
+                )
+            )
+            raise _exec_blocked_restricted(
+                blocked,
+                "コードからブロック対象（プロセス起動/ネットワーク/削除系/動的実行/書込 open）を"
+                "除いて再実行してください。ファイル書き出しは export/save コマンドを使ってください。"
+                f"どうしても必要な場合のみ policy.toml（{policy.policy_path()}）の [exec] mode を "
+                "trusted（無制限・自己責任）へ昇格できます",
+            )
+
     # audited（R-B）: 許可ハッシュ集合に一致するコードだけ自走実行する。不一致は監査に残して拒否し、
     # 追加すべき sha を提示する（ユーザがその sha を policy.toml の allow_hashes に足せば次回から自走）。
     if mode == "audited" and sha not in policy.read_allow_hashes():
@@ -1110,7 +1164,8 @@ def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             f"承認するなら policy.toml の [exec] allow_hashes にこの sha256 を追加してください: {sha}",
         )
 
-    # 実行が確定（trusted / audited で許可済み）。**実行前に**監査へ記録する（証跡を先に残す）。
+    # 実行が確定（trusted / restricted で検査通過 / audited で許可済み）。**実行前に**監査へ記録する
+    # （証跡を先に残す）。restricted の通過は blocked=[]（検査済みの証跡）として残る。
     audit_ok = _audit_exec(
         audit.make_entry(
             mode=mode,
@@ -1119,6 +1174,7 @@ def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             code_sha256=sha,
             code_len=len(source),
             heuristic_flags=flags,
+            blocked=blocked,
         )
     )
 

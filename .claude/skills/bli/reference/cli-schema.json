@@ -204,7 +204,7 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
-        "description": "構造化で表現できない操作のフォールバック（既定 off・サンドボックスなし）",
+        "description": "構造化で表現できない操作のフォールバック（既定 off・restricted で自走可・サンドボックスなし）",
         "properties": {
           "code": {
             "description": "実行するPythonコード（file と排他）",
@@ -219,7 +219,7 @@
         "type": "object"
       },
       "stability": "experimental",
-      "summary": "構造化で表現できない操作のフォールバック（既定 off・サンドボックスなし）"
+      "summary": "構造化で表現できない操作のフォールバック（既定 off・restricted で自走可・サンドボックスなし）"
     },
     {
       "capability_deps": [],
@@ -766,6 +766,52 @@
       },
       "stability": "stable",
       "summary": "アドオンへ疎通確認し protocol/version/capabilities を返す"
+    },
+    {
+      "capability_deps": [],
+      "heavy_ops": [],
+      "implemented": true,
+      "is_heavy": false,
+      "mutates": false,
+      "name": "policy",
+      "required_mode": "ANY",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "exec-python の実行ポリシー（policy.toml）を表示/編集する（CLIローカル・RPCなし）",
+        "properties": {
+          "action": {
+            "description": "show=表示 / set=更新",
+            "enum": [
+              "show",
+              "set"
+            ],
+            "type": "string"
+          },
+          "mode": {
+            "description": "set 時の新しい exec mode（show では無視）",
+            "enum": [
+              "off",
+              "restricted",
+              "audited",
+              "trusted"
+            ],
+            "type": "string"
+          },
+          "yes": {
+            "default": false,
+            "description": "set の対話確認をスキップする（人間が明示実行する前提）",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "policy",
+        "type": "object"
+      },
+      "stability": "stable",
+      "summary": "exec-python の実行ポリシー（policy.toml）を表示/編集する（CLIローカル・RPCなし）"
     },
     {
       "capability_deps": [],
@@ -1403,5 +1449,5 @@
     }
   ],
   "note": "SSOT（bli-core definitions）から生成。手で編集しない。再生成: uv run python scripts/generate_cli_schema.py",
-  "schema_hash": "818034d31acd81a0bf7068de3d2fbfc1c5d66df835f3d7d4aa75a5e9baa263a9"
+  "schema_hash": "fcfaafb5c3b35642d24a4fb8b75766604765e6dc88530832313abeb9b011c1c4"
 }

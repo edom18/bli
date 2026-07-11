@@ -120,6 +120,60 @@ def test_off_policy_beats_any_params(state_dir):
     assert ei.value.message == ErrorCode.EXEC_DISABLED
 
 
+def test_off_remediation_mentions_restricted_and_policy_command(state_dir):
+    # off の remediation は restricted への昇格と `bli policy` コマンドを案内する（P1-1）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops._exec_python({"code": "1 + 1"}, INFO)
+    assert ei.value.message == ErrorCode.EXEC_DISABLED
+    assert "restricted" in ei.value.data.remediation
+    assert "bli policy" in ei.value.data.remediation
+
+
+# ---- restricted（P1-1・AST ブロックリスト検査で自走可否を決める）----
+
+
+def test_restricted_blocks_subprocess_import(state_dir):
+    # ブロック対象を含むコードは EXEC_BLOCKED_RESTRICTED で拒否され、監査に blocked が残る。
+    from bli_addon import audit
+
+    _write_policy(state_dir, "restricted")
+    with pytest.raises(JsonRpcError) as ei:
+        ops._exec_python({"code": "import subprocess\nsubprocess.run(['ls'])"}, INFO)
+    assert ei.value.message == ErrorCode.EXEC_BLOCKED_RESTRICTED
+    assert ei.value.data.category == "PRECONDITION"
+    assert ei.value.data.retryable is False
+    entries = audit.read_entries()
+    assert len(entries) == 1
+    assert entries[0]["mode"] == "restricted"
+    assert entries[0]["decision"] == "rejected:restricted-blocked"
+    assert entries[0]["blocked"] == ["import:subprocess"]
+
+
+def test_restricted_allows_harmless_code_and_executes(state_dir, monkeypatch):
+    # ブロック対象を含まないコードは restricted でも自走実行される（確認不要）。
+    from bli_addon import audit
+
+    _write_policy(state_dir, "restricted")
+    _install_fake_gateway(monkeypatch)
+    result = ops._exec_python({"code": "21 * 2"}, INFO)
+    assert result["success"] is True
+    assert result["data"]["mode"] == "restricted"
+    assert result["data"]["result_repr"] == "42"
+    entries = audit.read_entries()
+    assert len(entries) == 1
+    assert entries[0]["decision"] == "executed"
+    assert entries[0]["blocked"] == []  # []=「検査して通過」の証跡（None=検査対象外は省略）
+
+
+def test_restricted_blocked_reason_appears_in_symptom(state_dir):
+    # 何がブロックされたかがエラー症状文にそのまま出る（自己修正の手がかり）。
+    _write_policy(state_dir, "restricted")
+    with pytest.raises(JsonRpcError) as ei:
+        ops._exec_python({"code": "eval('1')"}, INFO)
+    assert ei.value.message == ErrorCode.EXEC_BLOCKED_RESTRICTED
+    assert "call:eval" in ei.value.data.userVisibleSymptom
+
+
 # ---- code/file 排他（bpy 到達前の USER_INPUT）----
 
 
