@@ -557,3 +557,64 @@ def test_require_collection_missing_is_target_not_found(make_gateway):
         gw.require_collection("NoSuchCollection")
     assert ei.value.message == ErrorCode.E_TARGET_NOT_FOUND
     assert ei.value.data.category == "USER_INPUT"
+
+
+# ---- P1-3: _fbx_operator_kwargs（export --format fbx の写像・純関数・bpy 非依存）----
+
+_ALL_FBX_PROPS = {
+    "axis_forward",
+    "axis_up",
+    "global_scale",
+    "apply_unit_scale",
+    "embed_textures",
+    "path_mode",
+}
+
+
+def test_fbx_operator_kwargs_maps_bli_keys_to_operator_props(make_gateway):
+    gw = make_gateway()
+    kwargs = gw._fbx_operator_kwargs(
+        {"axis_forward": "-Z", "axis_up": "Y", "scale": 2.0, "apply_unit_scale": False},
+        _ALL_FBX_PROPS,
+    )
+    assert kwargs == {
+        "axis_forward": "-Z",
+        "axis_up": "Y",
+        "global_scale": 2.0,
+        "apply_unit_scale": False,
+    }
+
+
+def test_fbx_operator_kwargs_embed_textures_true_sets_path_mode_copy(make_gateway):
+    gw = make_gateway()
+    kwargs = gw._fbx_operator_kwargs({"embed_textures": True}, _ALL_FBX_PROPS)
+    assert kwargs == {"embed_textures": True, "path_mode": "COPY"}
+
+
+def test_fbx_operator_kwargs_embed_textures_false_does_not_set_path_mode(make_gateway):
+    gw = make_gateway()
+    kwargs = gw._fbx_operator_kwargs({"embed_textures": False}, _ALL_FBX_PROPS)
+    assert kwargs == {"embed_textures": False}
+
+
+def test_fbx_operator_kwargs_empty_options_is_empty(make_gateway):
+    gw = make_gateway()
+    assert gw._fbx_operator_kwargs({}, _ALL_FBX_PROPS) == {}
+
+
+def test_fbx_operator_kwargs_missing_prop_raises_keyerror_not_silent_drop(make_gateway):
+    # 写像先の operator プロパティが available_props に無ければ silent drop せず KeyError。
+    gw = make_gateway()
+    available = _ALL_FBX_PROPS - {"axis_forward"}
+    with pytest.raises(KeyError) as ei:
+        gw._fbx_operator_kwargs({"axis_forward": "-Z"}, available)
+    assert ei.value.args[0] == "axis_forward"
+
+
+def test_fbx_operator_kwargs_missing_path_mode_raises_keyerror(make_gateway):
+    # embed_textures=True で path_mode プロパティが無ければ KeyError（COPY を付与できない）。
+    gw = make_gateway()
+    available = _ALL_FBX_PROPS - {"path_mode"}
+    with pytest.raises(KeyError) as ei:
+        gw._fbx_operator_kwargs({"embed_textures": True}, available)
+    assert ei.value.args[0] == "path_mode"

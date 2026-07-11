@@ -403,11 +403,25 @@ def test_m9_export_discoverable():
     schema = json.loads(runner.invoke(app, ["help", "--command", "export", "--json"]).output)[
         "schema"
     ]
-    assert set(schema["properties"]) == {"format", "path", "targets", "regex", "use_selection"}
+    assert set(schema["properties"]) == {
+        "format",
+        "path",
+        "targets",
+        "regex",
+        "use_selection",
+        # P1-3: fbx 専用オプション（Unity 取込向け）。presence-sensitive なので default は持たない。
+        "axis_forward",
+        "axis_up",
+        "scale",
+        "apply_unit_scale",
+        "embed_textures",
+    }
     # targets は任意（--targets/--use-selection/シーン全体の3択）。required は format/path のみ。
     assert set(schema["required"]) == {"format", "path"}
     assert schema["properties"]["format"]["enum"] == ["obj", "fbx", "gltf", "stl", "3mf"]
     assert schema["properties"]["use_selection"]["default"] is False
+    assert schema["properties"]["axis_forward"]["enum"] == ["X", "Y", "Z", "-X", "-Y", "-Z"]
+    assert "default" not in schema["properties"]["scale"]  # presence-sensitive
 
 
 def test_export_bad_format_local_validation():

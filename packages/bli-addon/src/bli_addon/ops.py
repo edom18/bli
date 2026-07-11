@@ -1516,8 +1516,23 @@ def _print_export(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     return _ok("print-export", data, fingerprint=sha[:16])
 
 
+# format=fbx でのみ有効な追加パラメータ（P1-3・Unity 取込向け）。他 format に指定されたら
+# silent ignore せず INVALID_PARAMS で弾く（modifier/mesh の type/op 別パラメータと同じ流儀）。
+_EXPORT_FBX_ONLY_PARAMS: set[str] = {
+    "axis_forward",
+    "axis_up",
+    "scale",
+    "apply_unit_scale",
+    "embed_textures",
+}
+
+
 def _export(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
-    """多形式 export（M9 T9.1・obj/fbx/gltf/stl・3mf は CAPABILITY）。print-export の一般化（§E9）。"""
+    """多形式 export（M9 T9.1・obj/fbx/gltf/stl・3mf は CAPABILITY）。print-export の一般化（§E9）。
+
+    fbx 専用オプション（axis_forward/axis_up/scale/apply_unit_scale/embed_textures）は P1-3・
+    Unity 取込向け（両版とも export_scene.fbx のパラメータは完全同一・§4 P1-3 設計レビュー）。
+    """
     cmd = _command("export")
     _validate(cmd, params)
     fmt = str(params["format"])
@@ -1537,9 +1552,26 @@ def _export(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             symptom="glTF は単一ファイルの .glb のみ対応です（v1）",
             remediation="--path の拡張子を .glb にしてください（.gltf 分離形式は未対応）",
         )
+    # fbx 専用 param は format=fbx のときのみ有効（bpy 到達前に弾く・presence-sensitive）。
+    present_fbx_params = {k for k in _EXPORT_FBX_ONLY_PARAMS if k in params}
+    _require_input(
+        fmt == "fbx" or not present_fbx_params,
+        symptom=f"{sorted(present_fbx_params)} は --format fbx のときのみ有効です",
+        remediation="--format fbx で使うか、これらのオプションを外してください",
+    )
+    if "scale" in present_fbx_params:
+        # print-export の --scale と同じ理由（0 は退化・負値は法線反転）で、Unity 側に崩れた/裏返った
+        # メッシュを渡さないよう bpy 到達前に正値を要求する。
+        fbx_scale = float(params["scale"])
+        _require_input(
+            fbx_scale > 0.0,
+            symptom=f"--scale は正の値で指定してください（指定: {fbx_scale}）",
+            remediation="0 は退化、負値は法線反転で不正な FBX になります",
+        )
     targets = params.get("targets")
     use_selection = bool(params.get("use_selection", False))
-    # 空/空白のみの --targets は空 regex で全マッチ＝シーン全体に化けるため弾く（path と同流儀）。
+    # 空/空白のみの --targets は入力ミスとして早期に弾く（B2 の完全一致既定では 0 件エラーに
+    # なるだけだが、--regex 併用時は空 regex が全マッチ＝シーン全体に化けるため。path と同流儀）。
     if targets is not None:
         _require_input(
             str(targets).strip() != "",
@@ -1587,7 +1619,14 @@ def _export(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         remediation="存在するディレクトリのパスを指定してください",
     )
 
-    meta = gateway.export_generic(fmt, operator, path, select_objs=select_objs)
+    # fbx_options は指定されたキーのみ（省略キーは含めない＝gateway 側 rna 検査/写像の対象を絞る）。
+    fbx_options: dict[str, Any] | None = (
+        {k: params[k] for k in present_fbx_params} if present_fbx_params else None
+    )
+
+    meta = gateway.export_generic(
+        fmt, operator, path, select_objs=select_objs, fbx_options=fbx_options
+    )
     try:
         sha, size = _file_sha256_size(path)
     except (

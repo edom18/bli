@@ -1980,6 +1980,66 @@ def run_calls():
     with open(gx6["data"]["path"], "rb") as _f:
         assert _f.read(20).startswith(b"Kaydara FBX Binary"), "binary FBX は Kaydara magic で始まる"
 
+    # P1-3: fbx 専用オプション（axis_forward/axis_up/scale・Unity 取込向け）。global_scale は
+    # world 座標も一律スケールする（実機確認済み・§4 P1-3）ため、ExpCube（world (5,0,0)・size2）を
+    # --scale 2.0 で書き出すと中心 world(10,0,0)・half-size2 の bbox になる。
+    gx_fbx_opts = os.path.join(gen_dir, "exp_opts.fbx")
+    gx7, _ = call_retry(
+        "export",
+        {
+            "format": "fbx",
+            "path": gx_fbx_opts,
+            "targets": "ExpCube",
+            "axis_forward": "-Z",
+            "axis_up": "Y",
+            "scale": 2.0,
+        },
+    )
+    assert gx7["data"]["fbx_options"] == {
+        "axis_forward": "-Z",
+        "axis_up": "Y",
+        "scale": 2.0,
+    }, gx7["data"]
+    with open(gx7["data"]["path"], "rb") as _f:
+        assert _f.read(20).startswith(b"Kaydara FBX Binary"), (
+            "fbx 専用オプション指定でも binary FBX"
+        )
+    imp_opts, _ = call_retry("import", {"format": "fbx", "path": gx_fbx_opts})
+    imp_opts_meshes = [o for o in imp_opts["data"]["imported"] if o["type"] == "MESH"]
+    assert len(imp_opts_meshes) >= 1, imp_opts["data"]
+    oi_opts, _ = call_retry("object-info", {"targets": imp_opts_meshes[0]["name"]})
+    bb_opts = oi_opts["data"]["bbox"]
+    assert approx(bb_opts["min"], (8.0, -2.0, -2.0)) and approx(bb_opts["max"], (12.0, 2.0, 2.0)), (
+        bb_opts
+    )
+    for o in imp_opts["data"]["imported"]:  # cleanup（次形式/再実行の汚染回避）
+        call_retry("delete", {"targets": o["name"]})
+
+    # --embed-textures はテクスチャ無しシーンでも成功する（path_mode=COPY 自動設定で無エラー・実機確認済み）。
+    gx_fbx_embed = os.path.join(gen_dir, "exp_embed.fbx")
+    gx8, _ = call_retry(
+        "export",
+        {"format": "fbx", "path": gx_fbx_embed, "targets": "ExpCube", "embed_textures": True},
+    )
+    assert gx8["data"]["fbx_options"] == {"embed_textures": True}, gx8["data"]
+    assert os.path.getsize(gx8["data"]["path"]) > 0, gx8["data"]
+
+    # fbx 専用オプションは --format fbx 以外に指定すると INVALID_PARAMS（silent ignore しない）。
+    try:
+        call_retry(
+            "export",
+            {
+                "format": "stl",
+                "path": os.path.join(gen_dir, "x_bad_axis.stl"),
+                "targets": "ExpCube",
+                "axis_forward": "-Z",
+            },
+        )
+        raise AssertionError("stl への --axis-forward は INVALID_PARAMS のはず")
+    except client.RpcRemoteError as e:
+        assert e.error.get("message") == "INVALID_PARAMS", e.error
+    print("export_fbx_options_ok")
+
     # glTF は GLB 単一固定（.glb 必須）: .gltf 等は bpy 到達前に USER_INPUT で弾く（INVALID_PARAMS）。
     try:
         call_retry("export", {"format": "gltf", "path": os.path.join(gen_dir, "x.gltf")})

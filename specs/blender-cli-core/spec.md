@@ -226,9 +226,10 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 | `bli save [--path <file.blend>] [--backup]` | 保存（上書きは既定でバックアップ） |
 | `bli open --path <file.blend> [--force]` | ファイルを開く（シーン全体を置換・未保存の bli 変更があれば `--force` 必須） |
 | `bli import --format obj\|fbx\|gltf\|stl\|3mf --path <file>` | インポート |
-| `bli export --format obj\|fbx\|gltf\|stl\|3mf --path <file> [--use-selection]` | エクスポート |
+| `bli export --format obj\|fbx\|gltf\|stl\|3mf --path <file> [--use-selection] [--axis-forward] [--axis-up] [--scale] [--apply-unit-scale/--no-apply-unit-scale] [--embed-textures]` | エクスポート（axis/scale/apply-unit-scale/embed-textures は **fbx 専用**・Unity 取込向け・P1-3） |
 
 > v1必須フォーマット: **stl / obj / gltf(glb) / 3mf / fbx**。各形式の operator 差・改名は Adapter層（§9）で吸収する。
+> `export --format fbx` の Unity 向けオプションは Blender の既定（axis_forward=-Z / axis_up=Y / scale=1.0 / apply_unit_scale=on）のままで Unity の座標系・単位に正しく合う（実機確認済み）。負の軸を渡す際は `--axis-forward=-Z` のように `=` 連結が必要（`--axis-forward -Z` は `-Z` が別オプションと解釈され得る）。
 
 ### 逃げ道・発見・ジョブ
 | コマンド | 概要 |

@@ -2100,8 +2100,47 @@ def _select_set(objs: list[Any]) -> tuple[list[Any], Any]:
     return saved_selected, saved_active
 
 
+# fbx_options（bli 側キー）-> export_scene.fbx operator の実プロパティ名（P1-3・単一の写像表）。
+# 両版実機確定（axis_forward/axis_up/global_scale/apply_unit_scale/embed_textures は 5.0.1/4.4.3
+# で完全同一の rna properties・§E9 の RESOLVERS 確定と同じ確認手順）。
+_FBX_OPTION_TO_PROP: dict[str, str] = {
+    "axis_forward": "axis_forward",
+    "axis_up": "axis_up",
+    "scale": "global_scale",
+    "apply_unit_scale": "apply_unit_scale",
+    "embed_textures": "embed_textures",
+}
+
+
+def _fbx_operator_kwargs(fbx_options: dict[str, Any], available_props: set[str]) -> dict[str, Any]:
+    """export --format fbx の fbx_options を export_scene.fbx operator の kwargs へ写像する。
+
+    純関数（bpy 非依存・L1 テスト可能）。embed_textures=True のときは path_mode='COPY' も自動付与
+    する（Blender は path_mode が COPY 以外だと embed_textures を無視する仕様のため・実機確認済み）。
+    写像先の operator プロパティが available_props に無いキーが1つでもあれば KeyError(prop) を送出
+    する（silent drop 禁止。将来 operator が差し替わって当該プロパティが消えても黙って無視しない・
+    呼び出し側の export_generic が CAPABILITY_UNAVAILABLE へ変換する）。
+    """
+    kwargs: dict[str, Any] = {}
+    for key, value in fbx_options.items():
+        prop = _FBX_OPTION_TO_PROP[key]
+        if prop not in available_props:
+            raise KeyError(prop)
+        kwargs[prop] = value
+    if fbx_options.get("embed_textures") is True:
+        if "path_mode" not in available_props:
+            raise KeyError("path_mode")
+        kwargs["path_mode"] = "COPY"
+    return kwargs
+
+
 def export_generic(
-    fmt: str, operator_path: str, path: str, *, select_objs: list[Any] | None
+    fmt: str,
+    operator_path: str,
+    path: str,
+    *,
+    select_objs: list[Any] | None,
+    fbx_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """多形式 export（print-export の STL 限定を一般化・§E9）。
 
@@ -2113,12 +2152,25 @@ def export_generic(
     glTF は **GLB 単一固定**（`export_format` の有効値は両版とも ('GLB','GLTF_SEPARATE') のみ＝
     GLTF_EMBEDDED は存在しない・実機確認済み。SEPARATE は .bin 分離で sha256/size が崩れるため不採用）。
     .glb 拡張子の要求は ops 側で bpy 到達前に検証する。
+
+    fbx_options（P1-3・Unity 取込向け）は format=fbx のときだけ ops 側が渡す（他 format は None）。
+    指定時のみ `op.get_rna_type().properties` で rna 検査する（通常経路のコストを増やさない）。
     """
     op = _resolve_op(operator_path)
     sel_param = _EXPORT_SELECTION_PARAM[fmt]
     kwargs: dict[str, Any] = {"filepath": path, "check_existing": False}
     if fmt == "gltf":
         kwargs["export_format"] = "GLB"
+    if fbx_options:
+        available_props = set(op.get_rna_type().properties.keys())
+        try:
+            kwargs.update(_fbx_operator_kwargs(fbx_options, available_props))
+        except KeyError as e:
+            raise _op_error(
+                ErrorCode.CAPABILITY_UNAVAILABLE,
+                f"この Blender の FBX exporter は {e.args[0]} に未対応です",
+                category=ErrorCategory.ENVIRONMENT,
+            ) from e
 
     if select_objs is None:
         kwargs[sel_param] = False
@@ -2138,12 +2190,15 @@ def export_generic(
         finally:
             _restore_selection(saved_selected, saved_active)
         exported = sorted(o.name for o in select_objs)
-    return {
+    result: dict[str, Any] = {
         "format": fmt,
         "operator": operator_path,
         "use_selection": select_objs is not None,
         "exported_objects": exported,
     }
+    if fbx_options:
+        result["fbx_options"] = dict(fbx_options)
+    return result
 
 
 # ---- 状態キャプチャ（実地フィードバック #1 / Spike V で両版確認）----
