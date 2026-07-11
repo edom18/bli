@@ -1,6 +1,6 @@
 # bli (Blender CLI) — ロードマップ俯瞰（ROADMAP）
 
-最終更新: 2026-06-21 / このファイルは**全体像を1枚で見渡す**ための索引。詳細は各リンク先へ。
+最終更新: 2026-07-11 / このファイルは**全体像を1枚で見渡す**ための索引。詳細は各リンク先へ。
 
 - **プロダクト**: AIエージェントが **CLI 経由で Blender を自律操作**するツール（`bli`）。常駐 GUI Blender + アドオン TCP ソケット ← Python/Typer 製 CLI。MCP のトークン非効率を CLI で解消。
 - **真実の情報源（SSOT）**: `specs/blender-cli-core/`（`spec.md` / `plan.md` / `research.md` / `contracts/methods.md` / `data-model.md`）。
@@ -28,7 +28,9 @@
 | **M11** | exec-python（既定 off・`EXEC_DISABLED` / audited=許可ハッシュ自走 / trusted・AST flag・監査） | ✅ **完了**: T11.1 mode ゲート / T11.2 AST flag / T11.3 監査+許可ハッシュ（**PR #32**・base main） | 確定要約 HANDOFF §6k / GT research §E14 |
 | **M12** | Skill 同梱 & スキーマ同期（`.claude/skills/bli/` + cli-schema.json 生成 + schema_hash） | ✅ **完了**（**PR #33**・stacked on #32） | 確定要約 HANDOFF §6l / D12 |
 | **M13** | テスト網羅 & CI 仕上げ（bl_rna 契約 / L2 Blender マトリクス / golden / L3 / snapshot） | ✅ **完了**（**PR #34**・stacked on #33） | 確定要約 HANDOFF §6m |
-| **M14** | ドキュメント & 配布（addon zip ビルド・vendoring 検証・README・doctor 導入支援・mistakes-memo） | ✅ **実装完了**（**PR #36**・base main・マージ待ち） | 確定要約 HANDOFF §6n / DoD=クリーン環境で導入→ping→3シナリオ |
+| **M14** | ドキュメント & 配布（addon zip ビルド・vendoring 検証・README・doctor 導入支援・mistakes-memo） | ✅ **完了**（PR #36/#37 マージ済み） | 確定要約 HANDOFF §6n |
+| **P1** | **設計レビュー対応**（バグ4件 / exec **restricted** / add・mode・rename・parent・collection / FBX Unity opt / docs 再フレーミング / 検証型レビュー反映） | ✅ **完了**（PR **#38/#43/#40/#41/#42** マージ済み・main=c5d5544） | 確定要約 HANDOFF **§6o** / 発注書 `report/2026-07-11-design-review-generality.md` §4 / コマンド 33→38・pytest 584 |
+| **P2** | リファクタ & 汎用化（P2-2 Typer SSOT 自動生成 / P2-3 modifier・material 汎用化 / P2-4 モジュール分割） | ⬜ **次** | 着手書 **`.handoff/NEXT-P2.md`** / 発注書 report §4 |
 
 ★ = walking skeleton。✅=完了 / 🔶=進行中 / ⬜=未着手。
 
@@ -59,7 +61,7 @@
 | PR-4 | 基準指定整列（#4 straighten に angle/align-vector/reference 追加・支柱問題） | ✅ PR #17 |
 | PR-5 | undo/redo 公開（#3 `bli undo`/`redo`・GUI 必須・スタック端 RuntimeError 頑健化） | ✅ PR #18 |
 
-→ **M8〜M13 完了（main マージ済み・PR #10〜#35）。M14 ドキュメント&配布は実装完了＝PR #36 マージ待ち（確定要約 HANDOFF §6n）。これで v1 全マイルストーン（M0–M14）実装完了。** 残るは GUI 実機での zip 導入→`bli ping` の手動確認（headless 不可・README 記載）と任意の配布公開（Extensions/PyPI は後続）。
+→ **v1（M0–M14）完了 + 設計レビュー P1 対応完了（PR #1〜#43 マージ済み・main=c5d5544・確定要約 HANDOFF §6o）。** 実機デモ済み（zip 常駐 → bli のみでモデリング → capture / FBX export）。**次は P2（`.handoff/NEXT-P2.md`）**。任意の配布公開（Extensions/PyPI・CI artifact）は後続。
 ※ FB #4 の「部分ジオメトリ PCA（頂点サブセット基準）」は部分指定方法の決定が要るため別 PR 繰越（PR-4 では angle/align-vector/reference で支柱問題に実用解を提供済み）。
 
 ---
