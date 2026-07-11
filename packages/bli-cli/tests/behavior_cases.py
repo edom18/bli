@@ -36,7 +36,11 @@ CASES: list[Case] = [
     Case(
         "ping/connect-error",
         ["ping"],
-        [{"connect_error": "接続不能 127.0.0.1:9876: [Errno 111] refused（アドオンが起動していない可能性）"}],
+        [
+            {
+                "connect_error": "接続不能 127.0.0.1:9876: [Errno 111] refused（アドオンが起動していない可能性）"
+            }
+        ],
     ),
     # ---- scene-info ----
     Case(
@@ -73,7 +77,17 @@ CASES: list[Case] = [
     # ---- set-origin ----
     Case(
         "set-origin/geometry",
-        ["set-origin", "--targets", "Cube", "--to", "geometry", "--center", "bounds", "--id", FIXED_ID],
+        [
+            "set-origin",
+            "--targets",
+            "Cube",
+            "--to",
+            "geometry",
+            "--center",
+            "bounds",
+            "--id",
+            FIXED_ID,
+        ],
         [
             {
                 "result": {
@@ -85,7 +99,19 @@ CASES: list[Case] = [
     ),
     Case(
         "set-origin/world-xyz",
-        ["set-origin", "--target", "Cube", "--to", "world", "--x", "1.5", "--z", "0.25", "--id", FIXED_ID],
+        [
+            "set-origin",
+            "--target",
+            "Cube",
+            "--to",
+            "world",
+            "--x",
+            "1.5",
+            "--z",
+            "0.25",
+            "--id",
+            FIXED_ID,
+        ],
         [
             {
                 "result": {
@@ -110,7 +136,17 @@ CASES: list[Case] = [
     # ---- transform（_parse_vec）----
     Case(
         "transform/set",
-        ["transform", "--targets", "Cube", "--location", "1,2,3", "--scale", "2,2,2", "--id", FIXED_ID],
+        [
+            "transform",
+            "--targets",
+            "Cube",
+            "--location",
+            "1,2,3",
+            "--scale",
+            "2,2,2",
+            "--id",
+            FIXED_ID,
+        ],
         [
             {
                 "result": {
@@ -246,7 +282,17 @@ CASES: list[Case] = [
     # ---- straighten（method 別 human 分岐。floor は既存ケース）----
     Case(
         "straighten/world-align",
-        ["straighten", "--targets", "Cube", "--method", "world-align", "--axis", "Z", "--id", FIXED_ID],
+        [
+            "straighten",
+            "--targets",
+            "Cube",
+            "--method",
+            "world-align",
+            "--axis",
+            "Z",
+            "--id",
+            FIXED_ID,
+        ],
         [
             {
                 "result": {
@@ -300,7 +346,17 @@ CASES: list[Case] = [
     ),
     Case(
         "straighten/pca",
-        ["straighten", "--targets", "Cube", "--method", "pca", "--up-hint", "current", "--id", FIXED_ID],
+        [
+            "straighten",
+            "--targets",
+            "Cube",
+            "--method",
+            "pca",
+            "--up-hint",
+            "current",
+            "--id",
+            FIXED_ID,
+        ],
         [
             {
                 "result": {
@@ -522,7 +578,15 @@ CASES: list[Case] = [
     # ---- print-repair ----
     Case(
         "print-repair/manifold-normals",
-        ["print-repair", "--targets", "Cube", "--make-manifold", "--recalc-normals", "--id", FIXED_ID],
+        [
+            "print-repair",
+            "--targets",
+            "Cube",
+            "--make-manifold",
+            "--recalc-normals",
+            "--id",
+            FIXED_ID,
+        ],
         [
             {
                 "result": {
@@ -540,7 +604,17 @@ CASES: list[Case] = [
     # ---- print-export ----
     Case(
         "print-export/stl",
-        ["print-export", "--targets", "Cube", "--format", "stl", "--path", "out.stl", "--id", FIXED_ID],
+        [
+            "print-export",
+            "--targets",
+            "Cube",
+            "--format",
+            "stl",
+            "--path",
+            "out.stl",
+            "--id",
+            FIXED_ID,
+        ],
         [
             {
                 "result": {
@@ -565,7 +639,12 @@ CASES: list[Case] = [
             {
                 "result": {
                     "operation": "export",
-                    "data": {"format": "obj", "path": "out.obj", "size": 2048, "sha256": "deadbeef" * 8},
+                    "data": {
+                        "format": "obj",
+                        "path": "out.obj",
+                        "size": 2048,
+                        "sha256": "deadbeef" * 8,
+                    },
                 }
             }
         ],
@@ -788,7 +867,11 @@ CASES: list[Case] = [
             {
                 "result": {
                     "operation": "apply-transform",
-                    "data": {"name": "Cube", "scale": [1.0, 1.0, 1.0], "dimensions": [2.0, 2.0, 2.0]},
+                    "data": {
+                        "name": "Cube",
+                        "scale": [1.0, 1.0, 1.0],
+                        "dimensions": [2.0, 2.0, 2.0],
+                    },
                 }
             }
         ],
@@ -853,7 +936,9 @@ CASES: list[Case] = [
                     "data": {
                         "action": "list",
                         "name": "Cube",
-                        "materials": [{"slot": 0, "name": "Red", "base_color": [1.0, 0.0, 0.0, 1.0]}],
+                        "materials": [
+                            {"slot": 0, "name": "Red", "base_color": [1.0, 0.0, 0.0, 1.0]}
+                        ],
                     },
                 }
             }
@@ -957,7 +1042,17 @@ CASES: list[Case] = [
     ),
     Case(
         "modifier/apply",
-        ["modifier", "--action", "apply", "--targets", "Cube", "--name", "Mirror", "--id", FIXED_ID],
+        [
+            "modifier",
+            "--action",
+            "apply",
+            "--targets",
+            "Cube",
+            "--name",
+            "Mirror",
+            "--id",
+            FIXED_ID,
+        ],
         [
             {
                 "result": {
@@ -969,7 +1064,17 @@ CASES: list[Case] = [
     ),
     Case(
         "modifier/remove",
-        ["modifier", "--action", "remove", "--targets", "Cube", "--name", "Mirror", "--id", FIXED_ID],
+        [
+            "modifier",
+            "--action",
+            "remove",
+            "--targets",
+            "Cube",
+            "--name",
+            "Mirror",
+            "--id",
+            FIXED_ID,
+        ],
         [
             {
                 "result": {
@@ -1071,7 +1176,10 @@ CASES: list[Case] = [
                     "operation": "parent",
                     "data": {
                         "action": "set",
-                        "results": [{"name": "A", "parent": "Root"}, {"name": "B", "parent": "Root"}],
+                        "results": [
+                            {"name": "A", "parent": "Root"},
+                            {"name": "B", "parent": "Root"},
+                        ],
                     },
                 }
             }
@@ -1100,7 +1208,10 @@ CASES: list[Case] = [
             {
                 "result": {
                     "operation": "collection",
-                    "data": {"action": "list", "collections": [{"name": "Collection", "objects": 3}]},
+                    "data": {
+                        "action": "list",
+                        "collections": [{"name": "Collection", "objects": 3}],
+                    },
                 }
             }
         ],
@@ -1119,7 +1230,17 @@ CASES: list[Case] = [
     ),
     Case(
         "collection/move",
-        ["collection", "--action", "move", "--name", "Props", "--targets", "Cube", "--id", FIXED_ID],
+        [
+            "collection",
+            "--action",
+            "move",
+            "--name",
+            "Props",
+            "--targets",
+            "Cube",
+            "--id",
+            FIXED_ID,
+        ],
         [
             {
                 "result": {
@@ -1141,14 +1262,30 @@ CASES: list[Case] = [
             {
                 "result": {
                     "operation": "mesh",
-                    "data": {"op": "recalc-normals", "name": "Cube", "faces": 6, "flipped": 2, "inside": True},
+                    "data": {
+                        "op": "recalc-normals",
+                        "name": "Cube",
+                        "faces": 6,
+                        "flipped": 2,
+                        "inside": True,
+                    },
                 }
             }
         ],
     ),
     Case(
         "mesh/merge-by-distance",
-        ["mesh", "--op", "merge-by-distance", "--targets", "Cube", "--distance", "0.001", "--id", FIXED_ID],
+        [
+            "mesh",
+            "--op",
+            "merge-by-distance",
+            "--targets",
+            "Cube",
+            "--distance",
+            "0.001",
+            "--id",
+            FIXED_ID,
+        ],
         [
             {
                 "result": {
@@ -1183,7 +1320,19 @@ CASES: list[Case] = [
     ),
     Case(
         "mesh/bevel",
-        ["mesh", "--op", "bevel", "--targets", "Cube", "--width", "0.1", "--segments", "2", "--id", FIXED_ID],
+        [
+            "mesh",
+            "--op",
+            "bevel",
+            "--targets",
+            "Cube",
+            "--width",
+            "0.1",
+            "--segments",
+            "2",
+            "--id",
+            FIXED_ID,
+        ],
         [
             {
                 "result": {

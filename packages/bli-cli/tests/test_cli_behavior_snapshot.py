@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 import snapshot_lib
 from behavior_cases import CASES
 
@@ -25,4 +24,6 @@ def test_cli_behavior_matches_snapshot(case, json_out, snapshot):
 def test_no_orphan_snapshot_entries(snapshot):
     known = {f"{c.id}|{mode}" for c in CASES for mode in ("human", "json")}
     orphans = sorted(set(snapshot) - known)
-    assert not orphans, f"ケース表に無いスナップショットが残っている: {orphans}。{snapshot_lib.REGEN_HINT}"
+    assert not orphans, (
+        f"ケース表に無いスナップショットが残っている: {orphans}。{snapshot_lib.REGEN_HINT}"
+    )

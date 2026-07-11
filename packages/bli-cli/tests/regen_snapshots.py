@@ -11,8 +11,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-import snapshot_lib  # noqa: E402
-from behavior_cases import CASES  # noqa: E402
+import snapshot_lib
+from behavior_cases import CASES
 
 
 def main() -> None:
