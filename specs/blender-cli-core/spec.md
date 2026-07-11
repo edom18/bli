@@ -99,11 +99,14 @@
 
 ### 共通テンプレート
 ```
-bli <command> [--targets <name|regex>] [options] [--json] [--id <uuid>] [--dry-run]
+bli <command> [--targets <name>] [--regex] [options] [--json] [--id <uuid>] [--dry-run]
 ```
 - `--json` : 構造化出力（既定は人間可読。エージェントは常に`--json`推奨）。
 - `--id` : リクエストID（UUIDv4）。**省略時はCLIが自動採番**。リトライ時は同一IDを再利用。
-- `--targets` : 操作対象を明示。コマンド間で選択状態に依存しない（§7）。
+- `--targets` : 操作対象を明示。コマンド間で選択状態に依存しない（§7）。既定は**完全名一致のみ**
+  （暗黙の正規表現フォールバックは無い）。`--regex` を付けたときだけ正規表現として解釈する
+  （設計レビュー 2026-07-11 B2）。完全一致 0 件で、それが正規表現として解釈すると当たる場合は
+  `E_TARGET_NOT_FOUND` の症状文に `--regex` を使うヒントを添える。
 - `--dry-run` : 変更を行わず影響を返す（対応コマンドのみ）。
 
 ### 接続・診断
@@ -126,7 +129,7 @@ bli <command> [--targets <name|regex>] [options] [--json] [--id <uuid>] [--dry-r
 ### 汎用編集
 | コマンド | 概要 |
 |----------|------|
-| `bli select --targets <name\|regex> [--type ...] [--active <name>]` | 選択操作 |
+| `bli select --targets <name> [--regex] [--type ...] [--active <name>]` | 選択操作 |
 | `bli transform --targets <name> [--location x,y,z] [--rotation x,y,z(deg)] [--scale x,y,z] [--mode set\|delta]` | 位置/回転/拡縮 |
 | `bli apply-transform --targets <name> [--location] [--rotation] [--scale]` | トランスフォーム適用 |
 | `bli duplicate --targets <name> [--linked] [--count N] [--offset x,y,z]` | 複製（`bpy.data`直接） |
@@ -394,10 +397,12 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 | コード | 意味 |
 |:---:|------|
 | 0 | 成功 |
-| 1 | 確定失敗（業務エラー） |
-| 2 | TIMEOUT_PENDING（未決。`request-status`で要確認）/ `BUSY_RENDERING`（レンダ中で未受理・retryable・レンダ後に再試行）（M10 T10.2） |
-| 3 | 接続不能 / アドオン未起動 / 認証失敗 |
-| 4 | 入力エラー（CLI引数・スキーマ不一致） |
+| 1 | 確定失敗（業務エラー・下記いずれにも該当しない場合の既定） |
+| 2 | `retryable=true` の業務エラー（`TIMEOUT`/`BUSY_RENDERING`/`SESSION_BUSY`/`IN_PROGRESS` 等・`request-status`で要確認）（M10 T10.2） |
+| 3 | 接続不能 / アドオン未起動 / 認証失敗（`AUTH_FAILED`）/ プロトコル不一致（`PROTOCOL_VERSION_MISMATCH`） |
+| 4 | 入力エラー（`INVALID_PARAMS` またはエラーの `category=USER_INPUT`・CLI引数/スキーマ不一致） |
+
+- CLI の写像（`_exit_code_for`）は `kind`（エラー名）でなく `ErrorObject.retryable`/`category` を主に見る（設計レビュー 2026-07-11 B1）: `AUTH_FAILED`/`PROTOCOL_VERSION_MISMATCH` は kind 判定で exit 3（接続層はエラーモデルに軸が無いため）。それ以外は `retryable=true` → exit 2、`kind==INVALID_PARAMS` または `category==USER_INPUT` → exit 4、それ以外 → exit 1。サーバが新しい retryable な kind を追加しても CLI 側の追従は不要。
 
 ---
 

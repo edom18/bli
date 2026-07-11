@@ -33,6 +33,8 @@
 
 > **`dimensions` と `bbox.size` の違い**（紛らわしいので明記）: `dimensions` は **オブジェクト固有サイズ**（`obj.dimensions`・scale 反映・**回転不変**）。`bbox.size` は **world AABB**（`matrix_world @ bound_box` の軸並行境界・**回転すると変化**）。傾いた物体では両者は一致しない。`--targets` は `--target`（単数）も別名で受け付ける。
 
+> **`--targets` の解決セマンティクス**（全 `--targets` パラメータ共通・設計レビュー 2026-07-11 B2）: 既定（`--regex` 省略）は**完全名一致のみ**。`--regex` を明示したときだけ正規表現（`re.search`）として解釈する。暗黙のフォールバックは廃止済み（`Cube.001` のような既定命名は `.` が regex の任意一文字に当たるため、typo が別オブジェクトへ誤マッチし得た）。完全一致 0 件で、それが正規表現として解釈すると当たる場合は `E_TARGET_NOT_FOUND` の症状文に一致件数と `--regex` 使用のヒントを添える。不正な正規表現（`--regex` 指定時のみ評価）は `E_PRECONDITION`（category=USER_INPUT）。
+
 ## 汎用編集（オブジェクト操作）
 | method | params | result | M | H | Mode | St |
 |--------|--------|--------|:-:|:-:|----|:--:|

@@ -51,7 +51,15 @@ command(
 command(
     "object-info",
     "オブジェクトの寸法/頂点数/transform/bbox/材質/modifier を取得",
-    params=(p("targets", ParamType.STR, required=True, help="対象（name|regex）"),),
+    params=(
+        p("targets", ParamType.STR, required=True, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
+    ),
     required_mode=Mode.OBJECT,
 )
 command(
@@ -69,7 +77,13 @@ command(
     "set-origin",
     "オブジェクトの原点を指定方法で変更する",
     params=(
-        p("targets", ParamType.STR, required=True, help="対象（name|regex|session_uid）"),
+        p("targets", ParamType.STR, required=True, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
         p(
             "to",
             ParamType.ENUM,
@@ -98,7 +112,13 @@ command(
     # angle/align-vector/reference は「エージェントが算出した補正を straighten 経由で安全に適用」する
     # ための基準指定 method（transform 迂回の解消・実地フィードバック #4）。いずれも object 回転のみ。
     params=(
-        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("targets", ParamType.STR, required=True, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
         p(
             "method",
             ParamType.ENUM,
@@ -189,7 +209,13 @@ command(
     # print3d 依存で、未導入時は CAPABILITY_UNAVAILABLE（研究 §E6）。カテゴリ flag は presence-sensitive
     # （省略時は bmesh 3種すべて）。min_thickness は thin 専用。--save-to はファイルI/O のため M9 へ繰越。
     params=(
-        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("targets", ParamType.STR, required=True, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
         p("manifold", ParamType.BOOL, help="非多様体チェック"),
         p("normals", ParamType.BOOL, help="反転法線チェック"),
         p("degenerate", ParamType.BOOL, help="退化面チェック"),
@@ -210,7 +236,13 @@ command(
     # 修復フラグは presence-sensitive（全省略時は全修復）。完全修復は保証しない（spec §10 S3）。
     # mesh データを書き換える破壊的操作のため共有 mesh は --make-single-user 必須（§6e）。
     params=(
-        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("targets", ParamType.STR, required=True, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
         p("make_manifold", ParamType.BOOL, help="穴埋め/重複マージ/loose 除去で manifold 化"),
         p("recalc_normals", ParamType.BOOL, help="面法線を一貫化"),
         p("remove_degenerate", ParamType.BOOL, help="退化面/辺を除去"),
@@ -229,7 +261,13 @@ command(
     # 3mf は両版とも export operator が実体なし（§E8）→ CAPABILITY_UNAVAILABLE + STL hint。
     # ファイルを書くだけでシーンは変えない（mutates=False・選択は save/restore で非破壊）。
     params=(
-        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("targets", ParamType.STR, required=True, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
         p("format", ParamType.ENUM, required=True, choices=["stl", "3mf"], help="出力形式"),
         p("path", ParamType.PATH, required=True, help="出力ファイルパス"),
         p("ascii", ParamType.BOOL, default=False, help="STL を ASCII で出力（既定 binary）"),
@@ -309,7 +347,13 @@ command(
     "select",
     "オブジェクトを選択し active を設定する（name|regex / type フィルタ）",
     params=(
-        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("targets", ParamType.STR, required=True, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
         p("type", ParamType.STR, help="型フィルタ（MESH/CURVE/... 大小無視）"),
         p("active", ParamType.STR, help="active にする対象名（省略時は先頭）"),
     ),
@@ -320,7 +364,13 @@ command(
     "transform",
     "位置/回転/拡縮を設定または相対適用する（delta: loc/rot は加算・scale は乗算）",
     params=(
-        p("targets", ParamType.STR, required=True, help="対象"),
+        p("targets", ParamType.STR, required=True, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
         p("location", ParamType.VEC3, help="位置 x,y,z"),
         p("rotation", ParamType.VEC3, help="回転 x,y,z（度）"),
         p("scale", ParamType.VEC3, help="拡縮 x,y,z"),
@@ -336,7 +386,13 @@ command(
     # schema に default を出すと、既定値を埋める生成クライアントが全 false を送って
     # しまうため、default は持たせない（Codex P2）。
     params=(
-        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("targets", ParamType.STR, required=True, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
         p("location", ParamType.BOOL, help="位置を適用"),
         p("rotation", ParamType.BOOL, help="回転を適用"),
         p("scale", ParamType.BOOL, help="拡縮を適用"),
@@ -351,7 +407,13 @@ command(
     "duplicate",
     "オブジェクトを複製する（count 回・world offset 累積・linked でデータ共有）",
     params=(
-        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("targets", ParamType.STR, required=True, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
         p("linked", ParamType.BOOL, default=False, help="データを共有する（リンク複製）"),
         p("count", ParamType.INT, default=1, help="複製数（1〜1000）"),
         p("offset", ParamType.VEC3, help="複製ごとの world オフセット x,y,z（累積）"),
@@ -362,7 +424,15 @@ command(
 command(
     "delete",
     "オブジェクトを削除する（削除前サマリを backup として結果に残す）",
-    params=(p("targets", ParamType.STR, required=True, help="対象（name|regex）"),),
+    params=(
+        p("targets", ParamType.STR, required=True, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
+    ),
     mutates=True,
     required_mode=Mode.OBJECT,
 )
@@ -381,7 +451,13 @@ command(
             choices=["assign", "create", "list"],
             help="操作: assign|create|list",
         ),
-        p("targets", ParamType.STR, help="対象（name|regex）"),
+        p("targets", ParamType.STR, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
         p("name", ParamType.STR, help="マテリアル名（assign=既存名 / create=新規名）"),
         p("color", ParamType.VEC4, help="RGBA r,g,b,a（create の Base Color）"),
         p("make_single_user", ParamType.BOOL, default=False, help="共有mesh時に単一ユーザ化を許可"),
@@ -404,7 +480,13 @@ command(
             choices=["add", "remove", "list", "apply"],
             help="操作: add|remove|list|apply",
         ),
-        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("targets", ParamType.STR, required=True, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
         p(
             "type",
             ParamType.ENUM,
@@ -459,7 +541,13 @@ command(
             ],
             help="操作: recalc-normals|merge-by-distance|extrude|bevel|inset|boolean|decimate",
         ),
-        p("targets", ParamType.STR, required=True, help="対象（name|regex）"),
+        p("targets", ParamType.STR, required=True, help="対象名（完全一致・--regex で正規表現）"),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
         p("inside", ParamType.BOOL, help="recalc-normals: 法線を内向きにする"),
         p("distance", ParamType.FLOAT, help="merge-by-distance: マージ距離（既定 0.0001）"),
         # T7.2: extrude offset は world 空間 / bevel width・inset thickness はスカラで mesh ローカル
@@ -507,7 +595,17 @@ command(
             help="出力形式",
         ),
         p("path", ParamType.PATH, required=True, help="出力ファイルパス"),
-        p("targets", ParamType.STR, help="対象（name|regex・指定時はこれを選択して書き出す）"),
+        p(
+            "targets",
+            ParamType.STR,
+            help="対象名（完全一致・--regex で正規表現・指定時はこれを選択して書き出す）",
+        ),
+        p(
+            "regex",
+            ParamType.BOOL,
+            default=False,
+            help="targets を正規表現として解釈する（既定は完全名一致）",
+        ),
         p(
             "use_selection",
             ParamType.BOOL,

@@ -22,6 +22,11 @@
             "description": "共有mesh時に明示許可",
             "type": "boolean"
           },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "rotation": {
             "description": "回転を適用",
             "type": "boolean"
@@ -31,7 +36,7 @@
             "type": "boolean"
           },
           "targets": {
-            "description": "対象（name|regex）",
+            "description": "対象名（完全一致・--regex で正規表現）",
             "type": "string"
           }
         },
@@ -99,8 +104,13 @@
         "additionalProperties": false,
         "description": "オブジェクトを削除する（削除前サマリを backup として結果に残す）",
         "properties": {
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "targets": {
-            "description": "対象（name|regex）",
+            "description": "対象名（完全一致・--regex で正規表現）",
             "type": "string"
           }
         },
@@ -164,8 +174,13 @@
             "minItems": 3,
             "type": "array"
           },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "targets": {
-            "description": "対象（name|regex）",
+            "description": "対象名（完全一致・--regex で正規表現）",
             "type": "string"
           }
         },
@@ -234,8 +249,13 @@
             "description": "出力ファイルパス",
             "type": "string"
           },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "targets": {
-            "description": "対象（name|regex・指定時はこれを選択して書き出す）",
+            "description": "対象名（完全一致・--regex で正規表現・指定時はこれを選択して書き出す）",
             "type": "string"
           },
           "use_selection": {
@@ -448,8 +468,13 @@
             "description": "マテリアル名（assign=既存名 / create=新規名）",
             "type": "string"
           },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "targets": {
-            "description": "対象（name|regex）",
+            "description": "対象名（完全一致・--regex で正規表現）",
             "type": "string"
           }
         },
@@ -526,12 +551,17 @@
             "description": "decimate: 削減比率 0..1（必須）",
             "type": "number"
           },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "segments": {
             "description": "bevel: 分割数（既定1・1〜100）",
             "type": "integer"
           },
           "targets": {
-            "description": "対象（name|regex）",
+            "description": "対象名（完全一致・--regex で正規表現）",
             "type": "string"
           },
           "thickness": {
@@ -615,8 +645,13 @@
             "description": "DECIMATE の比率（0..1）",
             "type": "number"
           },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "targets": {
-            "description": "対象（name|regex）",
+            "description": "対象名（完全一致・--regex で正規表現）",
             "type": "string"
           },
           "thickness": {
@@ -662,8 +697,13 @@
         "additionalProperties": false,
         "description": "オブジェクトの寸法/頂点数/transform/bbox/材質/modifier を取得",
         "properties": {
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "targets": {
-            "description": "対象（name|regex）",
+            "description": "対象名（完全一致・--regex で正規表現）",
             "type": "string"
           }
         },
@@ -760,8 +800,13 @@
             "description": "反転法線チェック",
             "type": "boolean"
           },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "targets": {
-            "description": "対象（name|regex）",
+            "description": "対象名（完全一致・--regex で正規表現）",
             "type": "string"
           },
           "thin": {
@@ -813,13 +858,18 @@
             "description": "出力ファイルパス",
             "type": "string"
           },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "scale": {
             "default": 1.0,
             "description": "出力スケール（global_scale・既定 1.0）",
             "type": "number"
           },
           "targets": {
-            "description": "対象（name|regex）",
+            "description": "対象名（完全一致・--regex で正規表現）",
             "type": "string"
           }
         },
@@ -860,12 +910,17 @@
             "description": "面法線を一貫化",
             "type": "boolean"
           },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "remove_degenerate": {
             "description": "退化面/辺を除去",
             "type": "boolean"
           },
           "targets": {
-            "description": "対象（name|regex）",
+            "description": "対象名（完全一致・--regex で正規表現）",
             "type": "string"
           }
         },
@@ -1034,8 +1089,13 @@
             "description": "active にする対象名（省略時は先頭）",
             "type": "string"
           },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "targets": {
-            "description": "対象（name|regex）",
+            "description": "対象名（完全一致・--regex で正規表現）",
             "type": "string"
           },
           "type": {
@@ -1078,8 +1138,13 @@
             "description": "共有mesh時に明示許可",
             "type": "boolean"
           },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "targets": {
-            "description": "対象（name|regex|session_uid）",
+            "description": "対象名（完全一致・--regex で正規表現）",
             "type": "string"
           },
           "to": {
@@ -1193,8 +1258,13 @@
             "description": "reference: 基準にする別オブジェクト名",
             "type": "string"
           },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "targets": {
-            "description": "対象（name|regex）",
+            "description": "対象名（完全一致・--regex で正規表現）",
             "type": "string"
           },
           "to_dir": {
@@ -1269,6 +1339,11 @@
             ],
             "type": "string"
           },
+          "regex": {
+            "default": false,
+            "description": "targets を正規表現として解釈する（既定は完全名一致）",
+            "type": "boolean"
+          },
           "rotation": {
             "description": "回転 x,y,z（度）",
             "items": {
@@ -1288,7 +1363,7 @@
             "type": "array"
           },
           "targets": {
-            "description": "対象",
+            "description": "対象名（完全一致・--regex で正規表現）",
             "type": "string"
           }
         },
@@ -1328,5 +1403,5 @@
     }
   ],
   "note": "SSOT（bli-core definitions）から生成。手で編集しない。再生成: uv run python scripts/generate_cli_schema.py",
-  "schema_hash": "3e5f668d0d9a025d1a652854df92997d0c76ee401dab620cf67821744eceb87c"
+  "schema_hash": "818034d31acd81a0bf7068de3d2fbfc1c5d66df835f3d7d4aa75a5e9baa263a9"
 }
