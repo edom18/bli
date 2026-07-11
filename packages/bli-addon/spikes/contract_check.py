@@ -50,7 +50,19 @@ OPERATOR_ARGS = {
     "object.origin_set": ["type", "center"],
     "object.transform_apply": ["location", "rotation", "scale", "isolate_users"],
     "export_scene.gltf": ["filepath", "export_format", "use_selection"],
-    "export_scene.fbx": ["filepath", "use_selection"],
+    # axis_forward/axis_up/global_scale/apply_unit_scale/embed_textures/path_mode は P1-3（Unity
+    # 取込向け export --format fbx オプション）が依存する。版差で消えると bli の fbx_options が
+    # CAPABILITY_UNAVAILABLE へ縮退するだけで INTERNAL 化はしないが、この契約テストで早期検出する。
+    "export_scene.fbx": [
+        "filepath",
+        "use_selection",
+        "axis_forward",
+        "axis_up",
+        "global_scale",
+        "apply_unit_scale",
+        "embed_textures",
+        "path_mode",
+    ],
 }
 
 

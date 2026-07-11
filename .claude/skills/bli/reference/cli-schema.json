@@ -362,6 +362,38 @@
         "additionalProperties": false,
         "description": "シーン/選択を多形式で書き出す（obj/fbx/gltf/stl・3mf は未導入で CAPABILITY）",
         "properties": {
+          "apply_unit_scale": {
+            "description": "fbx 専用: シーン単位を1.0とみなして書き出す（Blender 既定 on）",
+            "type": "boolean"
+          },
+          "axis_forward": {
+            "description": "fbx 専用: forward 軸（Blender 既定 -Z・Unity 取込はこの既定のまま合う）",
+            "enum": [
+              "X",
+              "Y",
+              "Z",
+              "-X",
+              "-Y",
+              "-Z"
+            ],
+            "type": "string"
+          },
+          "axis_up": {
+            "description": "fbx 専用: up 軸（Blender 既定 Y・Unity 取込はこの既定のまま合う）",
+            "enum": [
+              "X",
+              "Y",
+              "Z",
+              "-X",
+              "-Y",
+              "-Z"
+            ],
+            "type": "string"
+          },
+          "embed_textures": {
+            "description": "fbx 専用: テクスチャを FBX に同梱する（path_mode=COPY を自動設定）",
+            "type": "boolean"
+          },
           "format": {
             "description": "出力形式",
             "enum": [
@@ -381,6 +413,10 @@
             "default": false,
             "description": "targets を正規表現として解釈する（既定は完全名一致）",
             "type": "boolean"
+          },
+          "scale": {
+            "description": "fbx 専用: global_scale（Blender 既定 1.0）",
+            "type": "number"
           },
           "targets": {
             "description": "対象名（完全一致・--regex で正規表現・指定時はこれを選択して書き出す）",
@@ -1708,5 +1744,5 @@
     }
   ],
   "note": "SSOT（bli-core definitions）から生成。手で編集しない。再生成: uv run python scripts/generate_cli_schema.py",
-  "schema_hash": "f82c1bfc10301ffbe677e80a2c9d1f7009790d26d11603265f735ca01d1cd4f6"
+  "schema_hash": "185188b11a1f457985e0112d91129802d94ac0ad4135a4913a6cfa3bfc807775"
 }

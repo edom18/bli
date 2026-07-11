@@ -1175,6 +1175,32 @@ def export(
         "--use-selection",
         help="現在の選択集合のみ書き出す（targets 省略時・省略でシーン全体）",
     ),
+    axis_forward: str | None = typer.Option(
+        None,
+        "--axis-forward",
+        help="fbx専用: forward軸 X|Y|Z|-X|-Y|-Z（既定 -Z・Unity 取込はこの既定のまま合う）。"
+        "負の軸は --axis-forward=-Z のように '=' で連結すること"
+        "（'--axis-forward -Z' は -Z が別オプションと誤解釈され得る）",
+    ),
+    axis_up: str | None = typer.Option(
+        None,
+        "--axis-up",
+        help="fbx専用: up軸 X|Y|Z|-X|-Y|-Z（既定 Y・Unity 取込はこの既定のまま合う）。"
+        "負の軸は --axis-up=-Z のように '=' で連結すること",
+    ),
+    scale: float | None = typer.Option(
+        None, "--scale", help="fbx専用: global_scale（既定は Blender 既定 1.0・正の値のみ）"
+    ),
+    apply_unit_scale: bool | None = typer.Option(
+        None,
+        "--apply-unit-scale/--no-apply-unit-scale",
+        help="fbx専用: シーン単位を1.0とみなして書き出す（既定は Blender 既定 on・省略時は指定しない）",
+    ),
+    embed_textures: bool = typer.Option(
+        False,
+        "--embed-textures",
+        help="fbx専用: テクスチャを FBX に同梱する（path_mode=COPY をサーバ側で自動設定）",
+    ),
     request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
     async_out: bool = typer.Option(
         False, "--async", help="job_id を即返し（既定は完了まで自動待機）"
@@ -1182,12 +1208,27 @@ def export(
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
-    """シーン/選択を多形式で書き出す（obj/fbx/gltf/stl・3mf は未導入で CAPABILITY）。"""
+    """シーン/選択を多形式で書き出す（obj/fbx/gltf/stl・3mf は未導入で CAPABILITY）。
+
+    axis-forward/axis-up/scale/apply-unit-scale/embed-textures は **fbx 専用**（他 format に
+    指定すると INVALID_PARAMS）。Unity 向けレシピは SKILL.md の「Unity 取り込みレシピ」参照。
+    """
     params: dict[str, Any] = {"format": fmt, "path": path, "use_selection": use_selection}
     if targets is not None:
         params["targets"] = targets
     if regex:
         params["regex"] = True
+    # fbx 専用オプションは presence-sensitive（省略時はサーバへ送らず Blender 既定に委ねる）。
+    if axis_forward is not None:
+        params["axis_forward"] = axis_forward
+    if axis_up is not None:
+        params["axis_up"] = axis_up
+    if scale is not None:
+        params["scale"] = scale
+    if apply_unit_scale is not None:
+        params["apply_unit_scale"] = apply_unit_scale
+    if embed_textures:
+        params["embed_textures"] = True
 
     def human(data: dict[str, Any]) -> str:
         scope = (
@@ -1195,9 +1236,11 @@ def export(
             if data.get("exported_objects") is not None
             else "whole scene"
         )
+        fbx_opts = data.get("fbx_options")
+        opts = f" fbx_options={fbx_opts}" if fbx_opts else ""
         return (
             f"exported [{data.get('format')}] {scope} -> {data.get('path')} "
-            f"({data.get('size')}B, sha={str(data.get('sha256'))[:12]})"
+            f"({data.get('size')}B, sha={str(data.get('sha256'))[:12]}){opts}"
         )
 
     _rpc(

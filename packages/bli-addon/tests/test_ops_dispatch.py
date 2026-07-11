@@ -1551,9 +1551,74 @@ def test_export_valid_params_reach_bpy():
         {"format": "gltf", "path": "out.glb"},
         {"format": "fbx", "path": "out.fbx"},
         {"format": "3mf", "path": "out.3mf"},
+        # P1-3: fbx 専用オプション（全指定）も検証を通過し gateway まで到達する。
+        {
+            "format": "fbx",
+            "path": "out.fbx",
+            "axis_forward": "-Z",
+            "axis_up": "Y",
+            "scale": 2.0,
+            "apply_unit_scale": True,
+            "embed_textures": True,
+        },
     ):
         with pytest.raises(ModuleNotFoundError):
             ops.dispatch("export", _generic_export_params(**extra), INFO)
+
+
+# ---- P1-3: export の fbx 専用オプション（axis/scale/apply_unit_scale/embed_textures）検証 ----
+
+
+def test_export_fbx_only_param_rejected_for_other_format():
+    # axis_forward/axis_up/scale/apply_unit_scale/embed_textures は format=fbx 専用
+    # （presence-sensitive・他 format への指定は silent ignore せず INVALID_PARAMS）。
+    for extra in (
+        {"axis_forward": "-Z"},
+        {"axis_up": "Y"},
+        {"scale": 2.0},
+        {"apply_unit_scale": True},
+        {"embed_textures": True},
+    ):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch("export", _generic_export_params(format="stl", **extra), INFO)
+        assert ei.value.code == RPC_INVALID_PARAMS, extra
+        assert ei.value.data is not None, extra
+        assert ei.value.data.category == "USER_INPUT", extra
+
+
+def test_export_fbx_bad_axis_enum_invalid_params():
+    # axis_forward/axis_up は ENUM(X|Y|Z|-X|-Y|-Z)。範囲外は schema 検証で INVALID_PARAMS。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "export",
+            _generic_export_params(format="fbx", path="out.fbx", axis_forward="UP"),
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_export_fbx_non_positive_scale_invalid_params():
+    # fbx の --scale も 0/負値は退化/反転で不正な FBX になるため bpy 到達前に弾く（print-export と同流儀）。
+    for bad in (0.0, -1.0, -0.5):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch(
+                "export", _generic_export_params(format="fbx", path="out.fbx", scale=bad), INFO
+            )
+        assert ei.value.code == RPC_INVALID_PARAMS, bad
+        assert ei.value.data is not None, bad
+        assert ei.value.data.category == "USER_INPUT", bad
+
+
+def test_export_fbx_bad_bool_type_invalid_params():
+    # apply_unit_scale / embed_textures は BOOL。非真偽値は型エラーで INVALID_PARAMS
+    for key in ("apply_unit_scale", "embed_textures"):
+        with pytest.raises(JsonRpcError) as ei:
+            ops.dispatch(
+                "export",
+                _generic_export_params(format="fbx", path="out.fbx", **{key: "yes"}),
+                INFO,
+            )
+        assert ei.value.code == RPC_INVALID_PARAMS, key
 
 
 # ---- M9 T9.2 import（多形式 import）の param 検証（bpy 不要）----

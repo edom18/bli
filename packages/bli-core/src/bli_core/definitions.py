@@ -737,6 +737,13 @@ command(
     # 両版とも GLB/GLTF_SEPARATE のみ・SEPARATE は .bin 分離で統計が崩れるため不採用・§E9）。
     # 3mf は両版とも export operator 不在（§E8）→ CAPABILITY_UNAVAILABLE + 別形式 hint。
     # ファイルを書くだけでシーンは変えない（mutates=False・選択は save/restore で非破壊）。
+    #
+    # axis_forward/axis_up/scale/apply_unit_scale/embed_textures は **fbx 専用**（P1-3・Unity 取込
+    # 向け）。両版実機確定（export_scene.fbx のパラメータは 5.0.1/4.4.3 で完全同一）: axis_forward/
+    # axis_up は ENUM(X|Y|Z|-X|-Y|-Z) 既定 -Z/Y、scale は global_scale へ写像（既定 1.0）、
+    # apply_unit_scale/embed_textures は BOOLEAN。いずれも schema default を持たせない
+    # （presence-sensitive・生成クライアントが既定値を埋めて他 format へ誤送信するのを防ぐ・§6e の
+    # 一般化）。ops 側で format=fbx 以外への指定を INVALID_PARAMS で拒否する。
     params=(
         p(
             "format",
@@ -762,6 +769,29 @@ command(
             ParamType.BOOL,
             default=False,
             help="現在の選択集合のみ書き出す（targets 省略時）",
+        ),
+        p(
+            "axis_forward",
+            ParamType.ENUM,
+            choices=["X", "Y", "Z", "-X", "-Y", "-Z"],
+            help="fbx 専用: forward 軸（Blender 既定 -Z・Unity 取込はこの既定のまま合う）",
+        ),
+        p(
+            "axis_up",
+            ParamType.ENUM,
+            choices=["X", "Y", "Z", "-X", "-Y", "-Z"],
+            help="fbx 専用: up 軸（Blender 既定 Y・Unity 取込はこの既定のまま合う）",
+        ),
+        p("scale", ParamType.FLOAT, help="fbx 専用: global_scale（Blender 既定 1.0）"),
+        p(
+            "apply_unit_scale",
+            ParamType.BOOL,
+            help="fbx 専用: シーン単位を1.0とみなして書き出す（Blender 既定 on）",
+        ),
+        p(
+            "embed_textures",
+            ParamType.BOOL,
+            help="fbx 専用: テクスチャを FBX に同梱する（path_mode=COPY を自動設定）",
         ),
     ),
     mutates=False,
