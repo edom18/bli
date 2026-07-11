@@ -33,7 +33,7 @@
 
 ### v1でやること
 - 常駐アドオン（TCPサーバ）＋ Python製CLIクライアント（`bli`）。
-- 接続・診断: `init` / `doctor` / `ping`（hello handshake）。
+- 接続・診断: `init` / `doctor` / `ping`（hello handshake）/ `policy`（exec 権限の表示/編集・CLIローカル・P1-1）。
 - 情報取得: `scene-info` / `object-info` / `list-objects` / `capture`（画像・実地FB #1）。
 - 汎用編集: `select` / `transform` / `apply-transform` / `duplicate` / `modifier` / `material` / `delete`。
 - 状態操作: `undo` / `redo`（実地FB #3・GUI 必須）。
@@ -41,7 +41,7 @@
 - シナリオ1（原点変更）: `set-origin`。
 - シナリオ2（直立補正）: `straighten`。
 - シナリオ3（3Dプリンタ対応）: `print-check` / `print-repair` / `print-setup` / `print-export`。
-- 逃げ道: `exec-python`（**既定 off**）。
+- 逃げ道: `exec-python`（**既定 off**・`restricted` で AST ブロックリスト検査つき自走可・P1-1）。
 - ジョブ制御: `request-status` / `job-status` / `job-wait`。
 - セキュリティモデル（トークン認証・127.0.0.1固定）。
 - 構造化JSON出力＋終了コード＋出力descriptor化。
@@ -115,6 +115,7 @@ bli <command> [--targets <name>] [--regex] [options] [--json] [--id <uuid>] [--d
 | `bli init` | 設定生成・セッショントークン発行・`connection.json` 書き込み |
 | `bli doctor` | 環境診断（Blender検出・アドオン導入・ポート・バージョン・能力） |
 | `bli ping` | hello handshake を行い protocol_version / Blender版 / 能力一覧を返す |
+| `bli policy --action show\|set --mode <m>` | exec-python の実行ポリシー（`policy.toml`）を表示/編集する（**CLIローカル完結・RPCなし**・P1-1） |
 
 ### 情報取得（読み取り専用）
 | コマンド | 概要 |
@@ -214,7 +215,8 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 ### 逃げ道・発見・ジョブ
 | コマンド | 概要 |
 |----------|------|
-| `bli exec-python --code <str>\|--file <p>` | 構造化で表現不能な操作。**既定off**（§6） |
+| `bli exec-python --code <str>\|--file <p>` | 構造化で表現不能な操作。**既定off**（`restricted` で自走可・§6） |
+| `bli policy --action show\|set --mode <m>` | exec 権限（`policy.toml`）の表示/編集（CLIローカル・P1-1） |
 | `bli help --json` / `bli list-commands --json` | コマンドスキーマの機械可読出力（発見用） |
 | `bli request-status --id <id>` | タイムアウト後の決着確認（§7） |
 | `bli job-status --id <jid>` / `bli job-wait --id <jid> [--timeout]` | 非同期重量ジョブの状態取得 |
@@ -270,20 +272,21 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 - 全接続は HELLO で提示。`hmac.compare_digest` で定数時間比較。不一致は即切断。
 - 最初の有効フレームが HELLO でない接続は切断。
 
-### exec-python（3モード・既定 off）
+### exec-python（4モード・既定 off）
 | モード | 挙動 | 既定 |
 |--------|------|:---:|
 | `off` | exec-python を無効化。呼ぶと `EXEC_DISABLED` を返す | **✓** |
+| `restricted` | **AST ブロックリスト検査で自走可否を決める**（P1-1）。Blender API（`bpy`/`bmesh`/`mathutils` 等）は全面許可。プロセス起動/ネットワーク/削除系/動的実行（eval等）/書込 `open` を検出したら `EXEC_BLOCKED_RESTRICTED` で拒否。**エージェント用途の推奨**（確認不要で自走できる範囲を事故防止しつつ最大化） | |
 | `audited` | 全コードを `audit/` に記録。**許可ハッシュ（sha256）一致で自走**（T11.3・R-B） | |
 | `trusted` | 無制限実行。明示有効化（設定）が前提 | |
 - モードは **ユーザ所有の設定ファイルでのみ昇格可能**。CLIフラグ単体では緩められない。
-  - **真実源（M11 T11.1・R-A 確定）**: サーバ（Blender アドオン）は **ユーザローカルの `policy.toml`**（`BLI_STATE_DIR/policy.toml`・OS 所有者限定・git 非管理）の `[exec] mode` のみを読む。CLI は mode を送らず（送れず）、リポジトリ内 `.bli/config.toml` の `[exec] mode` は **表示用ヒント**でサーバは読まない（mode=trusted を commit しても昇格しない）。policy 読取は実行ごとに最新化（off↔trusted の切替を即反映）。fail-closed（不在/パース失敗/不正値はすべて off）。
-  - off / audited 未許可は `EXEC_DISABLED`（PRECONDITION・retryable=False）。**audited（T11.3・R-B）**: コードの sha256 が `policy.toml` の `[exec] allow_hashes` に一致したときだけ自走実行し、不一致は拒否メッセージに追加すべき sha256 を提示する。trusted は無条件実行。
-- AST検査は「安全保証」ではなく **ヒューリスティックなフラグ付け**。レスポンスに `security_guarantee: false` と `heuristic_flags` を含める（T11.2）。**サンドボックスは提供しない**（§脅威モデル）＝コードは同一 OS 権限で走る。ユーザコードの実行時例外は `EXEC_ERROR`（runtime=ENVIRONMENT / 構文エラー=USER_INPUT・compile フェーズ）へ写像し INTERNAL にしない。
+  - **真実源（M11 T11.1・R-A 確定）**: サーバ（Blender アドオン）は **ユーザローカルの `policy.toml`**（`BLI_STATE_DIR/policy.toml`・OS 所有者限定・git 非管理）の `[exec] mode` のみを読む。CLI は mode を送らず（送れず）、リポジトリ内 `.bli/config.toml` の `[exec] mode` は **表示用ヒント**でサーバは読まない（mode=trusted を commit しても昇格しない）。policy 読取は実行ごとに最新化（off↔restricted↔trusted の切替を即反映）。fail-closed（不在/パース失敗/不正値はすべて off）。表示/編集は `bli policy --action show|set --mode <mode>`（CLI ローカル完結・サーバへ RPC を送らない・人間が明示実行する前提）で行う。
+  - off / audited 未許可は `EXEC_DISABLED`（PRECONDITION・retryable=False）。**restricted（P1-1）**: `exec_restricted.scan_blocked` の AST 走査がブロック対象（`import:<module>` / `attr-call:<module>.<attr>` / `from-import:<module>.<name>` / `call:<builtin>` / `file-write`）を検出すると **`EXEC_BLOCKED_RESTRICTED`**（PRECONDITION・retryable=False）で拒否し、検出理由を症状文に列挙する。**静的検査は完全ではない**（`getattr` 迂回・多段の別名束縛・`pathlib` 経由の削除等は捕捉できない）＝安全保証ではなく **事故防止**（`security_guarantee: false` は restricted でも不変。下記参照）。**audited（T11.3・R-B）**: コードの sha256 が `policy.toml` の `[exec] allow_hashes` に一致したときだけ自走実行し、不一致は拒否メッセージに追加すべき sha256 を提示する。trusted は無条件実行。
+- AST検査は「安全保証」ではなく **ヒューリスティックなフラグ付け**。レスポンスに `security_guarantee: false` と `heuristic_flags` を含める（T11.2・全モード共通・restricted の拒否判定とは別レイヤ＝`heuristic_flags` は注意喚起のみでブロックしない）。**サンドボックスは提供しない**（§脅威モデル）＝コードは同一 OS 権限で走る。ユーザコードの実行時例外は `EXEC_ERROR`（runtime=ENVIRONMENT / 構文エラー=USER_INPUT・compile フェーズ）へ写像し INTERNAL にしない。
 - 3シナリオは構造化サブコマンドのみで完遂可能（exec不要）。
 
 ### 監査・ロギング
-- メインスレッドの単一実行口を通る全Python文字列を `audit/` に記録（防止でなく検知・追跡）。**実装（T11.3）**: exec の試行をすべて `BLI_STATE_DIR/audit/exec.jsonl`（JSONL）に追記＝executed も rejected:off / rejected:audited-unlisted も記録（ts/mode/decision/code_sha256/code_len/heuristic_flags/source）。書込は best-effort（失敗時は応答 `audit_ok=false`・可用性優先）。
+- メインスレッドの単一実行口を通る全Python文字列を `audit/` に記録（防止でなく検知・追跡）。**実装（T11.3）**: exec の試行をすべて `BLI_STATE_DIR/audit/exec.jsonl`（JSONL）に追記＝executed も rejected:off / rejected:audited-unlisted / **rejected:restricted-blocked（P1-1）** も記録（ts/mode/decision/code_sha256/code_len/heuristic_flags/source）。restricted の拒否理由（`exec_restricted.scan_blocked` の結果）は `blocked` フィールドに載る（restricted で検査した経路のみ・他モードでは省略され既存 JSONL 行のスキーマは変わらない）。書込は best-effort（失敗時は応答 `audit_ok=false`・可用性優先）。
 - `save` / `open` / `export` / `import` は対象パスを明示ログ。`.blend` 上書きは既定でバックアップ強制。`open` はシーン全体を置換するため、未保存の bli 変更があれば `--force` を要求（誤って未保存作業を破棄しない）。
 
 ### 設定・トークンの配置（ハイブリッド）
@@ -389,8 +392,9 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 `SERVER_SHUTTING_DOWN` / `NO_RESPONSE` / `CONNECTION_RESET` / `SESSION_BUSY` /
 `IN_PROGRESS` / `E_MODE_MISMATCH` / `E_TARGET_NOT_FOUND` / `W_STATE_DRIFT` /
 `CAPABILITY_UNAVAILABLE` / `STALE_OUTPUT` / `PROTOCOL_VERSION_MISMATCH` /
-`SCHEMA_MISMATCH` / `EXEC_DISABLED` / `EXEC_ERROR` / `INVALID_PARAMS(-32602)`
-- `EXEC_DISABLED`（PRECONDITION・retryable=False）: exec mode が trusted 以外（off / T11.1 では audited も）。
+`SCHEMA_MISMATCH` / `EXEC_DISABLED` / `EXEC_BLOCKED_RESTRICTED` / `EXEC_ERROR` / `INVALID_PARAMS(-32602)`
+- `EXEC_DISABLED`（PRECONDITION・retryable=False）: exec mode=off、または mode=audited で許可リスト外（未許可）。
+- `EXEC_BLOCKED_RESTRICTED`（PRECONDITION・retryable=False・P1-1）: exec mode=restricted で AST ブロックリスト検査（`exec_restricted.scan_blocked`）がブロック対象を検出。症状文に検出理由を列挙し、remediation はコード修正または trusted への昇格を案内する。
 - `EXEC_ERROR`（runtime=ENVIRONMENT / 構文エラー=USER_INPUT・compile・retryable=False）: exec ユーザコードの例外（INTERNAL にしない・例外直前の stdout/stderr は cause に載る）。
 
 ### 終了コード表
@@ -492,7 +496,7 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 | D2 | 対象バージョン | 5.0主軸 ＋ 4.4ベストエフォート |
 | D3 | コマンド方式 | ハイブリッド（構造化主軸 ＋ exec逃げ道） |
 | D4 | v1スコープ | 基盤を厚く（汎用操作を幅広く＋3シナリオ） |
-| D5 | exec-python既定 | **off**（audited/trustedは設定で昇格） |
+| D5 | exec-python既定 | **off**（restricted/audited/trustedは設定で昇格。P1-1 で restricted を追加） |
 | D6 | 同時接続 | fail-fast（`SESSION_BUSY`で即拒否） |
 | D7 | 重量ガード | なし（拒否せず watchdog通知＋非同期job） |
 | D8 | バージョンサポート定義 | CI契約テストが通る版のみ公式、5.0主軸 |

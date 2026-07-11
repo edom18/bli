@@ -685,12 +685,12 @@ command(
     required_mode=Mode.ANY,
 )
 
-# ---- 逃げ道（既定 off・サンドボックスなし・M11）----
-# mode（off|audited|trusted）は **サーバがユーザローカル policy.toml から読む**（R-A）。CLI は
-# mode を送らない＝CLI フラグ単体では昇格できない（spec §276・脅威モデル §459）。code/file は排他。
+# ---- 逃げ道（既定 off・サンドボックスなし・M11・restricted は P1-1）----
+# mode（off|restricted|audited|trusted）は **サーバがユーザローカル policy.toml から読む**（R-A）。
+# CLI は mode を送らない＝CLI フラグ単体では昇格できない（spec §276・脅威モデル §459）。code/file は排他。
 command(
     "exec-python",
-    "構造化で表現できない操作のフォールバック（既定 off・サンドボックスなし）",
+    "構造化で表現できない操作のフォールバック（既定 off・restricted で自走可・サンドボックスなし）",
     params=(
         p("code", ParamType.STR, help="実行するPythonコード（file と排他）"),
         p("file", ParamType.PATH, help="実行するスクリプトファイル（code と排他）"),
@@ -698,4 +698,35 @@ command(
     mutates=True,
     stability=Stability.EXPERIMENTAL,
     implemented=True,  # M11 T11.1 で実装
+)
+
+# ---- policy（CLI ローカル・exec 権限ヘルパ / P1-1）----
+# init/doctor と同じ「CLI ローカル完結」系（RPC を送らない）。exec mode の**真実源はサーバが読む
+# ユーザローカル policy.toml**（bli_core.policy・R-A は不変）。このコマンドはその表示/編集を助ける
+# だけで、サーバへは何も送らない＝昇格は人間がこのコマンド（またはエディタ）で policy.toml を
+# 書いたときだけ成立する。
+command(
+    "policy",
+    "exec-python の実行ポリシー（policy.toml）を表示/編集する（CLIローカル・RPCなし）",
+    params=(
+        p(
+            "action",
+            ParamType.ENUM,
+            required=True,
+            choices=["show", "set"],
+            help="show=表示 / set=更新",
+        ),
+        p(
+            "mode",
+            ParamType.ENUM,
+            choices=["off", "restricted", "audited", "trusted"],
+            help="set 時の新しい exec mode（show では無視）",
+        ),
+        p(
+            "yes",
+            ParamType.BOOL,
+            default=False,
+            help="set の対話確認をスキップする（人間が明示実行する前提）",
+        ),
+    ),
 )

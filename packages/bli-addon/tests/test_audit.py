@@ -63,3 +63,48 @@ def test_record_failure_is_best_effort(state_dir, monkeypatch):
 def test_make_entry_timestamp_is_iso_utc(state_dir):
     entry = audit.make_entry(mode="off", decision="rejected:off", source="code")
     assert entry.ts.endswith("+00:00")  # UTC ISO8601
+
+
+# ---- blocked（P1-1・restricted の拒否理由）----
+
+
+def test_to_dict_omits_blocked_when_none():
+    # blocked=None（検査対象外の経路）は to_dict で省略され、既存 JSONL 行のスキーマを変えない。
+    entry = audit.make_entry(mode="trusted", decision="executed", source="code")
+    assert "blocked" not in entry.to_dict()
+
+
+def test_to_dict_includes_empty_blocked_list():
+    # blocked=[]（検査して通過）は省略せずそのまま出す（None と区別する）。
+    entry = audit.make_entry(mode="restricted", decision="executed", source="code", blocked=[])
+    assert entry.to_dict()["blocked"] == []
+
+
+def test_to_dict_includes_blocked_reasons():
+    entry = audit.make_entry(
+        mode="restricted",
+        decision="rejected:restricted-blocked",
+        source="code",
+        blocked=["import:subprocess", "call:eval"],
+    )
+    assert entry.to_dict()["blocked"] == ["import:subprocess", "call:eval"]
+
+
+def test_record_and_read_roundtrip_with_blocked(state_dir):
+    entry = audit.make_entry(
+        mode="restricted",
+        decision="rejected:restricted-blocked",
+        source="code",
+        code_sha256="abc",
+        code_len=10,
+        blocked=["call:eval"],
+    )
+    assert audit.record(entry) is True
+    rows = audit.read_entries()
+    assert rows[0]["blocked"] == ["call:eval"]
+
+
+def test_record_without_blocked_omits_key_from_jsonl(state_dir):
+    audit.record(audit.make_entry(mode="trusted", decision="executed", source="code"))
+    rows = audit.read_entries()
+    assert "blocked" not in rows[0]

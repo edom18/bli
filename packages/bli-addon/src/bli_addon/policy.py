@@ -1,74 +1,27 @@
-"""exec-python のポリシー読取（M11 T11.1・R-A）。spec §276 / §284 / §459。
+"""exec-python のポリシー読取（互換再エクスポート）。実体は bli_core.policy（P1-1 で移設）。
 
-exec の mode（off|audited|trusted）の **真実源はユーザローカル policy.toml**
-（`BLI_STATE_DIR/policy.toml`・OS 所有者限定・git 非管理）。サーバ（このアドオン）だけがこれを読む。
-
-**ここが M11 の肝**: CLI が送る mode は無視する＝CLI フラグ単体では昇格できない。リポジトリ内の
-`.bli/config.toml` に `mode = "trusted"` を commit しても昇格しない（サーバは config.toml を読まない）。
-昇格はユーザが自分の OS アカウントの policy.toml を編集したときだけ成立する（spec §276）。
-
-fail-closed: ファイル不在・パース失敗・不正な mode 値はすべて "off"（無効）へ丸める。
-
-bpy 非依存（標準 `tomllib` は addon の Blender Python 3.11+ / テストの 3.12 にあり）＝pytest 可。
+CLI の `bli policy`（表示/編集ヘルパ）とサーバが同じ fail-closed 読取ロジックを共有するため、
+読取の実体を純 Python の bli-core へ移した。既存の `bli_addon.policy` 参照（ops/spikes/tests）は
+このモジュール経由でそのまま動く。セマンティクス（真実源はユーザローカル policy.toml・
+CLI からの昇格不可・fail-closed）は不変。詳細は bli_core/policy.py の docstring を参照。
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from bli_core.policy import (
+    DEFAULT_MODE,
+    POLICY_FILENAME,
+    VALID_MODES,
+    policy_path,
+    read_allow_hashes,
+    read_exec_mode,
+)
 
-import tomllib
-
-from bli_core import runtime
-
-POLICY_FILENAME = "policy.toml"
-VALID_MODES = ("off", "audited", "trusted")
-DEFAULT_MODE = "off"
-
-
-def policy_path() -> Path:
-    """ユーザローカル policy.toml のパス（`BLI_STATE_DIR/policy.toml`）。"""
-    return runtime.user_state_dir() / POLICY_FILENAME
-
-
-def _load_policy() -> dict[str, Any]:
-    """policy.toml を辞書で返す。不在/パース失敗は空 dict（fail-closed の起点）。"""
-    path = policy_path()
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
-        return {}
-    try:
-        data = tomllib.loads(text)
-    except (tomllib.TOMLDecodeError, UnicodeError, ValueError):
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def read_exec_mode() -> str:
-    """policy.toml の `[exec] mode` を返す。不在/不正は "off"（fail-closed・R-A）。
-
-    CLI が送るどんな値とも独立＝この関数だけが exec の可否を決める真実源。
-    """
-    exec_section = _load_policy().get("exec")
-    if isinstance(exec_section, dict):
-        mode = exec_section.get("mode")
-        if mode in VALID_MODES:
-            return str(mode)
-    return DEFAULT_MODE
-
-
-def read_allow_hashes() -> frozenset[str]:
-    """policy.toml の `[exec] allow_hashes`（許可コードの sha256・小文字16進）を返す（M11 T11.3・R-B）。
-
-    audited モードはここに一致する sha256 のコードだけ自走実行する。不在/不正は空集合（fail-closed）。
-    要素は小文字に正規化し、文字列でないものは無視する。
-    """
-    exec_section = _load_policy().get("exec")
-    if not isinstance(exec_section, dict):
-        return frozenset()
-    raw = exec_section.get("allow_hashes")
-    if not isinstance(raw, list):
-        return frozenset()
-    # コピペ事故（前後空白・大文字）で沈黙して自走しない事態を減らすため strip + lower で正規化する。
-    return frozenset(h.strip().lower() for h in raw if isinstance(h, str))
+__all__ = [
+    "DEFAULT_MODE",
+    "POLICY_FILENAME",
+    "VALID_MODES",
+    "policy_path",
+    "read_allow_hashes",
+    "read_exec_mode",
+]

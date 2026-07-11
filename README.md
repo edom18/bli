@@ -87,5 +87,6 @@ python scripts/build_addon.py                                   # 配布 zip を
 `CLAUDE.md` に「Blender 操作は `bli` を使う。まず `bli list-commands --json` で発見する」と書いておくと、エージェントが迷わない。
 
 ## セキュリティ
-信頼境界はOSプロセス/FS境界。`exec-python` は既定 off。`127.0.0.1` 固定 + トークン認証。
+信頼境界はOSプロセス/FS境界。`exec-python` は既定 off（`restricted` で AST ブロックリスト検査つき自走可・
+有効化は `bli policy --action set --mode restricted`）。`127.0.0.1` 固定 + トークン認証。
 詳細: `specs/blender-cli-core/spec.md` §6。

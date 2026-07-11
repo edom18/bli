@@ -31,15 +31,23 @@ class AuditEntry:
     """1 件の exec 監査イベント。"""
 
     ts: str  # ISO8601 UTC
-    mode: str  # off | audited | trusted
-    decision: str  # executed | rejected:off | rejected:audited-unlisted
+    mode: str  # off | restricted | audited | trusted
+    decision: (
+        str  # executed | rejected:off | rejected:audited-unlisted | rejected:restricted-blocked
+    )
     code_sha256: str | None
     code_len: int | None
     heuristic_flags: list[str]
     source: str  # "code" | "file:<path>"
+    # restricted の拒否理由（exec_restricted.scan_blocked の結果・P1-1）。None は「検査対象外の
+    # 経路」＝to_dict で省略し、既存 JSONL 行のスキーマを変えない（blocked: [] は「検査して通過」）。
+    blocked: list[str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return dataclasses.asdict(self)
+        d = dataclasses.asdict(self)
+        if d.get("blocked") is None:
+            del d["blocked"]
+        return d
 
 
 def make_entry(
@@ -50,6 +58,7 @@ def make_entry(
     code_sha256: str | None = None,
     code_len: int | None = None,
     heuristic_flags: list[str] | None = None,
+    blocked: list[str] | None = None,
 ) -> AuditEntry:
     """監査エントリを組み立てる（ts は UTC now）。"""
     return AuditEntry(
@@ -60,6 +69,7 @@ def make_entry(
         code_len=code_len,
         heuristic_flags=heuristic_flags or [],
         source=source,
+        blocked=blocked,
     )
 
 
