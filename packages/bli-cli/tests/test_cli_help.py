@@ -57,7 +57,7 @@ def test_m6_t62_commands_discoverable():
     schema = json.loads(runner.invoke(app, ["help", "--command", "duplicate", "--json"]).output)[
         "schema"
     ]
-    assert set(schema["properties"]) == {"targets", "linked", "count", "offset"}
+    assert set(schema["properties"]) == {"targets", "regex", "linked", "count", "offset"}
     assert schema["required"] == ["targets"]
     assert schema["properties"]["offset"]["type"] == "array"
 
@@ -91,7 +91,14 @@ def test_m6_t63_material_discoverable():
     schema = json.loads(runner.invoke(app, ["help", "--command", "material", "--json"]).output)[
         "schema"
     ]
-    assert set(schema["properties"]) == {"action", "targets", "name", "color", "make_single_user"}
+    assert set(schema["properties"]) == {
+        "action",
+        "targets",
+        "regex",
+        "name",
+        "color",
+        "make_single_user",
+    }
     assert schema["required"] == ["action"]  # targets/name は action 別に ops 側で必須化
     color = schema["properties"]["color"]
     assert color["type"] == "array" and color["minItems"] == 4 and color["maxItems"] == 4
@@ -184,6 +191,7 @@ def test_m7_mesh_discoverable():
     assert set(schema["properties"]) == {
         "op",
         "targets",
+        "regex",
         "inside",
         "distance",
         "offset",
@@ -236,6 +244,7 @@ def test_m8_straighten_discoverable():
     ]
     assert set(schema["properties"]) == {
         "targets",
+        "regex",
         "method",
         "up_axis",
         "axis",
@@ -315,6 +324,7 @@ def test_m8_print_check_repair_discoverable():
     ]
     assert set(chk["properties"]) == {
         "targets",
+        "regex",
         "manifold",
         "normals",
         "degenerate",
@@ -332,6 +342,7 @@ def test_m8_print_check_repair_discoverable():
     ]
     assert set(rep["properties"]) == {
         "targets",
+        "regex",
         "make_manifold",
         "recalc_normals",
         "remove_degenerate",
@@ -356,6 +367,7 @@ def test_m8_print_export_discoverable():
     ]
     assert set(schema["properties"]) == {
         "targets",
+        "regex",
         "format",
         "path",
         "ascii",
@@ -391,7 +403,7 @@ def test_m9_export_discoverable():
     schema = json.loads(runner.invoke(app, ["help", "--command", "export", "--json"]).output)[
         "schema"
     ]
-    assert set(schema["properties"]) == {"format", "path", "targets", "use_selection"}
+    assert set(schema["properties"]) == {"format", "path", "targets", "regex", "use_selection"}
     # targets は任意（--targets/--use-selection/シーン全体の3択）。required は format/path のみ。
     assert set(schema["required"]) == {"format", "path"}
     assert schema["properties"]["format"]["enum"] == ["obj", "fbx", "gltf", "stl", "3mf"]
@@ -623,6 +635,68 @@ def test_busy_rendering_maps_to_timeout_pending_exit():
         "data": {"category": ErrorCategory.ENVIRONMENT, "retryable": True},
     }
     assert main_mod._exit_code_for(err) == ExitCode.TIMEOUT_PENDING
+
+
+def test_exit_code_for_auth_failed_is_connection():
+    # AUTH_FAILED は kind 判定で exit 3（接続不能の一種・設計レビュー 2026-07-11 B1）。
+    from bli_core.errors import ErrorCode, ExitCode
+
+    err = {"message": ErrorCode.AUTH_FAILED, "data": {"category": "ENVIRONMENT"}}
+    assert main_mod._exit_code_for(err) == ExitCode.CONNECTION
+
+
+def test_exit_code_for_protocol_version_mismatch_is_connection():
+    # PROTOCOL_VERSION_MISMATCH も kind 判定で exit 3（同上）。
+    from bli_core.errors import ErrorCode, ExitCode
+
+    err = {"message": ErrorCode.PROTOCOL_VERSION_MISMATCH, "data": {"category": "ENVIRONMENT"}}
+    assert main_mod._exit_code_for(err) == ExitCode.CONNECTION
+
+
+def test_exit_code_for_retryable_true_beats_kind_is_timeout_pending():
+    # retryable=True が真実源＝未知の kind でも retryable なら exit 2（サーバの kind 追加に追従不要）。
+    from bli_core.errors import ExitCode
+
+    err = {"message": "SOME_FUTURE_KIND", "data": {"category": "ENVIRONMENT", "retryable": True}}
+    assert main_mod._exit_code_for(err) == ExitCode.TIMEOUT_PENDING
+
+
+def test_exit_code_for_invalid_params_is_input():
+    # kind==INVALID_PARAMS は exit 4。
+    from bli_core.errors import ErrorCode, ExitCode
+
+    err = {"message": ErrorCode.INVALID_PARAMS, "data": {"category": "USER_INPUT"}}
+    assert main_mod._exit_code_for(err) == ExitCode.INPUT
+
+
+def test_exit_code_for_user_input_category_is_input():
+    # kind が INVALID_PARAMS でなくても category==USER_INPUT なら exit 4（E_TARGET_NOT_FOUND 等）。
+    from bli_core.errors import ErrorCode, ExitCode
+
+    err = {"message": ErrorCode.E_TARGET_NOT_FOUND, "data": {"category": "USER_INPUT"}}
+    assert main_mod._exit_code_for(err) == ExitCode.INPUT
+
+
+def test_exit_code_for_default_is_failure():
+    # 上記いずれにも該当しない業務エラーは確定失敗として exit 1。
+    from bli_core.errors import ErrorCode, ExitCode
+
+    err = {
+        "message": ErrorCode.E_OPERATOR,
+        "data": {"category": "PRECONDITION", "retryable": False},
+    }
+    assert main_mod._exit_code_for(err) == ExitCode.FAILURE
+
+
+def test_exit_code_for_missing_data_defaults_to_failure():
+    # data が無い/dict でない防御（retryable/category を読めない）＝確定失敗 exit 1 に倒す。
+    from bli_core.errors import ExitCode
+
+    assert main_mod._exit_code_for({"message": "E_SOMETHING"}) == ExitCode.FAILURE
+    assert main_mod._exit_code_for({"message": "E_SOMETHING", "data": None}) == ExitCode.FAILURE
+    assert main_mod._exit_code_for({"message": "E_SOMETHING", "data": "not-a-dict"}) == (
+        ExitCode.FAILURE
+    )
 
 
 def test_watchdog_suffix_responsive_is_empty():

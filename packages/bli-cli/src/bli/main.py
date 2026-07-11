@@ -104,15 +104,24 @@ def _parse_vec(name: str, raw: str, n: int) -> list[float]:
 
 
 def _exit_code_for(err: dict[str, Any]) -> ExitCode:
-    """サーバ error の kind/category から終了コードを決める（spec §8）。"""
+    """サーバ error を終了コードへ写像する（spec §8）。
+
+    ErrorObject の `retryable` フラグを真実源にする（kind 文字列の列挙だとサーバに
+    エラー種別を足すたび CLI との手動同期が要る。設計レビュー 2026-07-11 B1）。
+    retryable=True（TIMEOUT/BUSY_RENDERING/SESSION_BUSY/IN_PROGRESS）→ exit 2（未決・再試行可）。
+    AUTH_FAILED/PROTOCOL_VERSION_MISMATCH は「接続不能」の一種なので kind で exit 3 に写像する
+    （ErrorObject に接続層の軸は無いためここだけ kind 判定が残る）。
+    """
     kind = err.get("message", "")
     data = err.get("data")
-    category = data.get("category") if isinstance(data, dict) else None
-    if kind == ErrorCode.TIMEOUT:
-        return ExitCode.TIMEOUT_PENDING  # 未決: request-status で後追い
-    if kind == ErrorCode.BUSY_RENDERING:
-        return ExitCode.TIMEOUT_PENDING  # レンダ中で未受理（retryable・レンダ後に再試行）
-    if kind == ErrorCode.INVALID_PARAMS or category == ErrorCategory.USER_INPUT:
+    obj = data if isinstance(data, dict) else {}
+    if kind in (ErrorCode.AUTH_FAILED, ErrorCode.PROTOCOL_VERSION_MISMATCH):
+        return ExitCode.CONNECTION
+    if obj.get("retryable") is True:
+        return (
+            ExitCode.TIMEOUT_PENDING
+        )  # 未決: request-status 後追い / レンダ・別セッション後に再試行
+    if kind == ErrorCode.INVALID_PARAMS or obj.get("category") == ErrorCategory.USER_INPUT:
         return ExitCode.INPUT
     return ExitCode.FAILURE
 
@@ -510,12 +519,18 @@ def list_objects_cmd(
 @app.command("object-info")
 def object_info(
     targets: str = typer.Option(
-        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+        ..., "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
     """オブジェクトの寸法/頂点数/transform/材質/modifier を取得する。"""
+    params: dict[str, Any] = {"targets": targets}
+    if regex:
+        params["regex"] = True
 
     def human(data: dict[str, Any]) -> str:
         return (
@@ -523,13 +538,16 @@ def object_info(
             f"loc={data.get('location')} dims={data.get('dimensions')}"
         )
 
-    _rpc("object-info", {"targets": targets}, json_out=json_out, port=port, human=human)
+    _rpc("object-info", params, json_out=json_out, port=port, human=human)
 
 
 @app.command("set-origin")
 def set_origin(
     targets: str = typer.Option(
-        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+        ..., "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     to: str = typer.Option(..., "--to", help="原点の決め方: geometry|cursor|world"),
     center: str | None = typer.Option(None, "--center", help="geometry時の中心: median|bounds"),
@@ -547,6 +565,8 @@ def set_origin(
 ) -> None:
     """オブジェクトの原点を変更する。"""
     params: dict[str, Any] = {"targets": targets, "to": to}
+    if regex:
+        params["regex"] = True
     if center is not None:
         params["center"] = center
     if x is not None:
@@ -567,7 +587,10 @@ def set_origin(
 @app.command()
 def straighten(
     targets: str = typer.Option(
-        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+        ..., "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     method: str = typer.Option(
         ..., "--method", help="reset|world-align|pca|floor|angle|align-vector|reference"
@@ -609,6 +632,8 @@ def straighten(
 ) -> None:
     """オブジェクトを直立補正する（reset/world-align/pca/floor/angle/align-vector/reference）。"""
     params: dict[str, Any] = {"targets": targets, "method": method, "up_axis": up_axis}
+    if regex:
+        params["regex"] = True
     if axis is not None:
         params["axis"] = axis
     if up_hint is not None:
@@ -791,7 +816,10 @@ def print_setup(
 @app.command("print-check")
 def print_check(
     targets: str = typer.Option(
-        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+        ..., "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     manifold: bool = typer.Option(False, "--manifold", help="非多様体チェック"),
     normals: bool = typer.Option(False, "--normals", help="反転法線チェック"),
@@ -811,6 +839,8 @@ def print_check(
 ) -> None:
     """3Dプリント健全性をチェックする（manifold/normals/degenerate・件数を返す）。"""
     params: dict[str, Any] = {"targets": targets}
+    if regex:
+        params["regex"] = True
     # カテゴリ flag は presence-sensitive（省略時はサーバが bmesh 3種すべて）。
     if manifold:
         params["manifold"] = True
@@ -846,7 +876,10 @@ def print_check(
 @app.command("print-repair")
 def print_repair(
     targets: str = typer.Option(
-        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+        ..., "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     make_manifold: bool = typer.Option(
         False, "--make-manifold", help="穴埋め/重複マージ/loose 除去で manifold 化"
@@ -865,6 +898,8 @@ def print_repair(
 ) -> None:
     """3Dプリント向けに mesh を best-effort 修復する（全省略で全修復・完全修復は非保証）。"""
     params: dict[str, Any] = {"targets": targets}
+    if regex:
+        params["regex"] = True
     # presence-sensitive: 全省略時はサーバが全修復を実行。
     if make_manifold:
         params["make_manifold"] = True
@@ -898,7 +933,10 @@ def print_repair(
 @app.command("print-export")
 def print_export(
     targets: str = typer.Option(
-        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+        ..., "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     fmt: str = typer.Option(
         "stl", "--format", help="出力形式: stl|3mf（3mf 未導入時は STL を hint）"
@@ -924,6 +962,8 @@ def print_export(
         "scale": scale,
         "apply_modifiers": apply_modifiers,
     }
+    if regex:
+        params["regex"] = True
 
     def human(data: dict[str, Any]) -> str:
         return (
@@ -939,7 +979,13 @@ def export(
     fmt: str = typer.Option(..., "--format", help="出力形式: obj|fbx|gltf|stl|3mf"),
     path: str = typer.Option(..., "--path", help="出力ファイルパス（gltf は .glb 必須＝GLB 単一）"),
     targets: str | None = typer.Option(
-        None, "--targets", "--target", help="対象（name|regex・指定時はこれを書き出す）"
+        None,
+        "--targets",
+        "--target",
+        help="対象（完全一致・--regex で正規表現・指定時はこれを書き出す）",
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     use_selection: bool = typer.Option(
         False,
@@ -957,6 +1003,8 @@ def export(
     params: dict[str, Any] = {"format": fmt, "path": path, "use_selection": use_selection}
     if targets is not None:
         params["targets"] = targets
+    if regex:
+        params["regex"] = True
 
     def human(data: dict[str, Any]) -> str:
         scope = (
@@ -1115,7 +1163,10 @@ def exec_python(
 @app.command()
 def select(
     targets: str = typer.Option(
-        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+        ..., "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     type_filter: str | None = typer.Option(None, "--type", help="型フィルタ（MESH/CURVE/...）"),
     active: str | None = typer.Option(None, "--active", help="active にする対象名"),
@@ -1125,6 +1176,8 @@ def select(
 ) -> None:
     """オブジェクトを選択し active を設定する。"""
     params: dict[str, Any] = {"targets": targets}
+    if regex:
+        params["regex"] = True
     if type_filter is not None:
         params["type"] = type_filter
     if active is not None:
@@ -1139,7 +1192,10 @@ def select(
 @app.command()
 def transform(
     targets: str = typer.Option(
-        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+        ..., "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     location: str | None = typer.Option(None, "--location", help="位置 x,y,z"),
     rotation: str | None = typer.Option(None, "--rotation", help="回転 x,y,z（度）"),
@@ -1153,6 +1209,8 @@ def transform(
 ) -> None:
     """オブジェクトの位置/回転/拡縮を設定または相対適用する。"""
     params: dict[str, Any] = {"targets": targets, "mode": mode}
+    if regex:
+        params["regex"] = True
     try:
         if location is not None:
             params["location"] = _parse_vec("location", location, 3)
@@ -1176,7 +1234,10 @@ def transform(
 @app.command("apply-transform")
 def apply_transform_cmd(
     targets: str = typer.Option(
-        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+        ..., "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     location: bool = typer.Option(False, "--location", help="位置を適用"),
     rotation: bool = typer.Option(False, "--rotation", help="回転を適用"),
@@ -1190,6 +1251,8 @@ def apply_transform_cmd(
 ) -> None:
     """オブジェクトの transform をメッシュデータに適用する（全省略時は全適用）。"""
     params: dict[str, Any] = {"targets": targets}
+    if regex:
+        params["regex"] = True
     if location:
         params["location"] = True
     if rotation:
@@ -1213,7 +1276,10 @@ def apply_transform_cmd(
 @app.command()
 def duplicate(
     targets: str = typer.Option(
-        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+        ..., "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     linked: bool = typer.Option(False, "--linked", help="データを共有する（リンク複製）"),
     count: int = typer.Option(1, "--count", help="複製数（1〜1000）"),
@@ -1233,6 +1299,8 @@ def duplicate(
         )
         raise typer.Exit(int(ExitCode.INPUT))
     params: dict[str, Any] = {"targets": targets, "count": count}
+    if regex:
+        params["regex"] = True
     if linked:
         params["linked"] = True
     try:
@@ -1251,7 +1319,10 @@ def duplicate(
 @app.command()
 def delete(
     targets: str = typer.Option(
-        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+        ..., "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     request_id: str | None = typer.Option(None, "--id", help="リクエストID(UUIDv4)"),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
@@ -1259,6 +1330,8 @@ def delete(
 ) -> None:
     """オブジェクトを削除する（削除前サマリを backup として結果に残す）。"""
     params: dict[str, Any] = {"targets": targets}
+    if regex:
+        params["regex"] = True
 
     def human(data: dict[str, Any]) -> str:
         bk = data.get("backup") or {}
@@ -1271,7 +1344,10 @@ def delete(
 def material(
     action: str = typer.Option(..., "--action", help="操作: assign|create|list"),
     targets: str | None = typer.Option(
-        None, "--targets", "--target", help="対象オブジェクト（name|regex）"
+        None, "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     name: str | None = typer.Option(
         None, "--name", help="マテリアル名（assign=既存 / create=新規）"
@@ -1288,6 +1364,8 @@ def material(
     params: dict[str, Any] = {"action": action}
     if targets is not None:
         params["targets"] = targets
+    if regex:
+        params["regex"] = True
     if name is not None:
         params["name"] = name
     if make_single_user:
@@ -1317,7 +1395,10 @@ def material(
 def modifier(
     action: str = typer.Option(..., "--action", help="add|remove|list|apply"),
     targets: str = typer.Option(
-        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+        ..., "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     type_: str | None = typer.Option(
         None, "--type", help="add の種類: MIRROR|SUBSURF|SOLIDIFY|DECIMATE|BOOLEAN"
@@ -1340,6 +1421,8 @@ def modifier(
 ) -> None:
     """モディファイアを追加/削除/一覧/適用する（add は --type 必須・apply は mesh へ焼き込み）。"""
     params: dict[str, Any] = {"action": action, "targets": targets}
+    if regex:
+        params["regex"] = True
     if type_ is not None:
         params["type"] = type_
     if name is not None:
@@ -1379,7 +1462,10 @@ def mesh(
         ..., "--op", help="recalc-normals|merge-by-distance|extrude|bevel|inset|boolean|decimate"
     ),
     targets: str = typer.Option(
-        ..., "--targets", "--target", help="対象オブジェクト（name|regex）"
+        ..., "--targets", "--target", help="対象オブジェクト（完全一致・--regex で正規表現）"
+    ),
+    regex: bool = typer.Option(
+        False, "--regex", help="targets を正規表現として解釈する（既定は完全名一致）"
     ),
     inside: bool = typer.Option(False, "--inside", help="recalc-normals: 法線を内向きに"),
     distance: float | None = typer.Option(
@@ -1416,6 +1502,8 @@ def mesh(
 ) -> None:
     """メッシュを編集する（法線再計算 / 距離マージ / 押し出し / ベベル / インセット / ブール / デシメート）。"""
     params: dict[str, Any] = {"op": op, "targets": targets}
+    if regex:
+        params["regex"] = True
     # op 専用 param は明示時のみ送る（op 別検証で別 op への誤送信を弾けるよう presence を保つ）。
     if inside:
         params["inside"] = True

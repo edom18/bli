@@ -157,16 +157,18 @@ def exec_user_code(code: str) -> tuple[Any, str]:
 
 
 def resolve_targets(selector: str, *, regex: bool = False) -> list[Any]:
-    """selector からオブジェクト群を解決する（完全名 > regex）。
+    """selector からオブジェクト群を解決する（既定は完全名一致のみ・regex=True で正規表現照合）。
 
-    完全名に一致しない場合は regex 照合。不正な正規表現は INTERNAL ではなく
-    USER_INPUT エラーにする（共有リゾルバなので targets を取る全コマンドに効く。Codex P2）。
+    かつては完全名の不一致時に暗黙で regex 照合へフォールバックしていたが、Blender の既定命名
+    `Cube.001` は `.`（regex の任意一文字）を含むため、typo した targets が別オブジェクトへ静かに
+    誤マッチし得る（delete/apply 等の破壊系で実害）。明示 opt-in（--regex）へ分離した
+    （設計レビュー 2026-07-11 B2）。不正な正規表現は INTERNAL ではなく USER_INPUT エラーにする
+    （共有リゾルバなので targets を取る全コマンドに効く。Codex P2）。
     """
     objs = bpy.data.objects
     if not regex:
         obj = objs.get(selector)
-        if obj is not None:
-            return [obj]
+        return [obj] if obj is not None else []
     try:
         pattern = re.compile(selector)
     except re.error as e:
@@ -178,13 +180,31 @@ def resolve_targets(selector: str, *, regex: bool = False) -> list[Any]:
     return [o for o in objs if pattern.search(o.name)]
 
 
+def _regex_match_hint(selector: str, *, regex: bool) -> str:
+    """完全名一致 0 件時の移行ヒント。regex として解釈すると N 件当たるなら --regex を案内する。
+
+    暗黙フォールバック廃止（B2）でこれまで regex 頼みだった呼び出しが 0 件になるため、
+    E_TARGET_NOT_FOUND の症状文に脱出手段を添える（regex 指定済み・不正 regex・0 件なら空文字）。
+    """
+    if regex:
+        return ""
+    try:
+        pattern = re.compile(selector)
+    except re.error:
+        return ""
+    n = sum(1 for o in bpy.data.objects if pattern.search(o.name))
+    return (
+        f"（正規表現として解釈すると {n} 件に一致します。--regex を指定してください）" if n else ""
+    )
+
+
 def require_single(selector: str, *, regex: bool = False) -> Any:
     """対象を1つに解決する。0件/複数はエラー。"""
     found = resolve_targets(selector, regex=regex)
     if not found:
         raise _op_error(
             ErrorCode.E_TARGET_NOT_FOUND,
-            f"対象が見つかりません: {selector}",
+            f"対象が見つかりません: {selector}{_regex_match_hint(selector, regex=regex)}",
             category=ErrorCategory.USER_INPUT,
         )
     if len(found) > 1:
@@ -269,9 +289,10 @@ def object_summary(obj: Any) -> dict[str, Any]:
         data["polygons"] = len(obj.data.polygons)
         data["mesh_users"] = obj.data.users
     data["modifiers"] = [m.name for m in obj.modifiers]
-    data["materials"] = (
-        [m.name for m in obj.data.materials] if getattr(obj.data, "materials", None) else []
-    )
+    # material --action list と同じ窓口（list_object_materials＝material_slots・slot.link 尊重）で
+    # 読む。data.materials 直読みは OBJECT リンク slot で実効マテリアルと乖離し、object-info と
+    # material 一覧が食い違う（設計レビュー 2026-07-11 B3）。空スロットは None で報告する。
+    data["materials"] = [m["name"] for m in list_object_materials(obj)]
     return data
 
 
@@ -526,23 +547,25 @@ def apply_transform(
 def select_objects(
     targets: str,
     *,
+    regex: bool = False,
     type_filter: str | None = None,
     active: str | None = None,
     message: str | None = None,
 ) -> dict[str, Any]:
-    """targets(name|regex) を選択し active を設定する（select_set / active 直接設定・op不要）。"""
+    """targets を選択し active を設定する（select_set / active 直接設定・op不要）。"""
     # 選択は view layer 操作。グローバル解決後に **アクティブ view layer 内**へ絞る。
     # 別シーン/除外コレクションの object を弾いてから状態を変更する（Codex P2: 状態を汚さない）。
     view_layer = bpy.context.view_layer
     vl_names = {o.name for o in view_layer.objects}
-    matched = [o for o in resolve_targets(targets) if o.name in vl_names]  # 完全名 > regex
+    matched = [o for o in resolve_targets(targets, regex=regex) if o.name in vl_names]
     if type_filter is not None:
         want = type_filter.upper()
         matched = [o for o in matched if o.type == want]
     if not matched:
         raise _op_error(
             ErrorCode.E_TARGET_NOT_FOUND,
-            f"対象が見つかりません（アクティブ view layer 内）: {targets}",
+            f"対象が見つかりません（アクティブ view layer 内）: {targets}"
+            f"{_regex_match_hint(targets, regex=regex)}",
             category=ErrorCategory.USER_INPUT,
         )
 
@@ -1594,7 +1617,18 @@ def save_blend(path: str, *, backup: bool) -> None:
     saved_version = prefs.save_version
     try:
         prefs.save_version = 1 if backup else 0
-        run_operator(bpy.ops.wm.save_as_mainfile, filepath=path, check_existing=False)
+        try:
+            run_operator(bpy.ops.wm.save_as_mainfile, filepath=path, check_existing=False)
+        except JsonRpcError:
+            raise  # run_operator 内で写像済み（poll 不可 / FINISHED 以外 / RuntimeError）
+        except Exception as e:
+            # ディスク満杯/権限エラー（OSError）等も入力起因 → E_OPERATOR に写像し INTERNAL 化を
+            # 防ぐ（open_blend と同流儀・設計レビュー 2026-07-11 B4）。
+            raise _op_error(
+                ErrorCode.E_OPERATOR,
+                f".blend を保存できませんでした（パス/空き容量/権限を確認してください）: "
+                f"{type(e).__name__}: {e}",
+            ) from e
     finally:
         prefs.save_version = saved_version
 
@@ -1709,7 +1743,7 @@ def require_targets(selector: str, *, regex: bool = False) -> list[Any]:
     if not found:
         raise _op_error(
             ErrorCode.E_TARGET_NOT_FOUND,
-            f"対象が見つかりません: {selector}",
+            f"対象が見つかりません: {selector}{_regex_match_hint(selector, regex=regex)}",
             category=ErrorCategory.USER_INPUT,
         )
     return found

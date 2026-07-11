@@ -136,7 +136,7 @@ def _object_info(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     from . import gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
-    obj = gateway.require_single(str(params["targets"]))
+    obj = gateway.require_single(str(params["targets"]), regex=bool(params.get("regex", False)))
     return _ok(
         "object-info", gateway.object_summary(obj), fingerprint=gateway.object_fingerprint(obj)
     )
@@ -152,6 +152,7 @@ def _select(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     active = params.get("active")
     data = gateway.select_objects(
         str(params["targets"]),
+        regex=bool(params.get("regex", False)),
         type_filter=str(type_filter) if type_filter is not None else None,
         active=str(active) if active is not None else None,
         message="select",
@@ -240,7 +241,7 @@ def _transform(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     from . import gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
-    obj = gateway.require_single(str(params["targets"]))
+    obj = gateway.require_single(str(params["targets"]), regex=bool(params.get("regex", False)))
     mode = str(params.get("mode", "set"))
     data = gateway.transform_object(
         obj,
@@ -277,7 +278,7 @@ def _apply_transform(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]
     from . import gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
-    obj = gateway.require_single(str(params["targets"]))
+    obj = gateway.require_single(str(params["targets"]), regex=bool(params.get("regex", False)))
     # 破壊的（mesh データへ焼き込む）。共有 mesh は set-origin と同様にガードする。
     _guard_shared_mesh(gateway, obj, params)
     data = gateway.apply_transform(
@@ -302,7 +303,7 @@ def _duplicate(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     from . import gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
-    obj = gateway.require_single(str(params["targets"]))
+    obj = gateway.require_single(str(params["targets"]), regex=bool(params.get("regex", False)))
     offset = params.get("offset")
     linked = bool(params.get("linked", False))
     created = gateway.duplicate_object(
@@ -322,7 +323,7 @@ def _delete(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     from . import gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
-    obj = gateway.require_single(str(params["targets"]))
+    obj = gateway.require_single(str(params["targets"]), regex=bool(params.get("regex", False)))
     # 削除前にサマリ/fingerprint を取得する（削除後は obj が無効化されアクセス不可）。
     # 共有 mesh でも安全（object のみ除去・データは他利用者が残れば保持）→ ガード不要。
     name = obj.name
@@ -362,7 +363,7 @@ def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     from . import gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
-    obj = gateway.require_single(str(targets))
+    obj = gateway.require_single(str(targets), regex=bool(params.get("regex", False)))
     gateway.require_material_support(obj)
 
     if action == "list":
@@ -471,7 +472,7 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     from . import gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
-    obj = gateway.require_single(str(params["targets"]))
+    obj = gateway.require_single(str(params["targets"]), regex=bool(params.get("regex", False)))
     # 非対応型（EMPTY/LIGHT/CAMERA 等）を INTERNAL でなく E_PRECONDITION で弾く（material と同様）。
     gateway.require_modifier_support(obj)
 
@@ -626,7 +627,7 @@ def _mesh(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     from . import bmesh_ops, gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
-    obj = gateway.require_single(str(params["targets"]))
+    obj = gateway.require_single(str(params["targets"]), regex=bool(params.get("regex", False)))
     # 非 mesh 型（EMPTY/CURVE 等）を INTERNAL でなく E_PRECONDITION で弾く（material と同様）。
     gateway.require_mesh(obj)
     # boolean の相手は **共有ガード（単一ユーザ化）の前** に解決・検証する（不正な相手で obj の
@@ -678,7 +679,7 @@ def _set_origin(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     from . import gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
-    obj = gateway.require_single(str(params["targets"]))
+    obj = gateway.require_single(str(params["targets"]), regex=bool(params.get("regex", False)))
     to = str(params["to"])
 
     # 共有 mesh は明示許可（make_single_user）が無い限り拒否する。
@@ -794,7 +795,7 @@ def _straighten(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     from . import gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
-    obj = gateway.require_single(str(params["targets"]))
+    obj = gateway.require_single(str(params["targets"]), regex=bool(params.get("regex", False)))
     # method 別の前提（非対応型は INTERNAL でなく E_PRECONDITION）。
     reference_obj = None
     if method == "pca":
@@ -897,7 +898,7 @@ def _print_check(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     from . import bmesh_ops, gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
-    obj = gateway.require_single(str(params["targets"]))
+    obj = gateway.require_single(str(params["targets"]), regex=bool(params.get("regex", False)))
     gateway.require_mesh(obj)
     # thin（薄壁）/ intersect（自己交差）は print3d 依存。要求 かつ 未導入なら CAPABILITY_UNAVAILABLE
     # で縮退する（§E6・この環境では print3d 実体なし）。manifold/normals/degenerate は bmesh 自前で常時可。
@@ -950,7 +951,7 @@ def _print_repair(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     from . import bmesh_ops, gateway  # lazy: bpy 依存
 
     _check_mode(cmd, gateway.current_mode())
-    obj = gateway.require_single(str(params["targets"]))
+    obj = gateway.require_single(str(params["targets"]), regex=bool(params.get("regex", False)))
     gateway.require_mesh(obj)
     # mesh データを書き換える破壊的操作 → 共有 mesh は単一ユーザ化を要求（apply 系と同様）。
     _guard_shared_mesh(gateway, obj, params)
@@ -1250,7 +1251,7 @@ def _print_export(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             "--format stl を使ってください（大半のスライサは STL を受容します）",
         )
 
-    obj = gateway.require_single(str(params["targets"]))
+    obj = gateway.require_single(str(params["targets"]), regex=bool(params.get("regex", False)))
     gateway.require_mesh(obj)  # STL は mesh のみ
     # 出力先ディレクトリの不在は operator の生 RuntimeError（INTERNAL 化）になり得るため弾く
     # （path は addon プロセス側＝Blender の CWD 基準で解決される）。
@@ -1351,7 +1352,7 @@ def _export(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
 
     # セレクタ解決: --targets 指定=その集合 / --use-selection=現在の選択集合 / どちらも省略=シーン全体（None）。
     if targets is not None:
-        select_objs = gateway.require_targets(str(targets))
+        select_objs = gateway.require_targets(str(targets), regex=bool(params.get("regex", False)))
     elif use_selection:
         select_objs = gateway.current_selection()
         _require_input(

@@ -182,8 +182,15 @@
 
 ## 9. Target 解決（状態管理）
 
-- 入力: `--targets <name|regex|session_uid>`。
-- 解決順: session_uid > 完全名 > regex。
+- 入力: `--targets <name>` + 任意 `--regex`（session_uid は当初案から未実装のまま廃止・設計レビュー
+  2026-07-11 B2）。
+- 解決順: `--regex` 省略時は**完全名一致のみ**（`bpy.data.objects.get(name)`）。`--regex` 明示時のみ
+  正規表現照合（`re.search`）。かつては完全一致 0 件時に regex へ暗黙フォールバックしていたが、
+  Blender の既定命名 `Cube.001` が `.`（regex の任意一文字）を含むため typo が別オブジェクトへ
+  静かに誤マッチし得た。明示 opt-in に分離した。
+- 完全一致 0 件・`--regex` が正規表現として解釈すると当たる場合は、`E_TARGET_NOT_FOUND` の
+  症状文に一致件数と `--regex` 使用のヒントを添える。不正な正規表現（`--regex` 指定時のみ評価）は
+  `E_PRECONDITION`（category=USER_INPUT）。
 - 実行直前（dispatcher デキュー後）に再解決し `select_set` / active を再設定。
 - 不在: `E_TARGET_NOT_FOUND`。複数該当: コマンドにより許可/拒否。
 - レスポンスに状態フィンガープリント（選択/active/mode のハッシュ）を付与。乖離時 `W_STATE_DRIFT`。

@@ -60,3 +60,15 @@
 **Case: Windows のソケット切断を正常系だけで扱った**
 状況：Windows では切断が RST（ConnectionReset）になり得る。空 recv だけ想定すると落ちる。
 → 対策：テストは空 recv と RST の両方を許容する。
+
+**Case: フェイク `bpy` を差し込んで `bli_addon.gateway` を直接 import するテストで、後片付けを
+`sys.modules.pop("bli_addon.gateway", None)` だけにした**
+状況：`from . import gateway`（ops.py 等の相対 import）は、親パッケージ `bli_addon` に既に
+　`gateway` 属性があれば **sys.modules を経由せずそれを直接使う**（Python の import 属性キャッシュ）。
+　sys.modules から pop するだけでは `bli_addon.__dict__["gateway"]` が残り、フェイク bpy を積んだ
+　モジュールが後続テストへ漏れる。他テストは「bpy 無し＝ModuleNotFoundError」を前提にしており、
+　`AttributeError`（フェイク bpy の未実装属性）に化けて誤検出しにくい形で壊れた。
+→ 対策：後片付けは `sys.modules.pop("bli_addon.gateway", None)` **と**
+　`sys.modules["bli_addon"].__dict__.pop("gateway", None)` の両方を行う（`test_gateway_targets.py`
+　の `_forget_gateway_module()`）。同じ罠は他の bpy 依存サブモジュールをフェイクで直接テストする
+　ときにも当てはまる（P1-1/P1-2 で同様のテストを書く際は要注意）。
