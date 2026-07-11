@@ -1,6 +1,10 @@
 # bli (Blender CLI)
 
-AIエージェントがCLI経由でBlenderを自律操作するツール。
+Blender を **CLI から汎用操作する基盤**（AIエージェント向け）。
+生成・変形・メッシュ編集・マテリアル・シーン整理・ファイル I/O まで、Blender の一般的な操作を
+構造化サブコマンドで安全に自律実行できる。原点変更・直立補正・3Dプリンタ対応（単位/健全性チェック/
+STL書き出し）は代表的なユースケース例。Unity 等ゲームエンジン連携（import → 変形・修復・原点調整 →
+FBX/GLB export）にも使える。
 MCPのトークン非効率を避け、CLIファーストで設計（参照: hatayama/unity-cli-loop）。
 
 ## 構成（monorepo / uv workspace）

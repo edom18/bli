@@ -575,9 +575,9 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
-        "description": "シーン内オブジェクトを type/regex でフィルタして一覧する",
+        "description": "シーン内オブジェクトを type/名前正規表現 でフィルタして一覧する",
         "properties": {
-          "regex": {
+          "name_regex": {
             "description": "名前の正規表現フィルタ（部分一致）",
             "type": "string"
           },
@@ -590,7 +590,7 @@
         "type": "object"
       },
       "stability": "stable",
-      "summary": "シーン内オブジェクトを type/regex でフィルタして一覧する"
+      "summary": "シーン内オブジェクトを type/名前正規表現 でフィルタして一覧する"
     },
     {
       "capability_deps": [],
@@ -1744,5 +1744,5 @@
     }
   ],
   "note": "SSOT（bli-core definitions）から生成。手で編集しない。再生成: uv run python scripts/generate_cli_schema.py",
-  "schema_hash": "185188b11a1f457985e0112d91129802d94ac0ad4135a4913a6cfa3bfc807775"
+  "schema_hash": "2bffc13797c5edca2e151daee8153a94049081caca0d084a215da5d038819951"
 }

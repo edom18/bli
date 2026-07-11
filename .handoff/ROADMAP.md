@@ -22,7 +22,7 @@
 | M5 | 情報取得（list-objects / object-info bbox / scene-info の output_ref 退避） | ✅ | PR #2 |
 | M6 | 汎用編集（select/transform/apply-transform・duplicate/delete・material・modifier） | ✅ | PR #3–#6 |
 | M7 | メッシュ編集（mesh --op: bmesh 一次 + heavy は modifier 経由） | ✅ | PR #7–#9 |
-| **M8** | **3シナリオ中核価値（set-origin / straighten / print-*）+ 実地フィードバック対応** | ✅ **完了**（PR #10–#18, #20） | 下記 §M8 |
+| **M8** | **代表ユースケース（ドメインパック: set-origin / straighten / print-*）+ 実地フィードバック対応** | ✅ **完了**（PR #10–#18, #20） | 下記 §M8 |
 | **M9** | ファイルI/O（export / import / save / open・3mf 不可→CAPABILITY） | ✅ **完了**: T9.1 export(#21)/T9.2 import(#22)/T9.3 save(#23)/T9.4 open(#25) | 確定要約 HANDOFF §6i / GT research §E9・§E10・§E11 |
 | **M10** | 非同期job & フリーズ対策（job 化 / render busy / watchdog） | ✅ **完了**: T10.1 job 化(#27)・T10.2 render busy(#28)・T10.3 watchdog(#30) | 確定要約 HANDOFF §6j / GT research §E12・§E13（--dry-run は M13 繰越） |
 | **M11** | exec-python（既定 off・`EXEC_DISABLED` / audited=許可ハッシュ自走 / trusted・AST flag・監査） | ✅ **完了**: T11.1 mode ゲート / T11.2 AST flag / T11.3 監査+許可ハッシュ（**PR #32**・base main） | 確定要約 HANDOFF §6k / GT research §E14 |
@@ -34,9 +34,9 @@
 
 ---
 
-## M8 の現況（3シナリオ + 実地フィードバック対応）
+## M8 の現況（代表ユースケース + 実地フィードバック対応）
 
-**M8 はこのプロダクトの中核価値**（spec の3シナリオ: 原点変更 / 直立補正 / 3Dプリンタ対応）。サブPR分割で進行。
+**M8 は代表ユースケース（ドメインパック）**（spec の3例: 原点変更 / 直立補正 / 3Dプリンタ対応）。汎用基盤の上に載る具体例という位置づけ。サブPR分割で進行。
 
 ### コア3シナリオ（タスク T8.x）
 | タスク | コマンド | 状態 |

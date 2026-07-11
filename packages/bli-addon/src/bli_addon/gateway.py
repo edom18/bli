@@ -837,14 +837,23 @@ def parent_set(
     keep_transform: bool = True,
     message: str | None = None,
 ) -> list[dict[str, Any]]:
-    """children の親を parent_obj に設定する（自己参照/循環は事前拒否・op 不要）。"""
+    """children の親を parent_obj に設定する（自己参照/循環は事前拒否・op 不要）。
+
+    keep_transform は **world を退避→復元**で保つ（parent_clear と同型・レビュー R1-2）。
+    matrix_parent_inverse を新親の逆行列にするだけの方式は、子が既に別の親を持つ
+    （matrix_basis ≠ matrix_world となる）付け替えで world 位置が飛ぶ:
+    Blender の関係式は matrix_world = parent.matrix_world @ matrix_parent_inverse @ matrix_basis
+    のため。matrix_parent_inverse も新親基準に揃えてから matrix_world を書き戻す
+    （実機再現 5.0: 旧親を動かした後の付け替えで delta=10 → 本方式で 0 を確認）。
+    """
     require_valid_parent(children, parent_obj)
     results: list[dict[str, Any]] = []
     for child in children:
-        inv = parent_obj.matrix_world.inverted() if keep_transform else None
+        world = child.matrix_world.copy()
         child.parent = parent_obj
         if keep_transform:
-            child.matrix_parent_inverse = inv
+            child.matrix_parent_inverse = parent_obj.matrix_world.inverted()
+            child.matrix_world = world
         results.append({"name": child.name, "parent": parent_obj.name})
     if message:
         push_undo(message)

@@ -480,6 +480,24 @@ def test_parent_set_assigns_parent_and_returns_results(make_gateway):
     assert results == [{"name": "Child", "parent": "Parent"}]
 
 
+def test_parent_set_keep_transform_restores_world_for_reparent(make_gateway):
+    # R1-2: 既に別の親を持つ子の付け替えでも world を退避→復元する（parent_clear と同型）。
+    # matrix_parent_inverse だけ書く旧方式は matrix_basis ≠ matrix_world の子で位置が飛んだ
+    # （実機再現 5.0: delta=10）。fake bpy は親子の行列連鎖を再現しないため、ここでは
+    # 「復元書き込みが行われ、値が付け替え前の world と一致する」契約を検証する（実値は smoke）。
+    gw = make_gateway()
+    old_parent = _FakeObj("OldParent")
+    new_parent = _FakeObj("NewParent")
+    child = _FakeObj("Child")
+    child.parent = old_parent  # 既に親を持つ＝バグ経路
+    child.matrix_world = _FakeMatrixWorld((13.0, 4.0, 5.0))
+    gw.parent_set([child], new_parent, keep_transform=True)
+    assert child.parent is new_parent
+    restored = child.matrix_world.translation
+    assert (restored.x, restored.y, restored.z) == (13.0, 4.0, 5.0)  # world 復元
+    assert child.matrix_parent_inverse is not None  # 新親基準へ揃え済み
+
+
 def test_parent_clear_keep_transform_restores_world(make_gateway):
     gw = make_gateway()
     child = _FakeObj("Child")

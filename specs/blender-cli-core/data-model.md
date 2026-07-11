@@ -148,11 +148,24 @@
 
 ---
 
-## 7. Config（権限ポリシー / プロジェクトローカル `.bli/config.toml`）
+## 7. Config / Policy
+
+### 7a. exec 権限ポリシー（ユーザローカル `BLI_STATE_DIR/policy.toml`・**真実源**）
+
+サーバはこのファイルだけを読んで exec の可否を決める（R-A・spec §6）。読み書きのスキーマは
+`bli_core.policy` に集約（読取 fail-closed / `bli policy --action set` の自動編集はこの2キー
+以外があると拒否）。
 
 | キー | 型 | 既定 | 説明 |
 |------|----|----|----|
-| `exec.mode` | enum | `off` | off / audited / trusted（§spec §6） |
+| `exec.mode` | enum | `off` | off / restricted / audited / trusted（spec §6・P1-1 で restricted 追加） |
+| `exec.allow_hashes` | list[str] | `[]` | audited 用の許可コード sha256（小文字16進へ正規化して照合） |
+
+### 7b. プロジェクト設定（プロジェクトローカル `.bli/config.toml`・git 管理可）
+
+| キー | 型 | 既定 | 説明 |
+|------|----|----|----|
+| `exec.mode` | enum | `off` | **表示用ヒント**（サーバは読まない＝commit しても昇格しない。真実源は §7a） |
 | `server.port` | int | 9876 | リッスンポート |
 | `server.bind` | str | `127.0.0.1` | 変更不可（ガード） |
 | `server.read_timeout` | float | 30.0 | recvタイムアウト秒 |

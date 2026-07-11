@@ -26,7 +26,7 @@
 | method | params | result | M | H | Mode | St |
 |--------|--------|--------|:-:|:-:|----|:--:|
 | `scene-info` | `--depth?` | シーン階層/オブジェクト一覧/単位（大→output_ref） | - | △ | OBJECT | s |
-| `list-objects` | `--type?` `--regex?` | フィルタ済み一覧 | - | - | OBJECT | s |
+| `list-objects` | `--type?` `--name-regex?` | フィルタ済み一覧 | - | - | OBJECT | s |
 | `object-info` | `--targets` | 寸法/頂点数/transform/bbox/材質/modifier | - | - | OBJECT | s |
 | `capture` | `--source viewport\|screen\|render` `--width?` `--height?` `--camera?`(render) | PNG パス/サイズ/sha256/解像度 | - | - | ANY | s |
 
@@ -34,7 +34,7 @@
 
 > **`dimensions` と `bbox.size` の違い**（紛らわしいので明記）: `dimensions` は **オブジェクト固有サイズ**（`obj.dimensions`・scale 反映・**回転不変**）。`bbox.size` は **world AABB**（`matrix_world @ bound_box` の軸並行境界・**回転すると変化**）。傾いた物体では両者は一致しない。`--targets` は `--target`（単数）も別名で受け付ける。
 
-> **`--targets` の解決セマンティクス**（全 `--targets` パラメータ共通・設計レビュー 2026-07-11 B2）: 既定（`--regex` 省略）は**完全名一致のみ**。`--regex` を明示したときだけ正規表現（`re.search`）として解釈する。暗黙のフォールバックは廃止済み（`Cube.001` のような既定命名は `.` が regex の任意一文字に当たるため、typo が別オブジェクトへ誤マッチし得た）。完全一致 0 件で、それが正規表現として解釈すると当たる場合は `E_TARGET_NOT_FOUND` の症状文に一致件数と `--regex` 使用のヒントを添える。不正な正規表現（`--regex` 指定時のみ評価）は `E_PRECONDITION`（category=USER_INPUT）。
+> **`--targets` の解決セマンティクス**（全 `--targets` パラメータ共通・設計レビュー 2026-07-11 B2）: 既定（`--regex` 省略）は**完全名一致のみ**。`--regex` を明示したときだけ正規表現（`re.search`）として解釈する。暗黙のフォールバックは廃止済み（`Cube.001` のような既定命名は `.` が regex の任意一文字に当たるため、typo が別オブジェクトへ誤マッチし得た）。完全一致 0 件で、それが正規表現として解釈すると当たる場合は `E_TARGET_NOT_FOUND` の症状文に一致件数と `--regex` 使用のヒントを添える。不正な正規表現（`--regex` 指定時のみ評価）は `E_PRECONDITION`（category=USER_INPUT）。**紛らわしい別物**: `list-objects` の名前フィルタは `--name-regex <pat>`（パターン値を取る STR。旧 `--regex <pat>` は CLI 別名で受理・レビュー R1-4 で改名）で、この `--regex`（値なしの解釈フラグ）とは異なる。
 
 ## 汎用編集（オブジェクト操作）
 | method | params | result | M | H | Mode | St |
@@ -70,9 +70,9 @@
 >
 > **`rename`**: `--with-data` で `obj.data` も同名に変更する。要求名が既存と衝突した場合 Blender が `.001` 等へ実名を確定するため、結果は `old_name`/`new_name`（実名）の両方を返す。
 >
-> **`parent`（G3）**: `--to`（親名）と `--clear`（解除）は排他でどちらか必須（`INVALID_PARAMS`）。対象自身を親にしようとした場合、および親にしようとした対象が既に子孫（循環）になる場合は `E_PRECONDITION`（親の祖先チェーンを辿って検出）。`--keep-transform`（既定 on）は設定/解除いずれも見た目のワールド transform を保つ（設定時は `matrix_parent_inverse` を計算・解除時は world 行列を退避→再設定）。`targets` は複数可（`require_targets`）。
+> **`parent`（G3）**: `--to`（親名）と `--clear`（解除）は排他でどちらか必須（`INVALID_PARAMS`）。対象自身を親にしようとした場合、および親にしようとした対象が既に子孫（循環）になる場合は `E_PRECONDITION`（親の祖先チェーンを辿って検出）。`--keep-transform`（既定 on）は設定/解除いずれも見た目のワールド transform を保つ（**設定/解除とも world 行列を退避→復元**。設定時は `matrix_parent_inverse` も新親基準に再計算する。`matrix_parent_inverse` 単独方式は既に別の親を持つ子の付け替えで world が飛ぶため不採用・レビュー R1-2）。`targets` は複数可（`require_targets`）。
 >
-> **`collection`**: `create` は同名重複を `E_PRECONDITION` で拒否。`move` は対象を所属する全 collection から外して指定 collection のみへ link する（シーンから消えない）。`link` は既に link 済みなら静かに skip し結果で報告する（`{name, linked:false}`）。`unlink` は外すと対象の所属 collection が 0 になる場合（view layer から消える事故）を **全対象を検証してから** `E_PRECONDITION` で拒否し、remediation で `move` を促す（部分的に外して状態を汚さない）。`list` は scene の master collection 配下（子 collection）を再帰的に `{name, objects:<count>, children:[...]}` で返す。collection 名の解決は `bpy.data.collections.get`（完全一致のみ）。
+> **`collection`**: `create` は同名重複を `E_PRECONDITION` で拒否。`move` は対象を所属する全 collection から外して指定 collection のみへ link する（シーンから消えない）。`link` は既に link 済みなら静かに skip し結果で報告する（`{name, linked:false}`）。`unlink` は外すと対象の所属 collection が 0 になる場合（view layer から消える事故）を **全対象を検証してから** `E_PRECONDITION` で拒否し、remediation で `move` を促す（部分的に外して状態を汚さない）。`list` は scene の master collection 配下（子 collection）を再帰 walk した**フラットな配列**で返す（入れ子ツリーではない）。各要素は `{name, objects:<count>, children:[...]}` で、`children` は**直下の子 collection の名前（文字列）の配列**（子 collection 自体も配列のトップレベル要素として別途並ぶ・レビュー R1-6 で明確化）。collection 名の解決は `bpy.data.collections.get`（完全一致のみ）。
 
 ## メッシュ編集（bmesh 一次 / 単一 `mesh` コマンド + `--op`）
 | method | params | result | M | H | Mode | St |

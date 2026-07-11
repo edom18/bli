@@ -1,8 +1,9 @@
 """exec-python の監査ログ（M11 T11.3）。spec §280「防止でなく検知・追跡」。
 
 サンドボックスを提供しない（§459）代償として、メインスレッドの単一実行口を通る exec の **試行を
-すべて `audit/` に追記**する。trusted/audited の実行も、off/audited-unlisted の拒否も記録する＝
-事後追跡の証跡。`BLI_STATE_DIR/audit/exec.jsonl`（JSONL・1行1イベント・policy.toml と同じ信頼域）。
+すべて `audit/` に追記**する。trusted/restricted/audited の実行も、off/audited-unlisted/
+restricted-blocked の拒否も記録する＝事後追跡の証跡。`BLI_STATE_DIR/audit/exec.jsonl`
+（JSONL・1行1イベント・policy.toml と同じ信頼域）。
 
 bpy 非依存（純Python）＝pytest 可。書込は best-effort（失敗しても exec 自体は止めない＝可用性優先・
 ただし呼び出し側は戻り値 False を `audit_ok=false` として応答に載せ、証跡欠落を観測可能にする）。
