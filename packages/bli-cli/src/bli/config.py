@@ -16,13 +16,14 @@ CONFIG_TOML = """# bli プロジェクト設定（.bli/config.toml）
 # exec の真実源は **ユーザローカルの policy.toml**（BLI_STATE_DIR/policy.toml・OS 所有者限定）。
 # リポジトリに mode=trusted を commit しても昇格しない。実際に有効化するには自分の OS アカウントの
 # policy.toml に [exec] mode を書く（CLI フラグ単体では昇格できない・spec §276/§459）。
-#   policy.toml の例:
+#   policy.toml の例（編集は `bli policy --action set --mode <mode>` を人間が実行するのが簡単）:
 #     [exec]
-#     mode = "trusted"                       # off | audited | trusted
+#     mode = "restricted"                    # off | restricted | audited | trusted
+#     # restricted（推奨）= Blender API は自走許可・プロセス起動/ネットワーク/削除系等は拒否（P1-1）。
 #     # audited のときは許可した sha256 のコードだけ自走実行する（R-B）:
 #     # allow_hashes = ["<exec 応答の code_sha256>", ...]
 #   exec の試行はすべて BLI_STATE_DIR/audit/exec.jsonl に記録される（防止でなく検知・§280）。
-mode = "off"          # off | audited | trusted（既定 off・表示用）
+mode = "off"          # off | restricted | audited | trusted（既定 off・表示用）
 
 [server]
 port = 9876

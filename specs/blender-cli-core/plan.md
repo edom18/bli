@@ -219,7 +219,7 @@ M0 → M0.5 → M1 → M2(★) → M3 → M4 → {M5,M6,M7} → M8 → M9 → M1
 - **信頼境界の明示**: プロセス/FS境界。プロセス内sandboxは提供しない（Non-Goal、README/SKILL明記）。
 - **bind固定**: `127.0.0.1` のみ。`0.0.0.0` は設定でも起動拒否（ガード節）。
 - **token認証**: `secrets.token_urlsafe(32)`、所有者限定権限、`hmac.compare_digest`、非HELLO/HTTP様式は即切断。
-- **exec既定off**: off/audited/trusted、設定ファイル（ユーザ所有）でのみ昇格。CLIフラグ単体で緩めない。
+- **exec既定off**: off/restricted/audited/trusted（restricted は P1-1 追加）、設定ファイル（ユーザ所有 policy.toml）でのみ昇格。CLIフラグ単体で緩めない。
 - **監査**: メインスレッド実行口の全Python文字列を `audit/` に記録。save/export/importはパス明示、.blend上書きはbackup強制。
 - **秘匿情報**: token を `.bli/`/リポジトリに置かない。`.gitignore` 雛形同梱。コード/エージェント定義/フックにシークレットを書かない（security-guardrails準拠）。
 - **依存**: `npx -y`相当の未検証自動取得をしない。addon依存はvendoring、バージョン固定。

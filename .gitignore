@@ -33,3 +33,6 @@ packages/bli-addon/spikes/out/
 Thumbs.db
 .idea/
 .vscode/
+
+# review-orchestrator の状態・gate ログ（ローカル専用・機密混入の可能性）
+.claude/review/

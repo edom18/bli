@@ -64,10 +64,13 @@ command(
 )
 command(
     "list-objects",
-    "シーン内オブジェクトを type/regex でフィルタして一覧する",
+    "シーン内オブジェクトを type/名前正規表現 でフィルタして一覧する",
     params=(
         p("type", ParamType.STR, help="型フィルタ（MESH/CURVE/EMPTY/LIGHT/CAMERA 等・大小無視）"),
-        p("regex", ParamType.STR, help="名前の正規表現フィルタ（部分一致）"),
+        # 名前は name_regex: targets 系コマンドの `regex`（BOOL・targets を正規表現として解釈する
+        # 修飾フラグ）と同名で意味/型が異なると取り違えを誘発するため改名した（レビュー R1-4。
+        # 旧 `--regex <pat>` は CLI 層の別名として受理を継続）。
+        p("name_regex", ParamType.STR, help="名前の正規表現フィルタ（部分一致）"),
     ),
     required_mode=Mode.OBJECT,
 )

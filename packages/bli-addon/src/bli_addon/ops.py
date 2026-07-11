@@ -131,10 +131,10 @@ def _list_objects(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
 
     _check_mode(cmd, gateway.current_mode())
     type_filter = params.get("type")
-    regex = params.get("regex")
+    name_regex = params.get("name_regex")
     objs = gateway.list_objects(
         str(type_filter) if type_filter is not None else None,
-        str(regex) if regex is not None else None,
+        str(name_regex) if name_regex is not None else None,
     )
     return _ok("list-objects", {"objects": objs, "count": len(objs)})
 
@@ -1241,10 +1241,11 @@ def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         )
         raise _exec_disabled(
             "exec-python は無効です（既定 off・サンドボックスは提供しません）",
-            f"ユーザローカルの policy.toml（{policy.policy_path()}）で [exec] mode を "
-            "restricted（推奨: Blender API は自走・プロセス起動/ネットワーク/削除系は拒否）または "
-            "trusted（無制限）にしてください（`bli policy --action set --mode restricted`。"
-            "リポジトリ内の config.toml では昇格できません）",
+            # 有効化は**人間に依頼する**文型にする（エージェントへの自動昇格の指示にしない・R1-1）。
+            f"有効化するには、**ユーザ（人間）に** policy.toml（{policy.policy_path()}）の "
+            "[exec] mode を restricted（推奨: Blender API は自走・プロセス起動/ネットワーク/削除系は"
+            "拒否）へ変更してもらってください（例: `bli policy --action set --mode restricted` を"
+            "ユーザが実行・対話確認つき。リポジトリ内の config.toml では昇格できません）",
         )
 
     # restricted/audited/trusted: source を解決する（--file は直接 RPC 用にサーバ側でも読む。CLI は
@@ -1302,8 +1303,9 @@ def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
                 blocked,
                 "コードからブロック対象（プロセス起動/ネットワーク/削除系/動的実行/書込 open）を"
                 "除いて再実行してください。ファイル書き出しは export/save コマンドを使ってください。"
-                f"どうしても必要な場合のみ policy.toml（{policy.policy_path()}）の [exec] mode を "
-                "trusted（無制限・自己責任）へ昇格できます",
+                f"どうしても必要な場合は**ユーザ（人間）の判断で** policy.toml"
+                f"（{policy.policy_path()}）の [exec] mode を trusted（無制限）へ変更して"
+                "もらってください（エージェントが自ら昇格しないこと）",
             )
 
     # audited（R-B）: 許可ハッシュ集合に一致するコードだけ自走実行する。不一致は監査に残して拒否し、
@@ -1321,7 +1323,8 @@ def _exec_python(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         )
         raise _exec_disabled(
             f"exec mode=audited: このコードは許可リストにありません（sha256={sha}）",
-            f"承認するなら policy.toml の [exec] allow_hashes にこの sha256 を追加してください: {sha}",
+            f"承認するなら、**ユーザ（人間）に** policy.toml の [exec] allow_hashes へこの sha256 を"
+            f"追加してもらってください: {sha}",
         )
 
     # 実行が確定（trusted / restricted で検査通過 / audited で許可済み）。**実行前に**監査へ記録する

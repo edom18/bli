@@ -37,8 +37,17 @@ def test_list_objects_discoverable():
     res = runner.invoke(app, ["help", "--command", "list-objects", "--json"])
     assert res.exit_code == 0
     schema = json.loads(res.output)["schema"]
-    assert set(schema["properties"]) == {"type", "regex"}
-    assert "required" not in schema  # type/regex は任意
+    # 名前フィルタは name_regex（targets 系の BOOL `regex` と同名だと取り違えを誘発・R1-4 で改名）
+    assert set(schema["properties"]) == {"type", "name_regex"}
+    assert "required" not in schema  # type/name_regex は任意
+
+
+def test_list_objects_name_regex_swallowed_option_is_loud_input_error():
+    # `--regex --json` の値渡し忘れは click が --json を値として食い silent 空リストになる
+    # （R1-4 の残存経路）。`--` 始まりの値は誤用として送信前に exit 4 で loud に弾く。
+    res = runner.invoke(app, ["list-objects", "--regex", "--json"])
+    assert res.exit_code == 4, res.output
+    assert "オプションに見えます" in res.output
 
 
 def test_m6_commands_discoverable():

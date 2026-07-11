@@ -58,6 +58,26 @@ def test_malformed_toml_falls_back_to_off(state_dir):
     assert policy.read_exec_mode() == "off"
 
 
+def test_tomllib_missing_python310_falls_back_to_off(state_dir, monkeypatch):
+    # Python 3.10（tomllib 不在・requires-python >=3.10 の宣言範囲）では解析不能＝
+    # 昇格方向に倒さず off へ縮退する（bli-core は 3.10 互換維持・レビュー R2-1）。
+    from bli_core import policy as core_policy
+
+    _write_policy(state_dir, '[exec]\nmode = "trusted"\n')
+    monkeypatch.setattr(core_policy, "tomllib", None)
+    assert policy.read_exec_mode() == "off"
+    assert policy.read_allow_hashes() == frozenset()
+
+
+def test_tomllib_missing_python310_write_helper_refuses(state_dir, monkeypatch):
+    # 書込ヘルパは 3.10 では沈黙破壊を避けて UnsafePolicyError で明示拒否する（R2-1）。
+    from bli_core import policy as core_policy
+
+    monkeypatch.setattr(core_policy, "tomllib", None)
+    with pytest.raises(core_policy.UnsafePolicyError):
+        core_policy.load_preserved_allow_hashes()
+
+
 def test_missing_exec_section_falls_back_to_off(state_dir):
     _write_policy(state_dir, "[server]\nport = 9876\n")
     assert policy.read_exec_mode() == "off"

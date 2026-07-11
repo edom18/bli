@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import math
-import os
 import sys
 import time
 import uuid
@@ -479,79 +478,8 @@ def init(
 # init/doctor と同じ「CLI ローカル完結」系＝RPC を送らない。exec mode の真実源はサーバが読む
 # ユーザローカル policy.toml（bli_core.policy・R-A）で、このコマンドはその表示/編集を助けるだけ。
 # 昇格は人間がこのコマンド（またはエディタ）で policy.toml を書いたときだけ成立する。
-
-# 自動書き換えを許す既存 policy.toml の形（これ以外は「他の設定を静かに失わない」ため拒否する）。
-_POLICY_ALLOWED_TOP_KEYS = frozenset({"exec"})
-_POLICY_ALLOWED_EXEC_KEYS = frozenset({"mode", "allow_hashes"})
-
-
-class _UnsafePolicyFile(Exception):
-    """既存 policy.toml が想定外の形（自動編集で他設定を失いかねない）。手動編集を促す。"""
-
-
-def _policy_existing_allow_hashes(path: Path) -> list[str]:
-    """set 時に保持すべき allow_hashes を返す（順序保持・正規化なし）。
-
-    既存ファイルが「[exec] の mode/allow_hashes 以外は何もない」形でなければ _UnsafePolicyFile を
-    投げて自動編集を止める（policy.toml に手書きされた他の設定を静かに失わないため）。
-    """
-    import tomllib
-
-    if not path.exists():
-        return []
-    try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as e:
-        raise _UnsafePolicyFile(f"既存の policy.toml を解析できません: {e}") from e
-    if not isinstance(data, dict):
-        raise _UnsafePolicyFile("既存の policy.toml のトップレベルが table ではありません")
-    extra_top = set(data) - _POLICY_ALLOWED_TOP_KEYS
-    if extra_top:
-        raise _UnsafePolicyFile(
-            f"既存の policy.toml に [exec] 以外のセクションがあります: {sorted(extra_top)}"
-        )
-    exec_section = data.get("exec", {})
-    if not isinstance(exec_section, dict):
-        raise _UnsafePolicyFile("既存の policy.toml の [exec] が table ではありません")
-    extra_exec = set(exec_section) - _POLICY_ALLOWED_EXEC_KEYS
-    if extra_exec:
-        raise _UnsafePolicyFile(
-            f"既存の [exec] に mode/allow_hashes 以外のキーがあります: {sorted(extra_exec)}"
-        )
-    hashes = exec_section.get("allow_hashes", [])
-    if not isinstance(hashes, list) or not all(isinstance(h, str) for h in hashes):
-        raise _UnsafePolicyFile("既存の [exec] allow_hashes が文字列の配列ではありません")
-    return list(hashes)
-
-
-def _render_policy_toml(mode: str, allow_hashes: list[str]) -> str:
-    """policy.toml の内容を決定的に組み立てる（[exec] mode + 既存 allow_hashes を保持）。"""
-    lines = [
-        "# bli exec 実行ポリシー（ユーザローカル・git 非管理）。",
-        "# exec-python の mode はサーバ（Blender アドオン）がこのファイルだけを読む真実源。",
-        "# .bli/config.toml の [exec] mode は表示ヒントに過ぎず、ここを書き換えないと昇格しない。",
-        "# `bli policy --action set --mode <mode>` で書き換えられる（直接編集しても良い）。",
-        "",
-        "[exec]",
-        f'mode = "{mode}"          # off | restricted | audited | trusted',
-    ]
-    if allow_hashes:
-        items = ", ".join(json.dumps(h) for h in allow_hashes)
-        lines.append(f"allow_hashes = [{items}]  # audited 用の許可 sha256（保持）")
-    lines.append("")
-    return "\n".join(lines)
-
-
-def _atomic_write_owner_only(path: Path, text: str) -> None:
-    """policy.toml を所有者限定権限で原子的に書き込む（server.py の token 書込と同じ流儀）。"""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f"{path.name}.tmp{os.getpid()}")
-    tmp.write_text(text, encoding="utf-8")
-    try:
-        os.chmod(tmp, 0o600)  # posix で所有者限定。Windows は限定的（既知・トークンと同じ）
-    except OSError:
-        pass
-    os.replace(tmp, path)
+# ファイル形式の知識（許容スキーマ・レンダラ・原子的書込）は bli_core.policy に集約されており
+# （レビュー R1-3）、この層は Typer 受理・対話確認・出力整形のみを担う。
 
 
 def _policy_show(json_out: bool) -> None:
@@ -593,8 +521,8 @@ def _policy_set(mode: str, *, yes: bool, json_out: bool) -> None:
     current = core_policy.read_exec_mode()
 
     try:
-        allow_hashes = _policy_existing_allow_hashes(path)
-    except _UnsafePolicyFile as e:
+        allow_hashes = core_policy.load_preserved_allow_hashes()
+    except core_policy.UnsafePolicyError as e:
         _emit_error(
             json_out,
             ErrorCode.INVALID_PARAMS,
@@ -609,14 +537,16 @@ def _policy_set(mode: str, *, yes: bool, json_out: bool) -> None:
         except typer.Abort:
             confirmed = False
         if not confirmed:
+            # バイパス手段（--yes）はここでは案内しない: exec 昇格は人間の判断で行う建前を、
+            # エラー文が自ら崩さないため（レビュー R1-1。--yes 自体は --help に記載がある）。
             _emit_error(
                 json_out,
                 "ABORTED",
-                "確認されなかったため中断しました（--yes で確認をスキップできます）",
+                "確認されなかったため中断しました（人間による対話確認が必要です）",
             )
             raise typer.Exit(int(ExitCode.FAILURE))
 
-    _atomic_write_owner_only(path, _render_policy_toml(mode, allow_hashes))
+    core_policy.write_policy(mode, allow_hashes)
     payload = {
         "ok": True,
         "action": "set",
@@ -680,16 +610,35 @@ def list_objects_cmd(
     type_filter: str | None = typer.Option(
         None, "--type", help="型フィルタ（MESH/CURVE/EMPTY/LIGHT/CAMERA 等・大小無視）"
     ),
-    regex: str | None = typer.Option(None, "--regex", help="名前の正規表現フィルタ（部分一致）"),
+    # targets 系の `--regex`（値なしフラグ）と同名だと取り違えを誘発するため --name-regex を
+    # 一次名に改名（R1-4）。旧 `--regex <pat>` は移行用の別名として受理を継続する。
+    name_regex: str | None = typer.Option(
+        None,
+        "--name-regex",
+        "--regex",
+        help="名前の正規表現フィルタ（部分一致・旧名 --regex も受理）",
+    ),
     json_out: bool = typer.Option(False, "--json", help="JSON で出力"),
     port: int | None = typer.Option(None, "--port"),
 ) -> None:
-    """シーン内オブジェクトを type/regex でフィルタして一覧する。"""
+    """シーン内オブジェクトを type/名前正規表現 でフィルタして一覧する。"""
     params: dict[str, Any] = {}
     if type_filter is not None:
         params["type"] = type_filter
-    if regex is not None:
-        params["regex"] = regex
+    if name_regex is not None:
+        # `--regex --json` のような値の渡し忘れは click が次のオプションを値として食い、
+        # 「0 件の空リスト」という silent 失敗になる（targets 系の値なし `--regex` フラグとの
+        # 取り違えで起きやすい）。bli のオプションは全て `--` 始まりなので、`--` 始まりの
+        # パターン値は誤用として loud に弾く（本当に `--` で始まる名前は `\-\-` でエスケープ可）。
+        if name_regex.startswith("--"):
+            _emit_error(
+                json_out,
+                ErrorCode.INVALID_PARAMS,
+                f"--name-regex の値がオプションに見えます: {name_regex!r}"
+                "（値の渡し忘れの可能性。パターンが本当に -- で始まる場合は \\-\\- とエスケープ）",
+            )
+            raise typer.Exit(int(ExitCode.INPUT))
+        params["name_regex"] = name_regex
 
     def human(data: dict[str, Any]) -> str:
         objs = data.get("objects", [])

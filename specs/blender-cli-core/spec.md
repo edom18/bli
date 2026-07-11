@@ -125,7 +125,7 @@ bli <command> [--targets <name>] [--regex] [options] [--json] [--id <uuid>] [--d
 | コマンド | 概要 |
 |----------|------|
 | `bli scene-info [--depth N]` | シーン階層・オブジェクト一覧・単位設定。大きい場合は退避 |
-| `bli list-objects [--type MESH\|...] [--regex <pat>]` | 条件フィルタで一覧 |
+| `bli list-objects [--type MESH\|...] [--name-regex <pat>]` | 条件フィルタで一覧（targets 系の `--regex` フラグとは別物・パターン値を取る。旧 `--regex <pat>` は CLI 別名で受理） |
 | `bli object-info --targets <name>` | 寸法・頂点数・トランスフォーム・bbox・材質・モディファイア |
 | `bli capture [--source viewport\|screen\|render] [--width N] [--height N] [--camera <name>]` | 現在の状態を画像取得（PNG をファイル出力しパスを返す・実地FB #1） |
 
@@ -302,7 +302,7 @@ bli print-export --targets <name> --format stl|3mf --path <file> [--ascii] [--sc
 | `audited` | 全コードを `audit/` に記録。**許可ハッシュ（sha256）一致で自走**（T11.3・R-B） | |
 | `trusted` | 無制限実行。明示有効化（設定）が前提 | |
 - モードは **ユーザ所有の設定ファイルでのみ昇格可能**。CLIフラグ単体では緩められない。
-  - **真実源（M11 T11.1・R-A 確定）**: サーバ（Blender アドオン）は **ユーザローカルの `policy.toml`**（`BLI_STATE_DIR/policy.toml`・OS 所有者限定・git 非管理）の `[exec] mode` のみを読む。CLI は mode を送らず（送れず）、リポジトリ内 `.bli/config.toml` の `[exec] mode` は **表示用ヒント**でサーバは読まない（mode=trusted を commit しても昇格しない）。policy 読取は実行ごとに最新化（off↔restricted↔trusted の切替を即反映）。fail-closed（不在/パース失敗/不正値はすべて off）。表示/編集は `bli policy --action show|set --mode <mode>`（CLI ローカル完結・サーバへ RPC を送らない・人間が明示実行する前提）で行う。
+  - **真実源（M11 T11.1・R-A 確定）**: サーバ（Blender アドオン）は **ユーザローカルの `policy.toml`**（`BLI_STATE_DIR/policy.toml`・OS 所有者限定・git 非管理）の `[exec] mode` のみを読む。CLI は mode を送らず（送れず）、リポジトリ内 `.bli/config.toml` の `[exec] mode` は **表示用ヒント**でサーバは読まない（mode=trusted を commit しても昇格しない）。policy 読取は実行ごとに最新化（off↔restricted↔trusted の切替を即反映）。fail-closed（不在/パース失敗/不正値はすべて off）。表示/編集は `bli policy --action show|set --mode <mode>`（CLI ローカル完結・サーバへ RPC を送らない）で行う。**信頼境界の明示**: `policy.toml` への書込権限＝exec 有効化の権限そのもの（同一 OS ユーザに帰着・§脅威モデル）。`bli policy --action set`（昇格）は**人間が実行する前提**で、エージェントは EXEC_DISABLED / EXEC_BLOCKED_RESTRICTED に当たっても自ら実行せずユーザに依頼する（remediation・SKILL もこの文型で案内する。`--yes` は人間の非対話スクリプト向けで、対話確認そのものが技術的ガードではない＝ガードは「エージェントに実行させない規約」の側にある）。
   - off / audited 未許可は `EXEC_DISABLED`（PRECONDITION・retryable=False）。**restricted（P1-1）**: `exec_restricted.scan_blocked` の AST 走査がブロック対象（`import:<module>` / `attr-call:<module>.<attr>` / `from-import:<module>.<name>` / `call:<builtin>` / `file-write`）を検出すると **`EXEC_BLOCKED_RESTRICTED`**（PRECONDITION・retryable=False）で拒否し、検出理由を症状文に列挙する。**静的検査は完全ではない**（`getattr` 迂回・多段の別名束縛・`pathlib` 経由の削除等は捕捉できない）＝安全保証ではなく **事故防止**（`security_guarantee: false` は restricted でも不変。下記参照）。**audited（T11.3・R-B）**: コードの sha256 が `policy.toml` の `[exec] allow_hashes` に一致したときだけ自走実行し、不一致は拒否メッセージに追加すべき sha256 を提示する。trusted は無条件実行。
 - AST検査は「安全保証」ではなく **ヒューリスティックなフラグ付け**。レスポンスに `security_guarantee: false` と `heuristic_flags` を含める（T11.2・全モード共通・restricted の拒否判定とは別レイヤ＝`heuristic_flags` は注意喚起のみでブロックしない）。**サンドボックスは提供しない**（§脅威モデル）＝コードは同一 OS 権限で走る。ユーザコードの実行時例外は `EXEC_ERROR`（runtime=ENVIRONMENT / 構文エラー=USER_INPUT・compile フェーズ）へ写像し INTERNAL にしない。
 - 3シナリオは構造化サブコマンドのみで完遂可能（exec不要）。
