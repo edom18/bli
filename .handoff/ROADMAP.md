@@ -30,7 +30,7 @@
 | **M13** | テスト網羅 & CI 仕上げ（bl_rna 契約 / L2 Blender マトリクス / golden / L3 / snapshot） | ✅ **完了**（**PR #34**・stacked on #33） | 確定要約 HANDOFF §6m |
 | **M14** | ドキュメント & 配布（addon zip ビルド・vendoring 検証・README・doctor 導入支援・mistakes-memo） | ✅ **完了**（PR #36/#37 マージ済み） | 確定要約 HANDOFF §6n |
 | **P1** | **設計レビュー対応**（バグ4件 / exec **restricted** / add・mode・rename・parent・collection / FBX Unity opt / docs 再フレーミング / 検証型レビュー反映） | ✅ **完了**（PR **#38/#43/#40/#41/#42** マージ済み・main=c5d5544） | 確定要約 HANDOFF **§6o** / 発注書 `report/2026-07-11-design-review-generality.md` §4 / コマンド 31→37（cli-schema.json 実測・旧記載 33→38 は誤記）・pytest 584 |
-| **P2** | リファクタ & 汎用化（P2-2 Typer SSOT 自動生成 / P2-3 modifier・material 汎用化 / P2-4 モジュール分割） | 🔶 **進行中**: P2-2 ✅（**PR #45**・main.py 2,075→705 行・スナップショット byte 一致・pytest 753・確定要約 HANDOFF **§6p**）/ **次=P2-3**（機能追加・要 rna スパイク）→ P2-4 | 着手書 **`.handoff/NEXT-P2.md`** / 発注書 report §4 |
+| **P2** | リファクタ & 汎用化（P2-2 Typer SSOT 自動生成 / P2-3 modifier・material 汎用化 / P2-4 モジュール分割） | 🔶 **進行中**: P2-2 ✅（**PR #45**・main.py 2,075→705 行・§6p）/ P2-3 ✅（**PR #47**・任意 type + --props / PBR・テクスチャ・pytest 794・両版 smoke OK・**§6q**）/ **次=P2-4**（gateway 2,705 行 / ops 2,222 行の分割・純リファクタ） | 着手書 **`.handoff/NEXT-P2.md`** / 発注書 report §4 |
 
 ★ = walking skeleton。✅=完了 / 🔶=進行中 / ⬜=未着手。
 
@@ -61,7 +61,7 @@
 | PR-4 | 基準指定整列（#4 straighten に angle/align-vector/reference 追加・支柱問題） | ✅ PR #17 |
 | PR-5 | undo/redo 公開（#3 `bli undo`/`redo`・GUI 必須・スタック端 RuntimeError 頑健化） | ✅ PR #18 |
 
-→ **v1（M0–M14）+ 設計レビュー P1 + P2-2 完了（PR #1〜#45 マージ済み・main=5dd3fac・確定要約 HANDOFF §6o/§6p）。** 実機デモ済み（zip 常駐 → bli のみでモデリング → capture / FBX export）。**次は P2-3 → P2-4（`.handoff/NEXT-P2.md`）**。任意の配布公開（Extensions/PyPI・CI artifact）は後続。
+→ **v1（M0–M14）+ 設計レビュー P1 + P2-2 + P2-3 完了（PR #1〜#47 マージ済み・main=a0d8b7b・確定要約 HANDOFF §6o/§6p/§6q）。** 実機デモ済み（zip 常駐 → bli のみでモデリング → capture / FBX export）。**次は P2-4（`.handoff/NEXT-P2.md`）**。任意の配布公開（Extensions/PyPI・CI artifact）は後続。
 ※ FB #4 の「部分ジオメトリ PCA（頂点サブセット基準）」は部分指定方法の決定が要るため別 PR 繰越（PR-4 では angle/align-vector/reference で支柱問題に実用解を提供済み）。
 
 ---
