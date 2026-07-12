@@ -44,14 +44,18 @@
 | `apply-transform` | `--targets` `--location?` `--rotation?` `--scale?` | verified | ✓ | - | OBJECT | s |
 | `duplicate` | `--targets` `--linked?` `--count?`(1〜1000) `--offset?` | 新オブジェクト名 | ✓ | - | OBJECT | s |
 | `delete` | `--targets` | 削除結果（削除前 summary を backup として常時返却） | ✓ | - | OBJECT | s |
-| `material` | `--action assign\|create\|list` `--targets?` `--name?` `--color r,g,b,a?` `--make-single-user?` | 材質状態（list は slot/name/link/base_color） | ✓ | - | OBJECT | s |
-| `modifier` | `--action add\|remove\|list\|apply` `--targets` `--type?` `[type別params]` `--make-single-user?` | modifier状態（list は name/type/型別値） | ✓ | - | OBJECT | s |
+| `material` | `--action assign\|create\|list` `--targets?` `--name?` `--color r,g,b,a?` `[create専用: --metallic? --roughness? --emission r,g,b,a? --emission-strength? --alpha? --texture <path>? --pack-texture?]` `--make-single-user?` | 材質状態（list は slot/name/link/base_color・create は principled/texture 実値） | ✓ | - | OBJECT | s |
+| `modifier` | `--action add\|remove\|list\|apply` `--targets` `--type?`(任意 type) `--props '<JSON>'?` `[type別params]` `--make-single-user?` | modifier状態（list は name/type/型別値・--props 時は applied_props） | ✓ | - | OBJECT | s |
 
-`modifier --type`（v1必須）: `MIRROR` / `SUBSURF` / `SOLIDIFY` / `DECIMATE` / `BOOLEAN`。
+`modifier --type`（add で必須）: **任意の Modifier type**（P2-3 G4・例 `BEVEL`/`ARRAY`/`WELD`。実在はサーバが `bpy.types.Modifier` の rna enum から**能力検出**で検証＝両版 83 種・無効は有効一覧つき `INVALID_PARAMS`）。`MIRROR`/`SUBSURF`/`SOLIDIFY`/`DECIMATE`/`BOOLEAN` の 5 種は専用フラグあり（互換・下記）。
 
 > `modifier`: 操作は `--action`（ENUM）。`--type` は add で必須（schema 上は任意・サーバが action 別に検証）。型別 params（**add 専用**）= MIRROR:`--axis X\|Y\|Z` / SUBSURF:`--levels`(0〜6) / SOLIDIFY:`--thickness` / DECIMATE:`--ratio`(0〜1) / BOOLEAN:`--operation`+`--with`(相手mesh・必須)。`remove`/`apply` は `--name` 必須。**apply のみ** mesh へ焼き込む破壊的操作で、共有 mesh は `--make-single-user` 必須（add/remove/list はオブジェクト単位で不要）。非対応型は `E_PRECONDITION`。
+>
+> **`--props '<JSON>'`（P2-3 G4・add 専用）**: 任意プロパティを JSON オブジェクトで設定する（例: `--type BEVEL --props '{"width":0.1,"segments":2}'`）。サーバが対象 modifier の **rna から編集可能プロパティを列挙して検証**する: 未知キーは有効キー一覧つき `INVALID_PARAMS` / 型は rna 型（BOOLEAN/INT/FLOAT〔配列含む〕/ENUM〔有効値提示〕/STRING/POINTER）で検証 / POINTER は **Object 参照のみ名前文字列で解決**（他は未対応と明示）。数値の**範囲外は Blender の rna が clamp** するため、結果 `modifier.applied_props` に**設定後の実値**を返して可視化する（silent drop なし）。専用フラグとの**併用は不可**（曖昧さ排除・`INVALID_PARAMS`）。BOOLEAN を --props 経由で作る場合は `--with` の代わりに `{"object":"名前"}` を**必須**指定（--with と同一の自己参照禁止・mesh 限定検証を通す・レビュー R1-1）。検証失敗時は追加した modifier を撤去する（アトミック）。
 
 > `material`: 操作は `--action`（ENUM）。`create` は対象へ作成と同時に割当（create-and-assign）。`--color` は RGBA(VEC4)・create の Base Color。`targets`/`name` の必須は action 別（schema 上は任意・サーバが action ごとに検証）。スロットは active 置換・空なら追加。共有 mesh の **DATA slot** 書き込みは `--make-single-user` 必須（OBJECT リンク slot は object 限定で不要）。
+>
+> **PBR/テクスチャ（P2-3 G5・create 専用）**: `--metallic`/`--roughness`/`--alpha`（0..1・bpy 到達前に範囲検証）/`--emission r,g,b,a`（Emission Color。`--emission-strength` 省略時は **1.0 を明示設定**＝strength 既定 0 で発光が silent 無効化されるのを防ぐ）/`--texture <path>`（画像を読み込み **Image Texture ノードを Base Color に接続**・パス不在は bpy 到達前 USER_INPUT・壊れ画像は `E_OPERATOR`）/`--pack-texture`（画像を .blend にパック・`--texture` 必須）。Principled 入力名は両版同一（Metallic/Roughness/Alpha/Emission Color/Emission Strength・スパイク確定）で、欠如時は `E_PRECONDITION`（silent drop しない）。**`--color` と `--texture` 併用時**は Base Color 入力にノードが接続されるため color はビューポート表示色としてのみ有効。他 action（assign/list）でこれらを渡すと `INVALID_PARAMS`。設定失敗時は作りかけ material を撤去（アトミック）。result に `principled`（設定実値）/`texture`（image/path/packed）を返す。
 
 > `delete` は削除前の object summary を `backup` として結果に常時含める（即実行・確認フラグなし）。`.blend` への退避バックアップ（`backup.on_overwrite`）は save 依存のため **M9 へ繰越**。`duplicate --count` は 1〜1000（暴走防止の上限・`bli_core.runtime.MAX_DUPLICATE_COUNT`）。
 

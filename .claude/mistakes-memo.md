@@ -72,3 +72,12 @@
 　`sys.modules["bli_addon"].__dict__.pop("gateway", None)` の両方を行う（`test_gateway_targets.py`
 　の `_forget_gateway_module()`）。同じ罠は他の bpy 依存サブモジュールをフェイクで直接テストする
 　ときにも当てはまる（P1-1/P1-2 で同様のテストを書く際は要注意）。
+
+**Case: smoke golden が巨大 modifier を残置し、後続テストで depsgraph 評価が走ってメモリ爆発**
+状況：P2-3 の clamp 検証 golden で `BEVEL segments=10000→1000`（rna clamp）の modifier をテスト用
+　キューブに残したまま次の golden へ進んだ。追加時点では未評価だが、後続の BOOLEAN modifier 追加が
+　依存グラフ評価を誘発 → 12 辺 × 1000 セグメントの BEVEL 評価でジオメトリ爆発（--background の
+　blender.exe が数 GB 級のメモリを消費・ユーザーが Task Manager で発見）→ RPC TIMEOUT で smoke FAIL。
+→ 対策：smoke で「重い評価を誘発し得るパラメータ（SUBSURF levels・BEVEL segments・ARRAY count 等）」
+　を設定した modifier は、**assert 完了後すぐ remove** する（評価は遅延＝残すと後続のどこで評価が
+　走るか予測できない）。極端値の clamp 検証は applied_props の読み戻しで完結し、評価は不要。

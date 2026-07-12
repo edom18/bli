@@ -767,6 +767,18 @@
   "stderr": "",
   "stdout": "{\"ok\": true, \"operation\": \"material\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"assign\", \"material\": \"Red\", \"name\": \"Cube\", \"slot\": 0}}\n"
  },
+ "material/bad-emission-vec-local|human": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "エラー[INVALID_PARAMS]: emission は 4 要素（カンマ区切り）で指定してください: '1,0'\n",
+  "stdout": ""
+ },
+ "material/bad-emission-vec-local|json": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "{\"ok\": false, \"kind\": \"INVALID_PARAMS\", \"message\": \"emission は 4 要素（カンマ区切り）で指定してください: '1,0'\"}\n",
+  "stdout": ""
+ },
  "material/color-vec-error-local|human": {
   "calls": [],
   "exit_code": 4,
@@ -820,6 +832,90 @@
   "exit_code": 0,
   "stderr": "",
   "stdout": "{\"ok\": true, \"operation\": \"material\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"create\", \"material\": \"NewMat\", \"name\": \"Cube\", \"slot\": 1}}\n"
+ },
+ "material/create-pbr|human": {
+  "calls": [
+   {
+    "method": "material",
+    "params": {
+     "action": "create",
+     "alpha": 0.5,
+     "emission": [
+      1.0,
+      0.0,
+      0.0,
+      1.0
+     ],
+     "emission_strength": 2.0,
+     "metallic": 0.9,
+     "name": "PBRMat",
+     "roughness": 0.2,
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "create 'PBRMat' -> Cube slot=0\n"
+ },
+ "material/create-pbr|json": {
+  "calls": [
+   {
+    "method": "material",
+    "params": {
+     "action": "create",
+     "alpha": 0.5,
+     "emission": [
+      1.0,
+      0.0,
+      0.0,
+      1.0
+     ],
+     "emission_strength": 2.0,
+     "metallic": 0.9,
+     "name": "PBRMat",
+     "roughness": 0.2,
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"material\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"create\", \"material\": \"PBRMat\", \"name\": \"Cube\", \"slot\": 0, \"principled\": {\"metallic\": 0.9, \"roughness\": 0.2, \"alpha\": 0.5, \"emission_color\": [1.0, 0.0, 0.0, 1.0], \"emission_strength\": 2.0}}}\n"
+ },
+ "material/create-texture|human": {
+  "calls": [
+   {
+    "method": "material",
+    "params": {
+     "action": "create",
+     "name": "TexMat",
+     "pack_texture": true,
+     "targets": "Cube",
+     "texture": "tex.png"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "create 'TexMat' -> Cube slot=0\n"
+ },
+ "material/create-texture|json": {
+  "calls": [
+   {
+    "method": "material",
+    "params": {
+     "action": "create",
+     "name": "TexMat",
+     "pack_texture": true,
+     "targets": "Cube",
+     "texture": "tex.png"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"material\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"create\", \"material\": \"TexMat\", \"name\": \"Cube\", \"slot\": 0, \"texture\": {\"image\": \"tex.png\", \"path\": \"tex.png\", \"packed\": true}}}\n"
  },
  "material/list|human": {
   "calls": [
@@ -1106,6 +1202,38 @@
   "exit_code": 0,
   "stderr": "",
   "stdout": "{\"ok\": true, \"operation\": \"mode\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"from_mode\": \"EDIT\", \"to_mode\": \"OBJECT\", \"active\": \"Cube\"}}\n"
+ },
+ "modifier/add-props|human": {
+  "calls": [
+   {
+    "method": "modifier",
+    "params": {
+     "action": "add",
+     "props": "{\"width\":0.1,\"segments\":2}",
+     "targets": "Cube",
+     "type": "BEVEL"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "added BEVEL 'Bevel' to Cube\n"
+ },
+ "modifier/add-props|json": {
+  "calls": [
+   {
+    "method": "modifier",
+    "params": {
+     "action": "add",
+     "props": "{\"width\":0.1,\"segments\":2}",
+     "targets": "Cube",
+     "type": "BEVEL"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"modifier\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"add\", \"name\": \"Cube\", \"modifier\": {\"name\": \"Bevel\", \"type\": \"BEVEL\", \"applied_props\": {\"width\": 0.1, \"segments\": 2}}, \"modifiers\": [{\"name\": \"Bevel\", \"type\": \"BEVEL\"}]}}\n"
  },
  "modifier/add|human": {
   "calls": [

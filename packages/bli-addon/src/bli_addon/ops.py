@@ -342,6 +342,20 @@ def _delete(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     return _ok("delete", {"deleted": name, "backup": backup}, fingerprint=fp)
 
 
+# material create 専用の presence-sensitive パラメータ（P2-3 で PBR/テクスチャへ拡張・G5）。
+# 他 action で渡されたら silent ignore せず弾く（color の従来ガードの一般化）。
+_MATERIAL_CREATE_ONLY_PARAMS: tuple[str, ...] = (
+    "color",
+    "metallic",
+    "roughness",
+    "emission",
+    "emission_strength",
+    "alpha",
+    "texture",
+    "pack_texture",
+)
+
+
 def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     cmd = _command("material")
     _validate(cmd, params)
@@ -362,12 +376,52 @@ def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             symptom=f"{action} には --name が必要です",
             remediation="--name を指定してください",
         )
-    # color は create 専用（assign/list で渡されたら silent ignore せず弾く）。
+    # create 専用 param（color/PBR/テクスチャ）は他 action で渡されたら弾く。
+    given_create_only = [k for k in _MATERIAL_CREATE_ONLY_PARAMS if params.get(k) is not None]
     _require_input(
-        action == "create" or color is None,
-        symptom="--color は create のときのみ有効です",
-        remediation="create で使うか --color を外してください",
+        action == "create" or not given_create_only,
+        symptom=(
+            " / ".join("--" + k.replace("_", "-") for k in given_create_only)
+            + " は create のときのみ有効です"
+        ),
+        remediation="create で使うか該当オプションを外してください",
     )
+    # 数値範囲と依存関係を bpy 到達前に検証する（rna の silent clamp に頼らない・§6e）。
+    for key in ("metallic", "roughness", "alpha"):
+        if params.get(key) is not None:
+            _require_input(
+                0.0 <= float(params[key]) <= 1.0,
+                symptom=f"--{key} は 0.0〜1.0 で指定してください（指定: {params[key]}）",
+                remediation=f"--{key} を 0.0〜1.0 にしてください",
+            )
+    if params.get("emission_strength") is not None:
+        _require_input(
+            params.get("emission") is not None,
+            symptom="--emission-strength は --emission と併用してください",
+            remediation="--emission r,g,b,a も指定してください",
+        )
+        _require_input(
+            float(params["emission_strength"]) >= 0.0,
+            symptom=f"--emission-strength は 0 以上で指定してください（指定: {params['emission_strength']}）",
+            remediation="--emission-strength を 0 以上にしてください",
+        )
+    if params.get("pack_texture") is not None:
+        _require_input(
+            params.get("texture") is not None,
+            symptom="--pack-texture は --texture と併用してください",
+            remediation="--texture <path> も指定してください",
+        )
+    texture = params.get("texture")
+    if texture is not None:
+        import os
+
+        # CLI/Blender の CWD 差を吸収するため abspath 正規化（import と同じ流儀）。
+        texture = os.path.abspath(str(texture))
+        _require_input(
+            os.path.isfile(texture),
+            symptom=f"テクスチャ画像が見つかりません: {texture}",
+            remediation="存在する画像ファイルのパスを指定してください",
+        )
 
     from . import gateway  # lazy: bpy 依存
 
@@ -382,19 +436,44 @@ def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     # assign は既存マテリアルを **状態変更（単一ユーザ化）の前に** 解決する。見つからない名で
     # 先に mesh を単一ユーザ化してから失敗すると、エラー後にシーン状態が変わる（Codex P2）。
     # 未発見エラーは gateway.require_material に集約（require_single と同じ流儀。設計レビュー P2）。
+    #
+    # 共有 mesh ガード（Codex P2-A）は書き込み先が DATA slot / 空スロット append のときのみ
+    # （OBJECT リンク slot は object 限定書き込みで共有 mesh を触らない＝false-positive 回避）。
+    # ガード（--make-single-user 時は不可逆な単一ユーザ化）は **失敗し得る処理を全て通過した後**
+    # に実行する＝失敗時に mesh を分離しない: assign はマテリアル解決後 / create は P2-3 で
+    # texture・pack・Principled 欠如により失敗し得るため create_material 成功後（レビュー R2-A）。
     mat = None
+    extras: dict[str, Any] = {}
     if action == "assign":  # 既存マテリアルのみ。無ければ E_TARGET_NOT_FOUND＝create と責務分離
         mat = gateway.require_material(str(name))
-
-    # 共有 mesh ガード（Codex P2-A）。ただし書き込み先が OBJECT リンク slot のときは object
-    # 限定の書き込みで共有 mesh を触らないため掛けない（false-positive な E_PRECONDITION や
-    # --make-single-user による不要な分離を避ける。Codex P2）。DATA slot 書き込み・空スロット
-    # append のみガード対象。マテリアル解決（上）を通過した後に実行＝失敗時に mesh を分離しない。
-    if gateway.material_write_touches_mesh_data(obj):
-        _guard_shared_mesh(gateway, obj, params)
-
-    if action == "create":
-        mat = gateway.create_material(str(name), list(color) if color is not None else None)
+        if gateway.material_write_touches_mesh_data(obj):
+            _guard_shared_mesh(gateway, obj, params)
+    else:  # create
+        mat, extras = gateway.create_material(
+            str(name),
+            list(color) if color is not None else None,
+            metallic=float(params["metallic"]) if params.get("metallic") is not None else None,
+            roughness=float(params["roughness"]) if params.get("roughness") is not None else None,
+            emission=list(params["emission"]) if params.get("emission") is not None else None,
+            emission_strength=(
+                float(params["emission_strength"])
+                if params.get("emission_strength") is not None
+                else None
+            ),
+            alpha=float(params["alpha"]) if params.get("alpha") is not None else None,
+            texture_path=texture,
+            pack_texture=bool(params.get("pack_texture", False)),
+        )
+        try:
+            if gateway.material_write_touches_mesh_data(obj):
+                _guard_shared_mesh(gateway, obj, params)
+        except BaseException:
+            # ガード失敗（--make-single-user なしの共有 mesh 等）で作りたて material/image を
+            # 残さない（レビュー R2-A）。JsonRpcError 限定にすると想定外例外（MemoryError 等）で
+            # リークする＝gateway.create_material/_apply_material_extras と同じ捕捉幅に揃え、
+            # 必ず再送出する（methods.md の無条件アトミック性・レビュー R3-A・4 finder 収束）。
+            gateway.discard_created_material(mat, extras)
+            raise
 
     slot = gateway.assign_material(obj, mat)
     gateway.push_undo(f"material {action}")
@@ -404,6 +483,7 @@ def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         "material": mat.name,
         "slot": slot,
         "materials": gateway.list_object_materials(obj),
+        **extras,
     }
     return _ok("material", data, fingerprint=gateway.material_fingerprint(obj))
 
@@ -430,6 +510,32 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     name = params.get("name")
     present_type_params = {k for k in _ALL_MODIFIER_TYPE_PARAMS if k in params}
 
+    # --props（任意プロパティの JSON・P2-3 G4）は bpy 到達前に parse/形状検証する。
+    props: dict[str, Any] | None = None
+    if params.get("props") is not None:
+        import json
+
+        _require_input(
+            action == "add",
+            symptom="--props は add のときのみ有効です",
+            remediation="add で使うか --props を外してください",
+        )
+        try:
+            parsed: Any = json.loads(str(params["props"]))
+        except json.JSONDecodeError as e:
+            parsed = None
+            _require_input(
+                False,
+                symptom=f"--props の JSON が不正です: {e}",
+                remediation="オブジェクト形式で指定してください（例: --props '{\"width\":0.1}'）",
+            )
+        _require_input(
+            isinstance(parsed, dict) and len(parsed) > 0,
+            symptom="--props は空でないオブジェクト（key:value）の JSON で指定してください",
+            remediation='例: --props \'{"width":0.1,"segments":2}\'',
+        )
+        props = parsed
+
     # 条件付き必須を bpy 到達前に検証する（schema は action/type 非依存で任意）。
     if action == "add":
         _require_input(
@@ -438,19 +544,44 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             remediation="--type を指定してください",
         )
         mtype = str(mtype)
-        # type-param は当該 type のものだけ許可（silent ignore しない）。
-        extra = present_type_params - _MODIFIER_TYPE_PARAMS[mtype]
+        # type-param（専用フラグ）は 5 種の当該 type のものだけ許可（silent ignore しない）。
+        # 任意 type（P2-3）に専用フラグは無い＝ --props を案内する。
+        allowed = _MODIFIER_TYPE_PARAMS.get(mtype, set())
+        extra = present_type_params - allowed
+        if mtype in _MODIFIER_TYPE_PARAMS:
+            _require_input(
+                not extra,
+                symptom=f"{mtype} に無効なパラメータ: {sorted(extra)}",
+                remediation=f"{mtype} で有効な追加パラメータ: {sorted(allowed)}",
+            )
+        else:
+            _require_input(
+                not extra,
+                symptom=f"{mtype} に専用フラグはありません: {sorted(extra)}",
+                remediation="任意 type のプロパティは --props '<JSON>' で指定してください",
+            )
+        # 専用フラグと --props の併用は曖昧（同じプロパティを二重指定し得る）ため弾く。
         _require_input(
-            not extra,
-            symptom=f"{mtype} に無効なパラメータ: {sorted(extra)}",
-            remediation=f"{mtype} で有効な追加パラメータ: {sorted(_MODIFIER_TYPE_PARAMS[mtype])}",
+            props is None or not present_type_params,
+            symptom="--props と type 別の専用フラグは併用できません",
+            remediation="どちらか一方で指定してください",
         )
         if mtype == "BOOLEAN":
-            _require_input(
-                "with_object" in params,
-                symptom="BOOLEAN の add には --with（相手オブジェクト）が必要です",
-                remediation="--with <object> を指定してください",
-            )
+            # 相手オブジェクトは --with（専用フラグ経路）か props.object（--props 経路）で必須。
+            # object なしの BOOLEAN は不活性 modifier が無言で出来るだけ＝silent に許さない
+            # （レビュー R1-1）。
+            if props is None:
+                _require_input(
+                    "with_object" in params,
+                    symptom="BOOLEAN の add には --with（相手オブジェクト）が必要です",
+                    remediation='--with <object> を指定してください（--props \'{"object":"名前"}\' でも可）',
+                )
+            else:
+                _require_input(
+                    isinstance(props.get("object"), str),
+                    symptom="BOOLEAN の add には相手オブジェクトが必要です（props.object）",
+                    remediation='--props \'{"object":"名前"}\' で相手 mesh を指定してください',
+                )
         # 数値 param の範囲を bpy 到達前に弾く（暴走防止・silent クランプ回避）。
         if "levels" in params:
             _require_input(
@@ -509,10 +640,17 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         data = {"name": obj.name, "action": "apply", **result}
         return _ok("modifier", data, fingerprint=gateway.object_fingerprint(obj))
 
-    # add（type 別 param を設定。BOOLEAN は相手を解決し型/自己参照を検証＝mesh boolean と共有）。
+    # add（type 別 param または --props を設定。BOOLEAN は相手を解決し型/自己参照を検証＝mesh
+    # boolean と共有）。type の実在は rna enum から能力検出（P2-3・無効は有効一覧つき USER_INPUT）。
+    gateway.require_modifier_type(str(mtype))
     operand = None
-    if mtype == "BOOLEAN":
+    if mtype == "BOOLEAN" and "with_object" in params:
         operand = _resolve_boolean_operand(gateway, obj, params["with_object"])
+    if mtype == "BOOLEAN" and props is not None:
+        # props.object も --with と**同一の検証**（自己参照禁止・mesh 限定）を通す（レビュー
+        # R1-1・_resolve_boolean_operand の「二重定義で条件がドリフトするのを防ぐ」趣旨を
+        # props 経路にも適用）。実際の設定は set_modifier_props の POINTER 解決が行う（同名→同 obj）。
+        _resolve_boolean_operand(gateway, obj, props["object"])
     summary = gateway.add_modifier(
         obj,
         str(mtype),
@@ -523,6 +661,7 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         ratio=params.get("ratio"),
         operation=params.get("operation"),
         operand=operand,
+        props=props,
         message=f"modifier add {mtype}",
     )
     data = {

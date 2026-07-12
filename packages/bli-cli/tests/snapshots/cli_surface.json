@@ -1169,7 +1169,7 @@
    ]
   },
   "material": {
-   "help": "マテリアルを割り当て/作成/一覧する（create は対象へ作成と同時に割り当て）。",
+   "help": "マテリアルを割り当て/作成/一覧する（create は対象へ作成と同時に割り当て・PBR/テクスチャは create 専用）。",
    "params": [
     {
      "default": "None",
@@ -1231,6 +1231,90 @@
      "required": false,
      "secondary_opts": [],
      "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "create: Metallic（0..1）",
+     "is_flag": false,
+     "name": "metallic",
+     "opts": [
+      "--metallic"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "None",
+     "help": "create: Roughness（0..1）",
+     "is_flag": false,
+     "name": "roughness",
+     "opts": [
+      "--roughness"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "None",
+     "help": "create: Emission Color r,g,b,a",
+     "is_flag": false,
+     "name": "emission",
+     "opts": [
+      "--emission"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "create: Emission Strength（emission 指定時のみ・省略時 1.0）",
+     "is_flag": false,
+     "name": "emission_strength",
+     "opts": [
+      "--emission-strength"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "None",
+     "help": "create: Alpha（0..1）",
+     "is_flag": false,
+     "name": "alpha",
+     "opts": [
+      "--alpha"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "FLOAT"
+    },
+    {
+     "default": "None",
+     "help": "create: Base Color へ Image Texture ノードで接続する画像ファイル",
+     "is_flag": false,
+     "name": "texture",
+     "opts": [
+      "--texture"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "False",
+     "help": "create: テクスチャ画像を .blend にパックする（texture 指定時のみ）",
+     "is_flag": true,
+     "name": "pack_texture",
+     "opts": [
+      "--pack-texture"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "BOOL"
     },
     {
      "default": "False",
@@ -1571,7 +1655,7 @@
    ]
   },
   "modifier": {
-   "help": "モディファイアを追加/削除/一覧/適用する（add は --type 必須・apply は mesh へ焼き込み）。",
+   "help": "モディファイアを追加/削除/一覧/適用する（add は --type 必須・任意 type + --props 対応・apply は mesh へ焼き込み）。",
    "params": [
     {
      "default": "None",
@@ -1612,11 +1696,23 @@
     },
     {
      "default": "None",
-     "help": "add の種類: MIRROR|SUBSURF|SOLIDIFY|DECIMATE|BOOLEAN",
+     "help": "add 時の種類（任意の Modifier type・例: MIRROR|BEVEL|ARRAY・実在はサーバ検証）",
      "is_flag": false,
      "name": "type_",
      "opts": [
       "--type"
+     ],
+     "required": false,
+     "secondary_opts": [],
+     "type": "STRING"
+    },
+    {
+     "default": "None",
+     "help": "add 専用: プロパティの JSON（rna 型検証・例: '{\"width\":0.1,\"segments\":2}'・専用フラグと併用不可）",
+     "is_flag": false,
+     "name": "props",
+     "opts": [
+      "--props"
      ],
      "required": false,
      "secondary_opts": [],

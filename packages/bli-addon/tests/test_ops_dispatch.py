@@ -306,9 +306,94 @@ def test_modifier_add_missing_type_invalid_params():
     assert ei.value.data.category == "USER_INPUT"
 
 
-def test_modifier_add_bad_type_invalid_params():
+def test_modifier_add_unknown_type_with_flag_invalid_params():
+    # type は P2-3 で STR 化＝実在検証はサーバ（rna 能力検出・bpy 必要）。bpy 到達前に弾けるのは
+    # 「未知 type に専用フラグ」の組み合わせ（--props を案内する）。
     with pytest.raises(JsonRpcError) as ei:
-        ops.dispatch("modifier", {"action": "add", "targets": "Cube", "type": "BOGUS"}, INFO)
+        ops.dispatch(
+            "modifier", {"action": "add", "targets": "Cube", "type": "BOGUS", "levels": 2}, INFO
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert "--props" in ei.value.data.remediation
+
+
+def test_modifier_props_bad_json_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier",
+            {"action": "add", "targets": "Cube", "type": "BEVEL", "props": "{width:0.1}"},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_modifier_props_non_object_invalid_params():
+    # 配列/スカラの JSON は弾く（key:value のオブジェクトのみ）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier",
+            {"action": "add", "targets": "Cube", "type": "BEVEL", "props": "[1,2]"},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_modifier_props_only_for_add_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier",
+            {"action": "list", "targets": "Cube", "props": '{"width":0.1}'},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_modifier_boolean_props_missing_object_invalid_params():
+    # BOOLEAN を --props 経由で add する場合は props.object が必須（bpy 到達前・レビュー R2-C）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier",
+            {
+                "action": "add",
+                "targets": "Cube",
+                "type": "BOOLEAN",
+                "props": '{"operation":"UNION"}',
+            },
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert "props.object" in ei.value.data.userVisibleSymptom
+
+
+def test_modifier_boolean_props_object_non_string_invalid_params():
+    # props.object は文字列（オブジェクト名）のみ（bpy 到達前・レビュー R2-C）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier",
+            {"action": "add", "targets": "Cube", "type": "BOOLEAN", "props": '{"object": 5}'},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_modifier_props_conflicts_with_dedicated_flag_invalid_params():
+    # 専用フラグと --props の併用は曖昧（同一プロパティの二重指定）＝弾く。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier",
+            {
+                "action": "add",
+                "targets": "Cube",
+                "type": "SUBSURF",
+                "levels": 2,
+                "props": '{"levels":3}',
+            },
+            INFO,
+        )
     assert ei.value.code == RPC_INVALID_PARAMS
 
 
@@ -406,6 +491,106 @@ def test_modifier_apply_with_type_param_invalid_params():
     with pytest.raises(JsonRpcError) as ei:
         ops.dispatch(
             "modifier", {"action": "apply", "targets": "Cube", "name": "Mirror", "axis": "X"}, INFO
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+# ---- P2-3 G5: material PBR/テクスチャ（create 専用）の param 検証（bpy 不要）----
+
+
+def test_material_metallic_on_assign_invalid_params():
+    # --metallic は create 専用。assign で渡したら silent ignore せず弾く（color と同じ流儀）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "material",
+            {"action": "assign", "targets": "Cube", "name": "M", "metallic": 0.5},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_material_create_metallic_out_of_range_invalid_params():
+    # metallic は 0.0..1.0。範囲外は bpy 到達前に弾く（rna の silent clamp に頼らない）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "material",
+            {"action": "create", "targets": "Cube", "name": "M", "metallic": 1.5},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_material_create_roughness_out_of_range_invalid_params():
+    # roughness も同じ 0.0..1.0 範囲チェック。負値は弾く。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "material",
+            {"action": "create", "targets": "Cube", "name": "M", "roughness": -0.1},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_material_emission_strength_without_emission_invalid_params():
+    # --emission-strength は --emission と併用必須（単独指定は無音無効化を避けるため弾く）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "material",
+            {"action": "create", "targets": "Cube", "name": "M", "emission_strength": 2.0},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_material_pack_texture_without_texture_invalid_params():
+    # --pack-texture は --texture と併用必須。単独指定は弾く。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "material",
+            {"action": "create", "targets": "Cube", "name": "M", "pack_texture": True},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_material_texture_missing_file_invalid_params():
+    # 実在しないテクスチャパスは bpy 到達前（abspath 後 isfile）に USER_INPUT で弾く。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "material",
+            {
+                "action": "create",
+                "targets": "Cube",
+                "name": "M",
+                "texture": "does-not-exist-p2-3.png",
+            },
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+    assert "見つかりません" in ei.value.data.userVisibleSymptom
+
+
+def test_material_texture_on_list_invalid_params():
+    # --texture も create 専用。list で渡したら弾く（bpy 到達前）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "material",
+            {"action": "list", "targets": "Cube", "texture": "tex.png"},
+            INFO,
         )
     assert ei.value.code == RPC_INVALID_PARAMS
     assert ei.value.data is not None

@@ -373,19 +373,24 @@ SPECS: dict[str, CmdSpec] = {
         help_overrides={"targets": _TARGETS_HELP},
     ),
     "material": CmdSpec(
-        doc="マテリアルを割り当て/作成/一覧する（create は対象へ作成と同時に割り当て）。",
+        doc=(
+            "マテリアルを割り当て/作成/一覧する"
+            "（create は対象へ作成と同時に割り当て・PBR/テクスチャは create 専用）。"
+        ),
         help_overrides={
             "targets": _TARGETS_HELP,
             "name": "マテリアル名（assign=既存 / create=新規）",
         },
     ),
     "modifier": CmdSpec(
-        doc="モディファイアを追加/削除/一覧/適用する（add は --type 必須・apply は mesh へ焼き込み）。",
+        doc=(
+            "モディファイアを追加/削除/一覧/適用する"
+            "（add は --type 必須・任意 type + --props 対応・apply は mesh へ焼き込み）。"
+        ),
         py_names={"type": "type_"},
         help_overrides={
             "action": "add|remove|list|apply",
             "targets": _TARGETS_HELP,
-            "type": "add の種類: MIRROR|SUBSURF|SOLIDIFY|DECIMATE|BOOLEAN",
             "name": "モディファイア名（remove/apply 対象）",
             "axis": "MIRROR の軸: X|Y|Z",
             "operation": "BOOLEAN の演算: UNION|DIFFERENCE|INTERSECT",

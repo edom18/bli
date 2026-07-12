@@ -138,12 +138,14 @@ bli <command> [--targets <name>] [--regex] [options] [--json] [--id <uuid>] [--d
 | `bli transform --targets <name> [--location x,y,z] [--rotation x,y,z(deg)] [--scale x,y,z] [--mode set\|delta]` | 位置/回転/拡縮 |
 | `bli apply-transform --targets <name> [--location] [--rotation] [--scale]` | トランスフォーム適用 |
 | `bli duplicate --targets <name> [--linked] [--count N] [--offset x,y,z]` | 複製（`bpy.data`直接） |
-| `bli modifier --action add\|remove\|list\|apply --targets <name> [--type <T>] [--name] [型別params] [--make-single-user]` | モディファイア操作（add は --type 必須 / 型別: MIRROR=--axis, SUBSURF=--levels, SOLIDIFY=--thickness, DECIMATE=--ratio, BOOLEAN=--operation+--with / apply は破壊的・共有meshは--make-single-user） |
-| `bli material --action assign\|create\|list [--targets <name>] [--name] [--color r,g,b,a] [--make-single-user]` | マテリアル操作（create=作成+割当 / list は slot/name/link/base_color / 共有mesh DATA slotは--make-single-user） |
+| `bli modifier --action add\|remove\|list\|apply --targets <name> [--type <T>] [--props '<JSON>'] [--name] [型別params] [--make-single-user]` | モディファイア操作（add は --type 必須。**--type は任意の Modifier type**＝rna enum の能力検出で実在検証（P2-3 G4）。任意プロパティは `--props '<JSON>'`（rna 型検証・設定後実値を applied_props で返す・専用フラグと併用不可）。5種の専用フラグは互換: MIRROR=--axis, SUBSURF=--levels, SOLIDIFY=--thickness, DECIMATE=--ratio, BOOLEAN=--operation+--with / apply は破壊的・共有meshは--make-single-user） |
+| `bli material --action assign\|create\|list [--targets <name>] [--name] [--color r,g,b,a] [create専用: --metallic --roughness --emission r,g,b,a --emission-strength --alpha --texture <img> --pack-texture] [--make-single-user]` | マテリアル操作（create=作成+割当・**PBR/テクスチャ対応（P2-3 G5）**: texture は Image Texture ノードを Base Color へ接続 / list は slot/name/link/base_color / 共有mesh DATA slotは--make-single-user） |
 | `bli delete --targets <name>` | 削除（既定でバックアップ／確認セマンティクス） |
 
-#### 主要モディファイア（`modifier --type`）
-- v1必須: `MIRROR` / `SUBSURF` / `SOLIDIFY` / `DECIMATE` / `BOOLEAN`。
+#### モディファイア（`modifier --type`・P2-3 で任意 type へ汎用化 G4）
+- `--type` は**任意の Modifier type**（例: `BEVEL`/`ARRAY`/`WELD`）。実在はサーバが `bpy.types.Modifier` の rna enum から**能力検出**で検証（両版 83 種・無効は有効一覧つき INVALID_PARAMS・版番号分岐なし）。
+- 任意プロパティは `--props '<JSON>'`（add 専用・rna から型検証・範囲外は rna が clamp するため結果 `applied_props` に設定後実値を返す・専用フラグと併用不可・詳細は contracts/methods.md）。
+- `MIRROR` / `SUBSURF` / `SOLIDIFY` / `DECIMATE` / `BOOLEAN` の 5 種は専用フラグを互換維持。
 - `add`（パラメータ付き）/ `remove` / `list` / `apply` をサポート。
 
 ### シーングラフ生成/操作（P1-2・欠落プリミティブ第1弾: 設計レビュー 2026-07-11 §4 P1-2）
