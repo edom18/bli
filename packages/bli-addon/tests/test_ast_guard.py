@@ -50,3 +50,16 @@ def test_skips_spikes_dir(tmp_path):
     f = d / "op_spike.py"
     f.write_text("import bpy\nbpy.ops.object.select_all(action='SELECT')\n", encoding="utf-8")
     assert guard.check([str(tmp_path)], allow=set()) == []
+
+
+def test_allow_dir_is_skipped(tmp_path):
+    d = tmp_path / "gateway"
+    d.mkdir()
+    f = d / "objects.py"
+    f.write_text(
+        "import bpy\nbpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')\n", encoding="utf-8"
+    )
+    # gateway/ ディレクトリ配下は run_operator ラッパを分割したパッケージとして許可される
+    assert guard.check([str(tmp_path)], allow=set(), allow_dirs={"gateway"}) == []
+    # 許可しなければ検出される
+    assert len(guard.check([str(tmp_path)], allow=set(), allow_dirs=set())) == 1
