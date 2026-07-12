@@ -1,0 +1,2296 @@
+{
+ "add/cube-full|human": {
+  "calls": [
+   {
+    "method": "add",
+    "params": {
+     "location": [
+      0.0,
+      0.0,
+      1.0
+     ],
+     "name": "Box",
+     "rotation": [
+      0.0,
+      0.0,
+      45.0
+     ],
+     "scale": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "type": "cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "added cube: Box loc=[0.0, 0.0, 1.0]\n"
+ },
+ "add/cube-full|json": {
+  "calls": [
+   {
+    "method": "add",
+    "params": {
+     "location": [
+      0.0,
+      0.0,
+      1.0
+     ],
+     "name": "Box",
+     "rotation": [
+      0.0,
+      0.0,
+      45.0
+     ],
+     "scale": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "type": "cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"add\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"type\": \"cube\", \"name\": \"Box\", \"location\": [0.0, 0.0, 1.0]}}\n"
+ },
+ "add/light-sun|human": {
+  "calls": [
+   {
+    "method": "add",
+    "params": {
+     "light_type": "SUN",
+     "type": "light"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "added light: Sun loc=[0.0, 0.0, 0.0]\n"
+ },
+ "add/light-sun|json": {
+  "calls": [
+   {
+    "method": "add",
+    "params": {
+     "light_type": "SUN",
+     "type": "light"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"add\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"type\": \"light\", \"name\": \"Sun\", \"location\": [0.0, 0.0, 0.0]}}\n"
+ },
+ "add/location-vec-error-local|human": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "エラー[INVALID_PARAMS]: location は 3 要素（カンマ区切り）で指定してください: '1,2'\n",
+  "stdout": ""
+ },
+ "add/location-vec-error-local|json": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "{\"ok\": false, \"kind\": \"INVALID_PARAMS\", \"message\": \"location は 3 要素（カンマ区切り）で指定してください: '1,2'\"}\n",
+  "stdout": ""
+ },
+ "apply-transform/location-scale|human": {
+  "calls": [
+   {
+    "method": "apply-transform",
+    "params": {
+     "location": true,
+     "scale": true,
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "applied to Cube: scale=[1.0, 1.0, 1.0] dims=[2.0, 2.0, 2.0]\n"
+ },
+ "apply-transform/location-scale|json": {
+  "calls": [
+   {
+    "method": "apply-transform",
+    "params": {
+     "location": true,
+     "scale": true,
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"apply-transform\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"scale\": [1.0, 1.0, 1.0], \"dimensions\": [2.0, 2.0, 2.0]}}\n"
+ },
+ "capture/render-camera|human": {
+  "calls": [
+   {
+    "method": "capture",
+    "params": {
+     "camera": "Cam",
+     "source": "render"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "capture [render] camera=Cam 1920x1080 -> /tmp/render.png (98765B)\n"
+ },
+ "capture/render-camera|json": {
+  "calls": [
+   {
+    "method": "capture",
+    "params": {
+     "camera": "Cam",
+     "source": "render"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"capture\", \"request_id\": \"00000000-0000-4000-8000-000000000001\", \"data\": {\"source\": \"render\", \"camera\": \"Cam\", \"width\": 1920, \"height\": 1080, \"path\": \"/tmp/render.png\", \"size\": 98765}}\n"
+ },
+ "capture/viewport-default|human": {
+  "calls": [
+   {
+    "method": "capture",
+    "params": {
+     "source": "viewport"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "capture [viewport] 1920x1080 -> /tmp/viewport.png (45231B)\n"
+ },
+ "capture/viewport-default|json": {
+  "calls": [
+   {
+    "method": "capture",
+    "params": {
+     "source": "viewport"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"capture\", \"request_id\": \"00000000-0000-4000-8000-000000000001\", \"data\": {\"source\": \"viewport\", \"width\": 1920, \"height\": 1080, \"path\": \"/tmp/viewport.png\", \"size\": 45231}}\n"
+ },
+ "collection/create|human": {
+  "calls": [
+   {
+    "method": "collection",
+    "params": {
+     "action": "create",
+     "name": "Props"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "created collection 'Props'\n"
+ },
+ "collection/create|json": {
+  "calls": [
+   {
+    "method": "collection",
+    "params": {
+     "action": "create",
+     "name": "Props"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"collection\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"create\", \"name\": \"Props\"}}\n"
+ },
+ "collection/list|human": {
+  "calls": [
+   {
+    "method": "collection",
+    "params": {
+     "action": "list"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "collections [Collection(3)]\n"
+ },
+ "collection/list|json": {
+  "calls": [
+   {
+    "method": "collection",
+    "params": {
+     "action": "list"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"collection\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"list\", \"collections\": [{\"name\": \"Collection\", \"objects\": 3}]}}\n"
+ },
+ "collection/move|human": {
+  "calls": [
+   {
+    "method": "collection",
+    "params": {
+     "action": "move",
+     "name": "Props",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "move 'Props': Cube\n"
+ },
+ "collection/move|json": {
+  "calls": [
+   {
+    "method": "collection",
+    "params": {
+     "action": "move",
+     "name": "Props",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"collection\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"move\", \"collection\": \"Props\", \"results\": [{\"name\": \"Cube\"}]}}\n"
+ },
+ "delete/ok|human": {
+  "calls": [
+   {
+    "method": "delete",
+    "params": {
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "deleted 'Cube' (backup: type=MESH loc=[0.0, 0.0, 0.0])\n"
+ },
+ "delete/ok|json": {
+  "calls": [
+   {
+    "method": "delete",
+    "params": {
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"delete\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"deleted\": \"Cube\", \"backup\": {\"type\": \"MESH\", \"location\": [0.0, 0.0, 0.0]}}}\n"
+ },
+ "duplicate/count-offset-linked|human": {
+  "calls": [
+   {
+    "method": "duplicate",
+    "params": {
+     "count": 3,
+     "linked": true,
+     "offset": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "duplicated 'Cube' -> ['Cube.001', 'Cube.002', 'Cube.003'] (count=3)\n"
+ },
+ "duplicate/count-offset-linked|json": {
+  "calls": [
+   {
+    "method": "duplicate",
+    "params": {
+     "count": 3,
+     "linked": true,
+     "offset": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"duplicate\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"source\": \"Cube\", \"created\": [\"Cube.001\", \"Cube.002\", \"Cube.003\"], \"count\": 3}}\n"
+ },
+ "duplicate/count-zero-local|human": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "エラー[INVALID_PARAMS]: --count は 1〜1000 です: 0\n",
+  "stdout": ""
+ },
+ "duplicate/count-zero-local|json": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "{\"ok\": false, \"kind\": \"INVALID_PARAMS\", \"message\": \"--count は 1〜1000 です: 0\"}\n",
+  "stdout": ""
+ },
+ "exec-python/both-specified-local|human": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "エラー[INVALID_PARAMS]: --code か --file のどちらか一方を指定してください（両方/どちらも無しは不可）\n",
+  "stdout": ""
+ },
+ "exec-python/both-specified-local|json": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "{\"ok\": false, \"kind\": \"INVALID_PARAMS\", \"message\": \"--code か --file のどちらか一方を指定してください（両方/どちらも無しは不可）\"}\n",
+  "stdout": ""
+ },
+ "exec-python/from-file|human": {
+  "calls": [
+   {
+    "method": "exec-python",
+    "params": {
+     "code": "print(\"hello from file\")\n"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "exec ok（security_guarantee=false・サンドボックスなし）\nhello from file\n"
+ },
+ "exec-python/from-file|json": {
+  "calls": [
+   {
+    "method": "exec-python",
+    "params": {
+     "code": "print(\"hello from file\")\n"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"exec-python\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"stdout\": \"hello from file\\n\", \"stderr\": \"\", \"result_repr\": null, \"heuristic_flags\": [], \"audit_ok\": true}}\n"
+ },
+ "exec-python/full|human": {
+  "calls": [
+   {
+    "method": "exec-python",
+    "params": {
+     "code": "print(1)"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "exec ok（security_guarantee=false・サンドボックスなし）\n1\n[stderr] [warn] deprecation\n=> 2\n[heuristic_flags] network_call, file_write（注意喚起・ブロックはしない）\n[warn] 監査ログの書き込みに失敗しました（証跡が残っていません）\n"
+ },
+ "exec-python/full|json": {
+  "calls": [
+   {
+    "method": "exec-python",
+    "params": {
+     "code": "print(1)"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"exec-python\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"stdout\": \"1\\n\", \"stderr\": \"[warn] deprecation\\n\", \"result_repr\": \"2\", \"heuristic_flags\": [\"network_call\", \"file_write\"], \"audit_ok\": false}}\n"
+ },
+ "exec-python/minimal|human": {
+  "calls": [
+   {
+    "method": "exec-python",
+    "params": {
+     "code": "pass"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "exec ok（security_guarantee=false・サンドボックスなし）\n"
+ },
+ "exec-python/minimal|json": {
+  "calls": [
+   {
+    "method": "exec-python",
+    "params": {
+     "code": "pass"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"exec-python\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"stdout\": \"\", \"stderr\": \"\", \"result_repr\": null, \"heuristic_flags\": [], \"audit_ok\": true}}\n"
+ },
+ "exec-python/neither-specified-local|human": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "エラー[INVALID_PARAMS]: --code か --file のどちらか一方を指定してください（両方/どちらも無しは不可）\n",
+  "stdout": ""
+ },
+ "exec-python/neither-specified-local|json": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "{\"ok\": false, \"kind\": \"INVALID_PARAMS\", \"message\": \"--code か --file のどちらか一方を指定してください（両方/どちらも無しは不可）\"}\n",
+  "stdout": ""
+ },
+ "export/async-accepted|human": {
+  "calls": [
+   {
+    "method": "export",
+    "params": {
+     "format": "fbx",
+     "path": "out.fbx",
+     "use_selection": false
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "accepted job_id=11111111-2222-4333-8444-555555555555（bli job-wait --id 11111111-2222-4333-8444-555555555555 で結果取得）\n"
+ },
+ "export/async-accepted|json": {
+  "calls": [
+   {
+    "method": "export",
+    "params": {
+     "format": "fbx",
+     "path": "out.fbx",
+     "use_selection": false
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"export\", \"status\": \"accepted\", \"job_id\": \"11111111-2222-4333-8444-555555555555\", \"request_id\": \"11111111-2222-4333-8444-555555555555\"}\n"
+ },
+ "export/fbx-options|human": {
+  "calls": [
+   {
+    "method": "export",
+    "params": {
+     "apply_unit_scale": false,
+     "axis_forward": "-Z",
+     "axis_up": "Y",
+     "embed_textures": true,
+     "format": "fbx",
+     "path": "out.fbx",
+     "scale": 1.0,
+     "targets": "Cube",
+     "use_selection": false
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "exported [fbx] objects=['Cube'] -> out.fbx (4096B, sha=cafebabecafe) fbx_options={'axis_forward': '-Z', 'axis_up': 'Y', 'scale': 1.0, 'apply_unit_scale': False, 'embed_textures': True}\n"
+ },
+ "export/fbx-options|json": {
+  "calls": [
+   {
+    "method": "export",
+    "params": {
+     "apply_unit_scale": false,
+     "axis_forward": "-Z",
+     "axis_up": "Y",
+     "embed_textures": true,
+     "format": "fbx",
+     "path": "out.fbx",
+     "scale": 1.0,
+     "targets": "Cube",
+     "use_selection": false
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"export\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"format\": \"fbx\", \"path\": \"out.fbx\", \"exported_objects\": [\"Cube\"], \"size\": 4096, \"sha256\": \"cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe\", \"fbx_options\": {\"axis_forward\": \"-Z\", \"axis_up\": \"Y\", \"scale\": 1.0, \"apply_unit_scale\": false, \"embed_textures\": true}}}\n"
+ },
+ "export/use-selection-gltf|human": {
+  "calls": [
+   {
+    "method": "export",
+    "params": {
+     "format": "gltf",
+     "path": "out.glb",
+     "use_selection": true
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "exported [gltf] objects=['Cube', 'Sphere'] -> out.glb (8192B, sha=123456781234)\n"
+ },
+ "export/use-selection-gltf|json": {
+  "calls": [
+   {
+    "method": "export",
+    "params": {
+     "format": "gltf",
+     "path": "out.glb",
+     "use_selection": true
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"export\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"format\": \"gltf\", \"path\": \"out.glb\", \"exported_objects\": [\"Cube\", \"Sphere\"], \"size\": 8192, \"sha256\": \"1234567812345678123456781234567812345678123456781234567812345678\"}}\n"
+ },
+ "export/whole-scene|human": {
+  "calls": [
+   {
+    "method": "export",
+    "params": {
+     "format": "obj",
+     "path": "out.obj",
+     "use_selection": false
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "exported [obj] whole scene -> out.obj (2048B, sha=deadbeefdead)\n"
+ },
+ "export/whole-scene|json": {
+  "calls": [
+   {
+    "method": "export",
+    "params": {
+     "format": "obj",
+     "path": "out.obj",
+     "use_selection": false
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"export\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"format\": \"obj\", \"path\": \"out.obj\", \"size\": 2048, \"sha256\": \"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef\"}}\n"
+ },
+ "import/auto-wait-sync|human": {
+  "calls": [
+   {
+    "method": "import",
+    "params": {
+     "format": "obj",
+     "path": "in.obj"
+    }
+   },
+   {
+    "method": "request-status",
+    "params": {
+     "id": "11111111-2222-4333-8444-555555555555"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "imported [obj] 1: ['Cube']\n"
+ },
+ "import/auto-wait-sync|json": {
+  "calls": [
+   {
+    "method": "import",
+    "params": {
+     "format": "obj",
+     "path": "in.obj"
+    }
+   },
+   {
+    "method": "request-status",
+    "params": {
+     "id": "11111111-2222-4333-8444-555555555555"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"import\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"format\": \"obj\", \"imported\": [{\"name\": \"Cube\"}], \"count\": 1}}\n"
+ },
+ "import/obj|human": {
+  "calls": [
+   {
+    "method": "import",
+    "params": {
+     "format": "obj",
+     "path": "in.obj"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "imported [obj] 2: ['Cube', 'Cube.001']\n"
+ },
+ "import/obj|json": {
+  "calls": [
+   {
+    "method": "import",
+    "params": {
+     "format": "obj",
+     "path": "in.obj"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"import\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"format\": \"obj\", \"imported\": [{\"name\": \"Cube\"}, {\"name\": \"Cube.001\"}], \"count\": 2}}\n"
+ },
+ "job-status/no-watchdog|human": {
+  "calls": [
+   {
+    "method": "request-status",
+    "params": {
+     "id": "11111111-2222-4333-8444-555555555555"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "job_id=11111111-2222-4333-8444-555555555555 state=RUNNING known=True\n"
+ },
+ "job-status/no-watchdog|json": {
+  "calls": [
+   {
+    "method": "request-status",
+    "params": {
+     "id": "11111111-2222-4333-8444-555555555555"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"request-status\", \"request_id\": \"00000000-0000-4000-8000-000000000001\", \"data\": {\"id\": \"11111111-2222-4333-8444-555555555555\", \"state\": \"RUNNING\", \"known\": true}}\n"
+ },
+ "job-wait/done-generic|human": {
+  "calls": [
+   {
+    "method": "request-status",
+    "params": {
+     "id": "11111111-2222-4333-8444-555555555555"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "done operation=export\n"
+ },
+ "job-wait/done-generic|json": {
+  "calls": [
+   {
+    "method": "request-status",
+    "params": {
+     "id": "11111111-2222-4333-8444-555555555555"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"export\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"path\": \"out.fbx\", \"size\": 100}}\n"
+ },
+ "list-objects/name-regex-value-guard-local|human": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "エラー[INVALID_PARAMS]: --name-regex の値がオプションに見えます: '--foo'（値の渡し忘れの可能性。パターンが本当に -- で始まる場合は \\-\\- とエスケープ）\n",
+  "stdout": ""
+ },
+ "list-objects/name-regex-value-guard-local|json": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "{\"ok\": false, \"kind\": \"INVALID_PARAMS\", \"message\": \"--name-regex の値がオプションに見えます: '--foo'（値の渡し忘れの可能性。パターンが本当に -- で始まる場合は \\\\-\\\\- とエスケープ）\"}\n",
+  "stdout": ""
+ },
+ "list-objects/type-name-regex|human": {
+  "calls": [
+   {
+    "method": "list-objects",
+    "params": {
+     "name_regex": "Cu.*",
+     "type": "MESH"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "1 objects [Cube(MESH)]\n"
+ },
+ "list-objects/type-name-regex|json": {
+  "calls": [
+   {
+    "method": "list-objects",
+    "params": {
+     "name_regex": "Cu.*",
+     "type": "MESH"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"list-objects\", \"request_id\": \"00000000-0000-4000-8000-000000000001\", \"data\": {\"objects\": [{\"name\": \"Cube\", \"type\": \"MESH\"}], \"count\": 1}}\n"
+ },
+ "material/assign|human": {
+  "calls": [
+   {
+    "method": "material",
+    "params": {
+     "action": "assign",
+     "name": "Red",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "assign 'Red' -> Cube slot=0\n"
+ },
+ "material/assign|json": {
+  "calls": [
+   {
+    "method": "material",
+    "params": {
+     "action": "assign",
+     "name": "Red",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"material\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"assign\", \"material\": \"Red\", \"name\": \"Cube\", \"slot\": 0}}\n"
+ },
+ "material/color-vec-error-local|human": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "エラー[INVALID_PARAMS]: color は 4 要素（カンマ区切り）で指定してください: '1,0'\n",
+  "stdout": ""
+ },
+ "material/color-vec-error-local|json": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "{\"ok\": false, \"kind\": \"INVALID_PARAMS\", \"message\": \"color は 4 要素（カンマ区切り）で指定してください: '1,0'\"}\n",
+  "stdout": ""
+ },
+ "material/create-color|human": {
+  "calls": [
+   {
+    "method": "material",
+    "params": {
+     "action": "create",
+     "color": [
+      1.0,
+      0.0,
+      0.0,
+      1.0
+     ],
+     "name": "NewMat",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "create 'NewMat' -> Cube slot=1\n"
+ },
+ "material/create-color|json": {
+  "calls": [
+   {
+    "method": "material",
+    "params": {
+     "action": "create",
+     "color": [
+      1.0,
+      0.0,
+      0.0,
+      1.0
+     ],
+     "name": "NewMat",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"material\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"create\", \"material\": \"NewMat\", \"name\": \"Cube\", \"slot\": 1}}\n"
+ },
+ "material/list|human": {
+  "calls": [
+   {
+    "method": "material",
+    "params": {
+     "action": "list",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Cube materials [0:Red=[1.0, 0.0, 0.0, 1.0]]\n"
+ },
+ "material/list|json": {
+  "calls": [
+   {
+    "method": "material",
+    "params": {
+     "action": "list",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"material\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"list\", \"name\": \"Cube\", \"materials\": [{\"slot\": 0, \"name\": \"Red\", \"base_color\": [1.0, 0.0, 0.0, 1.0]}]}}\n"
+ },
+ "mesh/bevel|human": {
+  "calls": [
+   {
+    "method": "mesh",
+    "params": {
+     "op": "bevel",
+     "segments": 2,
+     "targets": "Cube",
+     "width": 0.1
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Cube bevel: +8v/+12e/+6f → 20v/30e/18f\n"
+ },
+ "mesh/bevel|json": {
+  "calls": [
+   {
+    "method": "mesh",
+    "params": {
+     "op": "bevel",
+     "segments": 2,
+     "targets": "Cube",
+     "width": 0.1
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"mesh\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"op\": \"bevel\", \"name\": \"Cube\", \"delta\": {\"vertices\": 8, \"edges\": 12, \"polygons\": 6}, \"stats\": {\"vertices\": 20, \"edges\": 30, \"polygons\": 18}}}\n"
+ },
+ "mesh/boolean|human": {
+  "calls": [
+   {
+    "method": "mesh",
+    "params": {
+     "op": "boolean",
+     "operation": "UNION",
+     "targets": "Cube",
+     "with_object": "Other"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Cube boolean (UNION with Other): -2v/-3e/-1f → 10v/13e/5f\n"
+ },
+ "mesh/boolean|json": {
+  "calls": [
+   {
+    "method": "mesh",
+    "params": {
+     "op": "boolean",
+     "operation": "UNION",
+     "targets": "Cube",
+     "with_object": "Other"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"mesh\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"op\": \"boolean\", \"name\": \"Cube\", \"operation\": \"UNION\", \"with_object\": \"Other\", \"delta\": {\"vertices\": -2, \"edges\": -3, \"polygons\": -1}, \"stats\": {\"vertices\": 10, \"edges\": 13, \"polygons\": 5}}}\n"
+ },
+ "mesh/decimate|human": {
+  "calls": [
+   {
+    "method": "mesh",
+    "params": {
+     "op": "decimate",
+     "ratio": 0.5,
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Cube decimate (ratio=0.5): -100v/-150e/-50f → 50v/75e/25f\n"
+ },
+ "mesh/decimate|json": {
+  "calls": [
+   {
+    "method": "mesh",
+    "params": {
+     "op": "decimate",
+     "ratio": 0.5,
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"mesh\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"op\": \"decimate\", \"name\": \"Cube\", \"ratio\": 0.5, \"delta\": {\"vertices\": -100, \"edges\": -150, \"polygons\": -50}, \"stats\": {\"vertices\": 50, \"edges\": 75, \"polygons\": 25}}}\n"
+ },
+ "mesh/extrude|human": {
+  "calls": [
+   {
+    "method": "mesh",
+    "params": {
+     "offset": [
+      0.0,
+      0.0,
+      1.0
+     ],
+     "op": "extrude",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Cube extrude: +4v/+4e/+1f → 12v/16e/7f\n"
+ },
+ "mesh/extrude|json": {
+  "calls": [
+   {
+    "method": "mesh",
+    "params": {
+     "offset": [
+      0.0,
+      0.0,
+      1.0
+     ],
+     "op": "extrude",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"mesh\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"op\": \"extrude\", \"name\": \"Cube\", \"delta\": {\"vertices\": 4, \"edges\": 4, \"polygons\": 1}, \"stats\": {\"vertices\": 12, \"edges\": 16, \"polygons\": 7}}}\n"
+ },
+ "mesh/merge-by-distance|human": {
+  "calls": [
+   {
+    "method": "mesh",
+    "params": {
+     "distance": 0.001,
+     "op": "merge-by-distance",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Cube merge-by-distance: merged=3 (10→7)\n"
+ },
+ "mesh/merge-by-distance|json": {
+  "calls": [
+   {
+    "method": "mesh",
+    "params": {
+     "distance": 0.001,
+     "op": "merge-by-distance",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"mesh\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"op\": \"merge-by-distance\", \"name\": \"Cube\", \"merged\": 3, \"before\": 10, \"after\": 7}}\n"
+ },
+ "mesh/offset-vec-error-local|human": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "エラー[INVALID_PARAMS]: offset は 3 要素（カンマ区切り）で指定してください: '1,2'\n",
+  "stdout": ""
+ },
+ "mesh/offset-vec-error-local|json": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "{\"ok\": false, \"kind\": \"INVALID_PARAMS\", \"message\": \"offset は 3 要素（カンマ区切り）で指定してください: '1,2'\"}\n",
+  "stdout": ""
+ },
+ "mesh/recalc-normals|human": {
+  "calls": [
+   {
+    "method": "mesh",
+    "params": {
+     "inside": true,
+     "op": "recalc-normals",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Cube recalc-normals: faces=6 flipped=2 inside=True\n"
+ },
+ "mesh/recalc-normals|json": {
+  "calls": [
+   {
+    "method": "mesh",
+    "params": {
+     "inside": true,
+     "op": "recalc-normals",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"mesh\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"op\": \"recalc-normals\", \"name\": \"Cube\", \"faces\": 6, \"flipped\": 2, \"inside\": true}}\n"
+ },
+ "mode/to-edit-targets|human": {
+  "calls": [
+   {
+    "method": "mode",
+    "params": {
+     "targets": "Cube",
+     "to": "edit"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "mode OBJECT -> EDIT (active=Cube)\n"
+ },
+ "mode/to-edit-targets|json": {
+  "calls": [
+   {
+    "method": "mode",
+    "params": {
+     "targets": "Cube",
+     "to": "edit"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"mode\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"from_mode\": \"OBJECT\", \"to_mode\": \"EDIT\", \"active\": \"Cube\"}}\n"
+ },
+ "mode/to-object-no-targets|human": {
+  "calls": [
+   {
+    "method": "mode",
+    "params": {
+     "to": "object"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "mode EDIT -> OBJECT (active=Cube)\n"
+ },
+ "mode/to-object-no-targets|json": {
+  "calls": [
+   {
+    "method": "mode",
+    "params": {
+     "to": "object"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"mode\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"from_mode\": \"EDIT\", \"to_mode\": \"OBJECT\", \"active\": \"Cube\"}}\n"
+ },
+ "modifier/add|human": {
+  "calls": [
+   {
+    "method": "modifier",
+    "params": {
+     "action": "add",
+     "axis": "X",
+     "targets": "Cube",
+     "type": "MIRROR"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "added MIRROR 'Mirror' to Cube\n"
+ },
+ "modifier/add|json": {
+  "calls": [
+   {
+    "method": "modifier",
+    "params": {
+     "action": "add",
+     "axis": "X",
+     "targets": "Cube",
+     "type": "MIRROR"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"modifier\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"add\", \"name\": \"Cube\", \"modifier\": {\"name\": \"Mirror\", \"type\": \"MIRROR\"}}}\n"
+ },
+ "modifier/apply|human": {
+  "calls": [
+   {
+    "method": "modifier",
+    "params": {
+     "action": "apply",
+     "name": "Mirror",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "applied 'Mirror' to Cube\n"
+ },
+ "modifier/apply|json": {
+  "calls": [
+   {
+    "method": "modifier",
+    "params": {
+     "action": "apply",
+     "name": "Mirror",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"modifier\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"apply\", \"name\": \"Cube\", \"applied\": \"Mirror\"}}\n"
+ },
+ "modifier/list|human": {
+  "calls": [
+   {
+    "method": "modifier",
+    "params": {
+     "action": "list",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Cube modifiers [Mirror(MIRROR)]\n"
+ },
+ "modifier/list|json": {
+  "calls": [
+   {
+    "method": "modifier",
+    "params": {
+     "action": "list",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"modifier\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"list\", \"name\": \"Cube\", \"modifiers\": [{\"name\": \"Mirror\", \"type\": \"MIRROR\"}]}}\n"
+ },
+ "modifier/remove|human": {
+  "calls": [
+   {
+    "method": "modifier",
+    "params": {
+     "action": "remove",
+     "name": "Mirror",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "removed 'Mirror' from Cube\n"
+ },
+ "modifier/remove|json": {
+  "calls": [
+   {
+    "method": "modifier",
+    "params": {
+     "action": "remove",
+     "name": "Mirror",
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"modifier\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"remove\", \"name\": \"Cube\", \"removed\": \"Mirror\"}}\n"
+ },
+ "object-info/regex-targets|human": {
+  "calls": [
+   {
+    "method": "object-info",
+    "params": {
+     "regex": true,
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Cube (MESH): loc=[0.0, 0.0, 0.0] dims=[2.0, 2.0, 2.0]\n"
+ },
+ "object-info/regex-targets|json": {
+  "calls": [
+   {
+    "method": "object-info",
+    "params": {
+     "regex": true,
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"object-info\", \"request_id\": \"00000000-0000-4000-8000-000000000001\", \"data\": {\"name\": \"Cube\", \"type\": \"MESH\", \"location\": [0.0, 0.0, 0.0], \"dimensions\": [2.0, 2.0, 2.0]}}\n"
+ },
+ "open/force-discard|human": {
+  "calls": [
+   {
+    "method": "open",
+    "params": {
+     "force": true,
+     "path": "x.blend"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "opened -> x.blend scene=Scene objects=5 (discarded unsaved)\n"
+ },
+ "open/force-discard|json": {
+  "calls": [
+   {
+    "method": "open",
+    "params": {
+     "force": true,
+     "path": "x.blend"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"open\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"path\": \"x.blend\", \"scene\": \"Scene\", \"object_count\": 5, \"discarded_unsaved\": true}}\n"
+ },
+ "parent/clear|human": {
+  "calls": [
+   {
+    "method": "parent",
+    "params": {
+     "clear": true,
+     "keep_transform": true,
+     "targets": "A,B"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "parent clear: A->None, B->None\n"
+ },
+ "parent/clear|json": {
+  "calls": [
+   {
+    "method": "parent",
+    "params": {
+     "clear": true,
+     "keep_transform": true,
+     "targets": "A,B"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"parent\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"clear\", \"results\": [{\"name\": \"A\", \"parent\": null}, {\"name\": \"B\", \"parent\": null}]}}\n"
+ },
+ "parent/set-multi|human": {
+  "calls": [
+   {
+    "method": "parent",
+    "params": {
+     "keep_transform": true,
+     "targets": "A,B",
+     "to": "Root"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "parent set: A->Root, B->Root\n"
+ },
+ "parent/set-multi|json": {
+  "calls": [
+   {
+    "method": "parent",
+    "params": {
+     "keep_transform": true,
+     "targets": "A,B",
+     "to": "Root"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"parent\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"action\": \"set\", \"results\": [{\"name\": \"A\", \"parent\": \"Root\"}, {\"name\": \"B\", \"parent\": \"Root\"}]}}\n"
+ },
+ "ping/connect-error|human": {
+  "calls": [
+   {
+    "method": "ping",
+    "params": null
+   }
+  ],
+  "exit_code": 3,
+  "stderr": "エラー[CONNECTION]: 接続不能 127.0.0.1:9876: [Errno 111] refused（アドオンが起動していない可能性） (id=00000000-0000-4000-8000-000000000001)\n",
+  "stdout": ""
+ },
+ "ping/connect-error|json": {
+  "calls": [
+   {
+    "method": "ping",
+    "params": null
+   }
+  ],
+  "exit_code": 3,
+  "stderr": "{\"ok\": false, \"kind\": \"CONNECTION\", \"message\": \"接続不能 127.0.0.1:9876: [Errno 111] refused（アドオンが起動していない可能性）\", \"request_id\": \"00000000-0000-4000-8000-000000000001\"}\n",
+  "stdout": ""
+ },
+ "ping/ok|human": {
+  "calls": [
+   {
+    "method": "ping",
+    "params": null
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "pong: Blender 5.0.1 (protocol 1.0, schema cafebabecafe)\n"
+ },
+ "ping/ok|json": {
+  "calls": [
+   {
+    "method": "ping",
+    "params": null
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"request_id\": \"00000000-0000-4000-8000-000000000001\", \"protocol_version\": \"1.0\", \"blender_version\": \"5.0.1\", \"schema_hash\": \"cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe\", \"capabilities\": [\"print3d\"], \"ping\": {\"pong\": true}}\n"
+ },
+ "print-check/all-omitted|human": {
+  "calls": [
+   {
+    "method": "print-check",
+    "params": {
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Cube printable=True non_manifold_edges=0 flipped_normals=0 degenerate_faces=0\n"
+ },
+ "print-check/all-omitted|json": {
+  "calls": [
+   {
+    "method": "print-check",
+    "params": {
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"print-check\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"checks\": {\"is_printable\": true, \"non_manifold_edges\": 0, \"flipped_normals\": 0, \"degenerate_faces\": 0}}}\n"
+ },
+ "print-check/thin-min-thickness|human": {
+  "calls": [
+   {
+    "method": "print-check",
+    "params": {
+     "min_thickness": 0.8,
+     "targets": "Cube",
+     "thin": true
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Cube printable=False thin_walls=3\n"
+ },
+ "print-check/thin-min-thickness|json": {
+  "calls": [
+   {
+    "method": "print-check",
+    "params": {
+     "min_thickness": 0.8,
+     "targets": "Cube",
+     "thin": true
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"print-check\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"checks\": {\"is_printable\": false, \"thin_walls\": 3}}}\n"
+ },
+ "print-export/stl|human": {
+  "calls": [
+   {
+    "method": "print-export",
+    "params": {
+     "apply_modifiers": true,
+     "ascii": false,
+     "format": "stl",
+     "path": "out.stl",
+     "scale": 1.0,
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "exported Cube [stl] -> out.stl (1024B, 12 tris, scale=1.0)\n"
+ },
+ "print-export/stl|json": {
+  "calls": [
+   {
+    "method": "print-export",
+    "params": {
+     "apply_modifiers": true,
+     "ascii": false,
+     "format": "stl",
+     "path": "out.stl",
+     "scale": 1.0,
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"print-export\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"format\": \"stl\", \"path\": \"out.stl\", \"size\": 1024, \"triangles\": 12, \"global_scale\": 1.0}}\n"
+ },
+ "print-repair/manifold-normals|human": {
+  "calls": [
+   {
+    "method": "print-repair",
+    "params": {
+     "make_manifold": true,
+     "recalc_normals": true,
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "repaired Cube applied=['make_manifold', 'recalc_normals'] fixed_non_manifold=2 printable=True\n"
+ },
+ "print-repair/manifold-normals|json": {
+  "calls": [
+   {
+    "method": "print-repair",
+    "params": {
+     "make_manifold": true,
+     "recalc_normals": true,
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"print-repair\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"applied\": [\"make_manifold\", \"recalc_normals\"], \"fixed\": {\"non_manifold_edges\": 2, \"flipped_normals\": 1}, \"after\": {\"is_printable\": true}}}\n"
+ },
+ "print-setup/mm|human": {
+  "calls": [
+   {
+    "method": "print-setup",
+    "params": {
+     "unit": "mm"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "scene 'Scene' unit=mm (system=METRIC length_unit=MILLIMETERS changed=True)\n"
+ },
+ "print-setup/mm|json": {
+  "calls": [
+   {
+    "method": "print-setup",
+    "params": {
+     "unit": "mm"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"print-setup\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"scene\": \"Scene\", \"unit\": \"mm\", \"unit_settings\": {\"system\": \"METRIC\", \"length_unit\": \"MILLIMETERS\"}, \"changed\": true}}\n"
+ },
+ "redo/ok|human": {
+  "calls": [
+   {
+    "method": "redo",
+    "params": {
+     "steps": 3
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "redo: requested=3 applied=3\n"
+ },
+ "redo/ok|json": {
+  "calls": [
+   {
+    "method": "redo",
+    "params": {
+     "steps": 3
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"redo\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"requested\": 3, \"applied\": 3}}\n"
+ },
+ "rename/with-data|human": {
+  "calls": [
+   {
+    "method": "rename",
+    "params": {
+     "name": "Box",
+     "targets": "Cube",
+     "with_data": true
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "renamed 'Cube' -> 'Box' (data_renamed=True)\n"
+ },
+ "rename/with-data|json": {
+  "calls": [
+   {
+    "method": "rename",
+    "params": {
+     "name": "Box",
+     "targets": "Cube",
+     "with_data": true
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"rename\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"old_name\": \"Cube\", \"new_name\": \"Box\", \"data_renamed\": true}}\n"
+ },
+ "request-status/responsive|human": {
+  "calls": [
+   {
+    "method": "request-status",
+    "params": {
+     "id": "11111111-2222-4333-8444-555555555555"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "id=11111111-2222-4333-8444-555555555555 state=RUNNING known=True\n"
+ },
+ "request-status/responsive|json": {
+  "calls": [
+   {
+    "method": "request-status",
+    "params": {
+     "id": "11111111-2222-4333-8444-555555555555"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"request-status\", \"request_id\": \"00000000-0000-4000-8000-000000000001\", \"data\": {\"id\": \"11111111-2222-4333-8444-555555555555\", \"state\": \"RUNNING\", \"known\": true, \"watchdog\": {\"responsive\": true, \"last_pump_age\": 0.1}}}\n"
+ },
+ "request-status/unresponsive|human": {
+  "calls": [
+   {
+    "method": "request-status",
+    "params": {
+     "id": "11111111-2222-4333-8444-555555555555"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "id=11111111-2222-4333-8444-555555555555 state=RUNNING known=True  ⚠ メインスレッド応答なし（42s 停止・重量処理で固まっている可能性／実行は継続中）\n"
+ },
+ "request-status/unresponsive|json": {
+  "calls": [
+   {
+    "method": "request-status",
+    "params": {
+     "id": "11111111-2222-4333-8444-555555555555"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"request-status\", \"request_id\": \"00000000-0000-4000-8000-000000000001\", \"data\": {\"id\": \"11111111-2222-4333-8444-555555555555\", \"state\": \"RUNNING\", \"known\": true, \"watchdog\": {\"responsive\": false, \"last_pump_age\": 42.3}}}\n"
+ },
+ "save/path-backed-up|human": {
+  "calls": [
+   {
+    "method": "save",
+    "params": {
+     "backup": true,
+     "path": "out.blend"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "saved -> out.blend (102400B) backup=out.blend1\n"
+ },
+ "save/path-backed-up|json": {
+  "calls": [
+   {
+    "method": "save",
+    "params": {
+     "backup": true,
+     "path": "out.blend"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"save\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"path\": \"out.blend\", \"size\": 102400, \"backed_up\": true, \"backup_path\": \"out.blend1\"}}\n"
+ },
+ "save/path-omitted|human": {
+  "calls": [
+   {
+    "method": "save",
+    "params": {
+     "backup": true
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "saved -> current.blend (51200B)\n"
+ },
+ "save/path-omitted|json": {
+  "calls": [
+   {
+    "method": "save",
+    "params": {
+     "backup": true
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"save\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"path\": \"current.blend\", \"size\": 51200, \"backed_up\": false}}\n"
+ },
+ "scene-info/basic|human": {
+  "calls": [
+   {
+    "method": "scene-info",
+    "params": {
+     "depth": 1
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "scene 'Scene': 2 objects [Cube, Light]\n"
+ },
+ "scene-info/basic|json": {
+  "calls": [
+   {
+    "method": "scene-info",
+    "params": {
+     "depth": 1
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"scene-info\", \"request_id\": \"00000000-0000-4000-8000-000000000001\", \"data\": {\"scene\": \"Scene\", \"object_count\": 2, \"objects\": [{\"name\": \"Cube\", \"type\": \"MESH\"}, {\"name\": \"Light\", \"type\": \"LIGHT\"}]}}\n"
+ },
+ "scene-info/depth|human": {
+  "calls": [
+   {
+    "method": "scene-info",
+    "params": {
+     "depth": 2
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "scene 'Scene': 0 objects []\n"
+ },
+ "scene-info/depth|json": {
+  "calls": [
+   {
+    "method": "scene-info",
+    "params": {
+     "depth": 2
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"scene-info\", \"request_id\": \"00000000-0000-4000-8000-000000000001\", \"data\": {\"scene\": \"Scene\", \"object_count\": 0, \"objects\": []}}\n"
+ },
+ "scene-info/invalid-params|human": {
+  "calls": [
+   {
+    "method": "scene-info",
+    "params": {
+     "depth": 2
+    }
+   }
+  ],
+  "exit_code": 4,
+  "stderr": "エラー[INVALID_PARAMS]: depth が不正です (id=00000000-0000-4000-8000-000000000001)\n",
+  "stdout": ""
+ },
+ "scene-info/invalid-params|json": {
+  "calls": [
+   {
+    "method": "scene-info",
+    "params": {
+     "depth": 2
+    }
+   }
+  ],
+  "exit_code": 4,
+  "stderr": "{\"ok\": false, \"kind\": \"INVALID_PARAMS\", \"message\": \"depth が不正です\", \"request_id\": \"00000000-0000-4000-8000-000000000001\"}\n",
+  "stdout": ""
+ },
+ "scene-info/timeout-retryable|human": {
+  "calls": [
+   {
+    "method": "scene-info",
+    "params": {
+     "depth": 1
+    }
+   }
+  ],
+  "exit_code": 2,
+  "stderr": "エラー[TIMEOUT]: 処理がタイムアウトしました（後追い: bli request-status --id 00000000-0000-4000-8000-000000000001） (id=00000000-0000-4000-8000-000000000001)\n",
+  "stdout": ""
+ },
+ "scene-info/timeout-retryable|json": {
+  "calls": [
+   {
+    "method": "scene-info",
+    "params": {
+     "depth": 1
+    }
+   }
+  ],
+  "exit_code": 2,
+  "stderr": "{\"ok\": false, \"kind\": \"TIMEOUT\", \"message\": \"処理がタイムアウトしました（後追い: bli request-status --id 00000000-0000-4000-8000-000000000001）\", \"request_id\": \"00000000-0000-4000-8000-000000000001\"}\n",
+  "stdout": ""
+ },
+ "select/regex-type-active|human": {
+  "calls": [
+   {
+    "method": "select",
+    "params": {
+     "active": "Cube",
+     "regex": true,
+     "targets": "Cube.*",
+     "type": "MESH"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "selected 2: ['Cube', 'Cube.001'] active=Cube\n"
+ },
+ "select/regex-type-active|json": {
+  "calls": [
+   {
+    "method": "select",
+    "params": {
+     "active": "Cube",
+     "regex": true,
+     "targets": "Cube.*",
+     "type": "MESH"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"select\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"count\": 2, \"selected\": [\"Cube\", \"Cube.001\"], \"active\": \"Cube\"}}\n"
+ },
+ "set-origin/geometry|human": {
+  "calls": [
+   {
+    "method": "set-origin",
+    "params": {
+     "center": "bounds",
+     "targets": "Cube",
+     "to": "geometry"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "origin of Cube -> geometry @ [0.0, 0.0, 0.5]\n"
+ },
+ "set-origin/geometry|json": {
+  "calls": [
+   {
+    "method": "set-origin",
+    "params": {
+     "center": "bounds",
+     "targets": "Cube",
+     "to": "geometry"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"set-origin\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"to\": \"geometry\", \"origin_world\": [0.0, 0.0, 0.5]}}\n"
+ },
+ "set-origin/invalid-enum-local|human": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "エラー[INVALID_PARAMS]: to: Input should be 'geometry', 'cursor' or 'world'\n",
+  "stdout": ""
+ },
+ "set-origin/invalid-enum-local|json": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "{\"ok\": false, \"kind\": \"INVALID_PARAMS\", \"message\": \"to: Input should be 'geometry', 'cursor' or 'world'\"}\n",
+  "stdout": ""
+ },
+ "set-origin/world-xyz|human": {
+  "calls": [
+   {
+    "method": "set-origin",
+    "params": {
+     "targets": "Cube",
+     "to": "world",
+     "x": 1.5,
+     "z": 0.25
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "origin of Cube -> world @ [1.5, 0.0, 0.25]\n"
+ },
+ "set-origin/world-xyz|json": {
+  "calls": [
+   {
+    "method": "set-origin",
+    "params": {
+     "targets": "Cube",
+     "to": "world",
+     "x": 1.5,
+     "z": 0.25
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"set-origin\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"to\": \"world\", \"origin_world\": [1.5, 0.0, 0.25]}}\n"
+ },
+ "straighten/align-vector|human": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "from_dir": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "method": "align-vector",
+     "targets": "Cube",
+     "to_dir": [
+      0.0,
+      0.0,
+      1.0
+     ],
+     "up_axis": "+Z"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "straighten Cube [align-vector] up=+Z: [1.0, 0.0, 0.0] -> [0.0, 0.0, 1.0] angle=90.0deg rot=[0.0, 90.0, 0.0] baked=False\n"
+ },
+ "straighten/align-vector|json": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "from_dir": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "method": "align-vector",
+     "targets": "Cube",
+     "to_dir": [
+      0.0,
+      0.0,
+      1.0
+     ],
+     "up_axis": "+Z"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"straighten\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"method\": \"align-vector\", \"up_axis\": \"+Z\", \"from_dir\": [1.0, 0.0, 0.0], \"from_world_after\": [0.0, 0.0, 1.0], \"angle_deg\": 90.0, \"rotation_euler_deg\": [0.0, 90.0, 0.0], \"baked\": false}}\n"
+ },
+ "straighten/angle|human": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "axis": "Z",
+     "degrees": 45.0,
+     "method": "angle",
+     "targets": "Cube",
+     "up_axis": "+Z"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "straighten Cube [angle] up=+Z: axis=Z degrees=45.0 rot=[0.0, 0.0, 45.0] baked=False\n"
+ },
+ "straighten/angle|json": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "axis": "Z",
+     "degrees": 45.0,
+     "method": "angle",
+     "targets": "Cube",
+     "up_axis": "+Z"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"straighten\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"method\": \"angle\", \"up_axis\": \"+Z\", \"axis\": \"Z\", \"degrees\": 45.0, \"rotation_euler_deg\": [0.0, 0.0, 45.0], \"baked\": false}}\n"
+ },
+ "straighten/dry-run|human": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "dry_run": true,
+     "method": "reset",
+     "targets": "Cube",
+     "up_axis": "+Z"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "[dry-run] straighten Cube [reset] up=+Z: rot=[0.0, 0.0, 0.0] baked=False\n"
+ },
+ "straighten/dry-run|json": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "dry_run": true,
+     "method": "reset",
+     "targets": "Cube",
+     "up_axis": "+Z"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"straighten\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"method\": \"reset\", \"up_axis\": \"+Z\", \"dry_run\": true, \"rotation_euler_deg\": [0.0, 0.0, 0.0], \"baked\": false}}\n"
+ },
+ "straighten/floor|human": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "method": "floor",
+     "targets": "Cube",
+     "up_axis": "+Z"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "straighten Cube [floor] up=+Z: grounded min_up=-0.5 offset=0.5\n"
+ },
+ "straighten/floor|json": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "method": "floor",
+     "targets": "Cube",
+     "up_axis": "+Z"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"straighten\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"method\": \"floor\", \"up_axis\": \"+Z\", \"min_up\": -0.5, \"floor_offset\": 0.5}}\n"
+ },
+ "straighten/from-dir-vec-error-local|human": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "エラー[INVALID_PARAMS]: from-dir は 3 要素（カンマ区切り）で指定してください: '1,2'\n",
+  "stdout": ""
+ },
+ "straighten/from-dir-vec-error-local|json": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "{\"ok\": false, \"kind\": \"INVALID_PARAMS\", \"message\": \"from-dir は 3 要素（カンマ区切り）で指定してください: '1,2'\"}\n",
+  "stdout": ""
+ },
+ "straighten/pca|human": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "method": "pca",
+     "targets": "Cube",
+     "up_axis": "+Z",
+     "up_hint": "current"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "straighten Cube [pca] up=+Z: tilt=5.0deg principal -> [0.0, 0.0, 1.0] rot=[1.0, 2.0, 3.0]\n"
+ },
+ "straighten/pca|json": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "method": "pca",
+     "targets": "Cube",
+     "up_axis": "+Z",
+     "up_hint": "current"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"straighten\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"method\": \"pca\", \"up_axis\": \"+Z\", \"tilt_from_up_deg\": 5.0, \"principal_world_after\": [0.0, 0.0, 1.0], \"rotation_euler_deg\": [1.0, 2.0, 3.0]}}\n"
+ },
+ "straighten/reference|human": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "axis": "X",
+     "method": "reference",
+     "ref_axis": "+Z",
+     "reference": "Other",
+     "targets": "Cube",
+     "up_axis": "+Z"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "straighten Cube [reference] up=+Z: axis=X ref=Other:+Z -> [1.0, 0.0, 0.0] rot=[0.0, 0.0, 90.0]\n"
+ },
+ "straighten/reference|json": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "axis": "X",
+     "method": "reference",
+     "ref_axis": "+Z",
+     "reference": "Other",
+     "targets": "Cube",
+     "up_axis": "+Z"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"straighten\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"method\": \"reference\", \"up_axis\": \"+Z\", \"axis\": \"X\", \"reference\": \"Other\", \"ref_axis\": \"+Z\", \"aligned_world\": [1.0, 0.0, 0.0], \"rotation_euler_deg\": [0.0, 0.0, 90.0]}}\n"
+ },
+ "straighten/reset-default|human": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "method": "reset",
+     "targets": "Cube",
+     "up_axis": "+Z"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "straighten Cube [reset] up=+Z: rot=[0.0, 0.0, 0.0] baked=False\n"
+ },
+ "straighten/reset-default|json": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "method": "reset",
+     "targets": "Cube",
+     "up_axis": "+Z"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"straighten\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"method\": \"reset\", \"up_axis\": \"+Z\", \"rotation_euler_deg\": [0.0, 0.0, 0.0], \"baked\": false}}\n"
+ },
+ "straighten/world-align|human": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "axis": "Z",
+     "method": "world-align",
+     "targets": "Cube",
+     "up_axis": "+Z"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "straighten Cube [world-align] up=+Z: axis=Z -> [0.0, 0.0, 1.0] rot=[0.0, 0.0, 0.0]\n"
+ },
+ "straighten/world-align|json": {
+  "calls": [
+   {
+    "method": "straighten",
+    "params": {
+     "axis": "Z",
+     "method": "world-align",
+     "targets": "Cube",
+     "up_axis": "+Z"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"straighten\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"method\": \"world-align\", \"up_axis\": \"+Z\", \"axis\": \"Z\", \"aligned_world\": [0.0, 0.0, 1.0], \"rotation_euler_deg\": [0.0, 0.0, 0.0]}}\n"
+ },
+ "transform/bad-vec-local|human": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "エラー[INVALID_PARAMS]: location は 3 要素（カンマ区切り）で指定してください: '1,2'\n",
+  "stdout": ""
+ },
+ "transform/bad-vec-local|json": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "{\"ok\": false, \"kind\": \"INVALID_PARAMS\", \"message\": \"location は 3 要素（カンマ区切り）で指定してください: '1,2'\"}\n",
+  "stdout": ""
+ },
+ "transform/set|human": {
+  "calls": [
+   {
+    "method": "transform",
+    "params": {
+     "location": [
+      1.0,
+      2.0,
+      3.0
+     ],
+     "mode": "set",
+     "scale": [
+      2.0,
+      2.0,
+      2.0
+     ],
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Cube: loc=[1.0, 2.0, 3.0] rot=[0.0, 0.0, 0.0] scale=[2.0, 2.0, 2.0]\n"
+ },
+ "transform/set|json": {
+  "calls": [
+   {
+    "method": "transform",
+    "params": {
+     "location": [
+      1.0,
+      2.0,
+      3.0
+     ],
+     "mode": "set",
+     "scale": [
+      2.0,
+      2.0,
+      2.0
+     ],
+     "targets": "Cube"
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"transform\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"name\": \"Cube\", \"location\": [1.0, 2.0, 3.0], \"rotation_euler_deg\": [0.0, 0.0, 0.0], \"scale\": [2.0, 2.0, 2.0]}}\n"
+ },
+ "undo/ok|human": {
+  "calls": [
+   {
+    "method": "undo",
+    "params": {
+     "steps": 2
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "undo: requested=2 applied=2\n"
+ },
+ "undo/ok|json": {
+  "calls": [
+   {
+    "method": "undo",
+    "params": {
+     "steps": 2
+    }
+   }
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "{\"ok\": true, \"operation\": \"undo\", \"request_id\": \"11111111-2222-4333-8444-555555555555\", \"data\": {\"requested\": 2, \"applied\": 2}}\n"
+ },
+ "undo/steps-out-of-range|human": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "エラー[INVALID_PARAMS]: --steps は 1〜100 です: 0\n",
+  "stdout": ""
+ },
+ "undo/steps-out-of-range|json": {
+  "calls": [],
+  "exit_code": 4,
+  "stderr": "{\"ok\": false, \"kind\": \"INVALID_PARAMS\", \"message\": \"--steps は 1〜100 です: 0\"}\n",
+  "stdout": ""
+ }
+}
