@@ -995,6 +995,96 @@ CASES: list[Case] = [
         ],
         local_only=True,
     ),
+    Case(
+        "material/create-pbr",
+        [
+            "material",
+            "--action",
+            "create",
+            "--targets",
+            "Cube",
+            "--name",
+            "PBRMat",
+            "--metallic",
+            "0.9",
+            "--roughness",
+            "0.2",
+            "--alpha",
+            "0.5",
+            "--emission",
+            "1,0,0,1",
+            "--emission-strength",
+            "2.0",
+            "--id",
+            FIXED_ID,
+        ],
+        [
+            {
+                "result": {
+                    "operation": "material",
+                    "data": {
+                        "action": "create",
+                        "material": "PBRMat",
+                        "name": "Cube",
+                        "slot": 0,
+                        "principled": {
+                            "metallic": 0.9,
+                            "roughness": 0.2,
+                            "alpha": 0.5,
+                            "emission_color": [1.0, 0.0, 0.0, 1.0],
+                            "emission_strength": 2.0,
+                        },
+                    },
+                }
+            }
+        ],
+    ),
+    Case(
+        "material/create-texture",
+        [
+            "material",
+            "--action",
+            "create",
+            "--targets",
+            "Cube",
+            "--name",
+            "TexMat",
+            "--texture",
+            "tex.png",
+            "--pack-texture",
+            "--id",
+            FIXED_ID,
+        ],
+        [
+            {
+                "result": {
+                    "operation": "material",
+                    "data": {
+                        "action": "create",
+                        "material": "TexMat",
+                        "name": "Cube",
+                        "slot": 0,
+                        "texture": {"image": "tex.png", "path": "tex.png", "packed": True},
+                    },
+                }
+            }
+        ],
+    ),
+    Case(
+        "material/bad-emission-vec-local",
+        [
+            "material",
+            "--action",
+            "create",
+            "--targets",
+            "Cube",
+            "--name",
+            "M",
+            "--emission",
+            "1,0",
+        ],
+        local_only=True,
+    ),
     # ---- modifier ----
     Case(
         "modifier/list",
@@ -1035,6 +1125,39 @@ CASES: list[Case] = [
                         "action": "add",
                         "name": "Cube",
                         "modifier": {"name": "Mirror", "type": "MIRROR"},
+                    },
+                }
+            }
+        ],
+    ),
+    Case(
+        "modifier/add-props",
+        [
+            "modifier",
+            "--action",
+            "add",
+            "--targets",
+            "Cube",
+            "--type",
+            "BEVEL",
+            "--props",
+            '{"width":0.1,"segments":2}',
+            "--id",
+            FIXED_ID,
+        ],
+        [
+            {
+                "result": {
+                    "operation": "modifier",
+                    "data": {
+                        "action": "add",
+                        "name": "Cube",
+                        "modifier": {
+                            "name": "Bevel",
+                            "type": "BEVEL",
+                            "applied_props": {"width": 0.1, "segments": 2},
+                        },
+                        "modifiers": [{"name": "Bevel", "type": "BEVEL"}],
                     },
                 }
             }
