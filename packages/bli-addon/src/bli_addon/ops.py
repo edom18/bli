@@ -556,12 +556,22 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             symptom="--props と type 別の専用フラグは併用できません",
             remediation="どちらか一方で指定してください",
         )
-        if mtype == "BOOLEAN" and props is None:
-            _require_input(
-                "with_object" in params,
-                symptom="BOOLEAN の add には --with（相手オブジェクト）が必要です",
-                remediation='--with <object> を指定してください（--props \'{"object":"名前"}\' でも可）',
-            )
+        if mtype == "BOOLEAN":
+            # 相手オブジェクトは --with（専用フラグ経路）か props.object（--props 経路）で必須。
+            # object なしの BOOLEAN は不活性 modifier が無言で出来るだけ＝silent に許さない
+            # （レビュー R1-1）。
+            if props is None:
+                _require_input(
+                    "with_object" in params,
+                    symptom="BOOLEAN の add には --with（相手オブジェクト）が必要です",
+                    remediation='--with <object> を指定してください（--props \'{"object":"名前"}\' でも可）',
+                )
+            else:
+                _require_input(
+                    isinstance(props.get("object"), str),
+                    symptom="BOOLEAN の add には相手オブジェクトが必要です（props.object）",
+                    remediation='--props \'{"object":"名前"}\' で相手 mesh を指定してください',
+                )
         # 数値 param の範囲を bpy 到達前に弾く（暴走防止・silent クランプ回避）。
         if "levels" in params:
             _require_input(
@@ -626,6 +636,11 @@ def _modifier(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     operand = None
     if mtype == "BOOLEAN" and "with_object" in params:
         operand = _resolve_boolean_operand(gateway, obj, params["with_object"])
+    if mtype == "BOOLEAN" and props is not None:
+        # props.object も --with と**同一の検証**（自己参照禁止・mesh 限定）を通す（レビュー
+        # R1-1・_resolve_boolean_operand の「二重定義で条件がドリフトするのを防ぐ」趣旨を
+        # props 経路にも適用）。実際の設定は set_modifier_props の POINTER 解決が行う（同名→同 obj）。
+        _resolve_boolean_operand(gateway, obj, props["object"])
     summary = gateway.add_modifier(
         obj,
         str(mtype),

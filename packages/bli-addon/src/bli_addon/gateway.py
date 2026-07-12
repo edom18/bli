@@ -1113,6 +1113,9 @@ def create_material(
     mat.use_nodes = True
     if color is not None:
         rgba = (float(color[0]), float(color[1]), float(color[2]), float(color[3]))
+        # color は M6 からの互換で意図的に soft-skip（bsdf/Base Color 欠如でも diffuse_color は
+        # 設定＝ビューポート表示は成立）。PBR/テクスチャ（P2-3）は _principled_input で strict
+        # （E_PRECONDITION）＝この非対称は意図的（レビュー R1-8 で明文化）。
         bsdf = _principled(mat)
         if bsdf is not None:
             bc = bsdf.inputs.get("Base Color")
@@ -1182,20 +1185,27 @@ def _apply_material_extras(
             principled_applied["emission_strength"] = float(es.default_value)
         if texture_path is not None:
             img = _load_texture_image(texture_path)
-            nt = mat.node_tree
-            tex = nt.nodes.new("ShaderNodeTexImage")
-            tex.image = img
-            tex.location = (-320.0, 260.0)  # Principled の左（GUI で開いたとき重ならない位置）
-            nt.links.new(tex.outputs["Color"], _principled_input(bsdf, "Base Color"))
-            if pack_texture:
-                try:
-                    img.pack()
-                except RuntimeError as e:
-                    raise _op_error(
-                        ErrorCode.E_OPERATOR,
-                        f"テクスチャのパックに失敗しました: {e}",
-                        category=ErrorCategory.USER_INPUT,
-                    ) from e
+            try:
+                nt = mat.node_tree
+                tex = nt.nodes.new("ShaderNodeTexImage")
+                tex.image = img
+                tex.location = (-320.0, 260.0)  # Principled の左（GUI で開いても重ならない位置）
+                nt.links.new(tex.outputs["Color"], _principled_input(bsdf, "Base Color"))
+                if pack_texture:
+                    try:
+                        img.pack()
+                    except RuntimeError as e:
+                        raise _op_error(
+                            ErrorCode.E_OPERATOR,
+                            f"テクスチャのパックに失敗しました: {e}",
+                            category=ErrorCategory.USER_INPUT,
+                        ) from e
+            except JsonRpcError:
+                # material 撤去（呼び出し元）だけでは独立 ID の Image は消えない＝ロード済み
+                # image を orphan として残さない（screenshot_area の一時 datablock 破棄と同じ
+                # 流儀・レビュー R1-2）。
+                bpy.data.images.remove(img)
+                raise
             extras["texture"] = {
                 "image": img.name,
                 "path": texture_path,

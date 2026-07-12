@@ -1252,6 +1252,10 @@ def run_calls(p23_texture_path):
         glb_bytes = _f.read()
     assert glb_bytes[:4] == b"glTF", "GLB は magic 'glTF' で始まる"
     assert b'"images"' in glb_bytes, "GLB の JSON チャンクにテクスチャ images が含まれていない"
+    # 受け入れ基準の後半「メタリック値の export 反映」: glTF JSON チャンクに
+    # pbrMetallicRoughness.metallicFactor が出力されることを確認（値の完全一致は
+    # float 表記揺れがあるためキー存在で判定・レビュー R1-9）。
+    assert b"metallicFactor" in glb_bytes, "GLB に metallicFactor が無い"
 
     p23_fbx = os.path.join(p23_gen_dir, "p23.fbx")
     ef, _ = call_retry(
