@@ -29,7 +29,7 @@
 | **M12** | Skill 同梱 & スキーマ同期（`.claude/skills/bli/` + cli-schema.json 生成 + schema_hash） | ✅ **完了**（**PR #33**・stacked on #32） | 確定要約 HANDOFF §6l / D12 |
 | **M13** | テスト網羅 & CI 仕上げ（bl_rna 契約 / L2 Blender マトリクス / golden / L3 / snapshot） | ✅ **完了**（**PR #34**・stacked on #33） | 確定要約 HANDOFF §6m |
 | **M14** | ドキュメント & 配布（addon zip ビルド・vendoring 検証・README・doctor 導入支援・mistakes-memo） | ✅ **完了**（PR #36/#37 マージ済み） | 確定要約 HANDOFF §6n |
-| **P1** | **設計レビュー対応**（バグ4件 / exec **restricted** / add・mode・rename・parent・collection / FBX Unity opt / docs 再フレーミング / 検証型レビュー反映） | ✅ **完了**（PR **#38/#43/#40/#41/#42** マージ済み・main=c5d5544） | 確定要約 HANDOFF **§6o** / 発注書 `report/2026-07-11-design-review-generality.md` §4 / コマンド 33→38・pytest 584 |
+| **P1** | **設計レビュー対応**（バグ4件 / exec **restricted** / add・mode・rename・parent・collection / FBX Unity opt / docs 再フレーミング / 検証型レビュー反映） | ✅ **完了**（PR **#38/#43/#40/#41/#42** マージ済み・main=c5d5544） | 確定要約 HANDOFF **§6o** / 発注書 `report/2026-07-11-design-review-generality.md` §4 / コマンド 31→37（cli-schema.json 実測・旧記載 33→38 は誤記）・pytest 584 |
 | **P2** | リファクタ & 汎用化（P2-2 Typer SSOT 自動生成 / P2-3 modifier・material 汎用化 / P2-4 モジュール分割） | 🔶 **進行中**: P2-2 ✅（**PR #45**・main.py 2,075→705 行・スナップショット byte 一致・pytest 753・確定要約 HANDOFF **§6p**）/ **次=P2-3**（機能追加・要 rna スパイク）→ P2-4 | 着手書 **`.handoff/NEXT-P2.md`** / 発注書 report §4 |
 
 ★ = walking skeleton。✅=完了 / 🔶=進行中 / ⬜=未着手。
