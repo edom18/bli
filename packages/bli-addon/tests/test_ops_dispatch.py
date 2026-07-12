@@ -306,9 +306,65 @@ def test_modifier_add_missing_type_invalid_params():
     assert ei.value.data.category == "USER_INPUT"
 
 
-def test_modifier_add_bad_type_invalid_params():
+def test_modifier_add_unknown_type_with_flag_invalid_params():
+    # type は P2-3 で STR 化＝実在検証はサーバ（rna 能力検出・bpy 必要）。bpy 到達前に弾けるのは
+    # 「未知 type に専用フラグ」の組み合わせ（--props を案内する）。
     with pytest.raises(JsonRpcError) as ei:
-        ops.dispatch("modifier", {"action": "add", "targets": "Cube", "type": "BOGUS"}, INFO)
+        ops.dispatch(
+            "modifier", {"action": "add", "targets": "Cube", "type": "BOGUS", "levels": 2}, INFO
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert "--props" in ei.value.data.remediation
+
+
+def test_modifier_props_bad_json_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier",
+            {"action": "add", "targets": "Cube", "type": "BEVEL", "props": "{width:0.1}"},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert ei.value.data.category == "USER_INPUT"
+
+
+def test_modifier_props_non_object_invalid_params():
+    # 配列/スカラの JSON は弾く（key:value のオブジェクトのみ）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier",
+            {"action": "add", "targets": "Cube", "type": "BEVEL", "props": "[1,2]"},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_modifier_props_only_for_add_invalid_params():
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier",
+            {"action": "list", "targets": "Cube", "props": '{"width":0.1}'},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
+def test_modifier_props_conflicts_with_dedicated_flag_invalid_params():
+    # 専用フラグと --props の併用は曖昧（同一プロパティの二重指定）＝弾く。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier",
+            {
+                "action": "add",
+                "targets": "Cube",
+                "type": "SUBSURF",
+                "levels": 2,
+                "props": '{"levels":3}',
+            },
+            INFO,
+        )
     assert ei.value.code == RPC_INVALID_PARAMS
 
 

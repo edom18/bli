@@ -1045,11 +1045,69 @@ def require_material(name: str) -> Any:
     return mat
 
 
-def create_material(name: str, color: list[float] | None) -> Any:
-    """新規マテリアルを作る（use_nodes + Principled Base Color + diffuse_color）。
+def _require_principled(mat: Any) -> Any:
+    """Principled BSDF ノードを返す（無ければ E_PRECONDITION・silent drop しない）。
+
+    PBR/テクスチャ設定（P2-3 G5）は Principled 前提。use_nodes 直後の既定構成なら必ず
+    存在する（両版スパイク確定）ため、無い場合は想定外構成として明示的に失敗させる。
+    """
+    bsdf = _principled(mat)
+    if bsdf is None:
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            "Principled BSDF ノードが見つかりません（use_nodes 構成が想定外）",
+        )
+    return bsdf
+
+
+def _principled_input(bsdf: Any, input_name: str) -> Any:
+    """Principled の入力ソケットを返す（無ければ E_PRECONDITION・silent drop しない）。
+
+    入力名は両版（5.0.1/4.4.3）で同一（Metallic/Roughness/Alpha/Emission Color/
+    Emission Strength・P2-3 スパイク確定）。欠如＝想定外ビルドとして明示的に失敗させる。
+    """
+    sock = bsdf.inputs.get(input_name)
+    if sock is None:
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"Principled BSDF に '{input_name}' 入力がありません（想定外のビルド/構成）",
+        )
+    return sock
+
+
+def _load_texture_image(path: str) -> Any:
+    """画像を読み込む（存在チェックは ops 済み・壊れ画像等は E_OPERATOR/USER_INPUT へ写像）。"""
+    try:
+        return bpy.data.images.load(path)
+    except (RuntimeError, OSError) as e:
+        raise _op_error(
+            ErrorCode.E_OPERATOR,
+            f"テクスチャ画像を読み込めません: {path}（{e}）",
+            category=ErrorCategory.USER_INPUT,
+        ) from e
+
+
+def create_material(
+    name: str,
+    color: list[float] | None,
+    *,
+    metallic: float | None = None,
+    roughness: float | None = None,
+    emission: list[float] | None = None,
+    emission_strength: float | None = None,
+    alpha: float | None = None,
+    texture_path: str | None = None,
+    pack_texture: bool = False,
+) -> tuple[Any, dict[str, Any]]:
+    """新規マテリアルを作り (mat, extras) を返す（use_nodes + Principled・P2-3 で PBR/テクスチャ対応）。
 
     name は既存と衝突すると Blender が name.001 等に自動採番する（戻り値の mat.name が真）。
-    color(RGBA) 指定時は Principled の Base Color とビューポート表示色の双方へ反映する。
+    color(RGBA) 指定時は Principled の Base Color とビューポート表示色の双方へ反映する
+    （texture 併用時は Base Color 入力にノードが接続されるため、color はビューポート表示色
+    としてのみ有効＝methods.md に明記）。extras は結果報告用:
+    `{"principled": {設定した入力の実値}, "texture": {image, path, packed}}`（未設定キーは省略）。
+    emission 指定時に emission_strength 省略なら 1.0 を明示設定する（既定 strength 0 のビルド
+    でも発光が silent に無効化されないように）。
     """
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
@@ -1061,7 +1119,91 @@ def create_material(name: str, color: list[float] | None) -> Any:
             if bc is not None:
                 bc.default_value = rgba
         mat.diffuse_color = rgba
-    return mat
+
+    extras: dict[str, Any] = {}
+    try:
+        extras = _apply_material_extras(
+            mat,
+            metallic=metallic,
+            roughness=roughness,
+            emission=emission,
+            emission_strength=emission_strength,
+            alpha=alpha,
+            texture_path=texture_path,
+            pack_texture=pack_texture,
+        )
+    except JsonRpcError:
+        # 失敗時に作りかけの material を残さない（add_modifier の props と同じアトミック流儀）。
+        bpy.data.materials.remove(mat)
+        raise
+    return mat, extras
+
+
+def _apply_material_extras(
+    mat: Any,
+    *,
+    metallic: float | None,
+    roughness: float | None,
+    emission: list[float] | None,
+    emission_strength: float | None,
+    alpha: float | None,
+    texture_path: str | None,
+    pack_texture: bool,
+) -> dict[str, Any]:
+    """PBR/テクスチャ設定を適用し extras（結果報告用）を返す（create_material 専用）。"""
+    extras: dict[str, Any] = {}
+    principled_applied: dict[str, Any] = {}
+    needs_bsdf = (
+        any(v is not None for v in (metallic, roughness, emission, alpha))
+        or texture_path is not None
+    )
+    if needs_bsdf:
+        bsdf = _require_principled(mat)
+        for input_name, key, value in (
+            ("Metallic", "metallic", metallic),
+            ("Roughness", "roughness", roughness),
+            ("Alpha", "alpha", alpha),
+        ):
+            if value is not None:
+                sock = _principled_input(bsdf, input_name)
+                sock.default_value = float(value)
+                principled_applied[key] = float(sock.default_value)
+        if emission is not None:
+            ec = _principled_input(bsdf, "Emission Color")
+            ec.default_value = (
+                float(emission[0]),
+                float(emission[1]),
+                float(emission[2]),
+                float(emission[3]),
+            )
+            es = _principled_input(bsdf, "Emission Strength")
+            es.default_value = float(emission_strength if emission_strength is not None else 1.0)
+            principled_applied["emission_color"] = [float(v) for v in ec.default_value]
+            principled_applied["emission_strength"] = float(es.default_value)
+        if texture_path is not None:
+            img = _load_texture_image(texture_path)
+            nt = mat.node_tree
+            tex = nt.nodes.new("ShaderNodeTexImage")
+            tex.image = img
+            tex.location = (-320.0, 260.0)  # Principled の左（GUI で開いたとき重ならない位置）
+            nt.links.new(tex.outputs["Color"], _principled_input(bsdf, "Base Color"))
+            if pack_texture:
+                try:
+                    img.pack()
+                except RuntimeError as e:
+                    raise _op_error(
+                        ErrorCode.E_OPERATOR,
+                        f"テクスチャのパックに失敗しました: {e}",
+                        category=ErrorCategory.USER_INPUT,
+                    ) from e
+            extras["texture"] = {
+                "image": img.name,
+                "path": texture_path,
+                "packed": img.packed_file is not None,
+            }
+    if principled_applied:
+        extras["principled"] = principled_applied
+    return extras
 
 
 def _target_slot_index(obj: Any) -> int | None:
@@ -1194,6 +1336,174 @@ def require_modifier(obj: Any, name: str) -> Any:
     return mod
 
 
+# ---- modifier 任意 type + --props（P2-3 G4）----
+# type の実在と props の型は **rna から能力検出**で検証する（版番号分岐なし・両版 83 種を
+# スパイクで確定）。数値の範囲外は Blender の rna が silent に clamp する（segments 10000→1000）
+# ため、設定後に実値を読み戻して applied_props で可視化する（silent drop 禁止の流儀）。
+
+
+def valid_modifier_types() -> list[str]:
+    """この Blender が受け付ける Modifier type の一覧（rna enum から能力検出）。"""
+    return [i.identifier for i in bpy.types.Modifier.bl_rna.properties["type"].enum_items]
+
+
+def require_modifier_type(mod_type: str) -> None:
+    """Modifier type の実在を rna enum で検証する（無効は USER_INPUT・有効一覧を提示）。"""
+    valid = valid_modifier_types()
+    if mod_type not in valid:
+        raise _op_error(
+            ErrorCode.INVALID_PARAMS,
+            f"未知の modifier type です: {mod_type}（有効: {'|'.join(valid)}）",
+            category=ErrorCategory.USER_INPUT,
+        )
+
+
+def _modifier_prop_rna(mod: Any) -> dict[str, Any]:
+    """mod の編集可能 rna プロパティ（identifier → rna Property・rna_type 除外）。"""
+    return {
+        p.identifier: p
+        for p in mod.bl_rna.properties
+        if not p.is_readonly and p.identifier != "rna_type"
+    }
+
+
+def _coerce_prop_value(prop: Any, value: Any) -> Any:
+    """--props の JSON 値を rna プロパティ型へ検証・変換する（不正は USER_INPUT）。
+
+    POINTER は v1 では Object 参照のみ（名前文字列で解決）。ENUM フラグ（複数選択）と
+    Object 以外の参照は未対応として明示的に弾く（silent drop しない）。
+    """
+    t = prop.type
+    ident = prop.identifier
+
+    def _bad(expect: str) -> JsonRpcError:
+        return _op_error(
+            ErrorCode.INVALID_PARAMS,
+            f"props.{ident} の型が不正です（期待: {expect} / 実際: {type(value).__name__}）",
+            category=ErrorCategory.USER_INPUT,
+        )
+
+    array_n = int(getattr(prop, "array_length", 0) or 0)
+    if t == "BOOLEAN":
+        if array_n:
+            if not (
+                isinstance(value, list)
+                and len(value) == array_n
+                and all(isinstance(v, bool) for v in value)
+            ):
+                raise _bad(f"bool の配列（長さ {array_n}）")
+            return value
+        if not isinstance(value, bool):
+            raise _bad("bool")
+        return value
+    if t == "INT":
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise _bad("int")
+        return value
+    if t == "FLOAT":
+
+        def _num(v: Any) -> bool:
+            return (
+                not isinstance(v, bool) and isinstance(v, (int, float)) and math.isfinite(float(v))
+            )
+
+        if array_n:
+            if not (
+                isinstance(value, list) and len(value) == array_n and all(_num(v) for v in value)
+            ):
+                raise _bad(f"数値の配列（長さ {array_n}・有限値）")
+            return [float(v) for v in value]
+        if not _num(value):
+            raise _bad("有限の数値")
+        return float(value)
+    if t == "ENUM":
+        if getattr(prop, "is_enum_flag", False):
+            raise _op_error(
+                ErrorCode.INVALID_PARAMS,
+                f"props.{ident}（複数選択 ENUM）は未対応です",
+                category=ErrorCategory.USER_INPUT,
+            )
+        idents = [i.identifier for i in prop.enum_items]
+        if not isinstance(value, str) or value not in idents:
+            raise _op_error(
+                ErrorCode.INVALID_PARAMS,
+                f"props.{ident} の値が不正です: {value!r}（有効: {'|'.join(idents)}）",
+                category=ErrorCategory.USER_INPUT,
+            )
+        return value
+    if t == "STRING":
+        if not isinstance(value, str):
+            raise _bad("str")
+        return value
+    if t == "POINTER":
+        fixed = getattr(getattr(prop, "fixed_type", None), "identifier", "")
+        if fixed != "Object":
+            raise _op_error(
+                ErrorCode.INVALID_PARAMS,
+                f"props.{ident}（{fixed or '不明'} 参照）は未対応です（v1 は Object 参照のみ名前で解決）",
+                category=ErrorCategory.USER_INPUT,
+            )
+        if not isinstance(value, str):
+            raise _bad("str（オブジェクト名）")
+        target = bpy.data.objects.get(value)
+        if target is None:
+            raise _op_error(
+                ErrorCode.E_TARGET_NOT_FOUND,
+                f"props.{ident} のオブジェクトが見つかりません: {value}",
+                category=ErrorCategory.USER_INPUT,
+            )
+        return target
+    raise _op_error(
+        ErrorCode.INVALID_PARAMS,
+        f"props.{ident} のプロパティ型 {t} は未対応です",
+        category=ErrorCategory.USER_INPUT,
+    )
+
+
+def _prop_value_repr(mod: Any, ident: str) -> Any:
+    """設定後の実値を JSON 化可能な形で読み戻す（rna の clamp を applied_props で可視化）。"""
+    v = getattr(mod, ident)
+    if v is None or isinstance(v, (str, int, float, bool)):
+        return v
+    if hasattr(v, "name"):
+        return v.name  # Object 等の ID 参照
+    try:
+        return [float(x) if isinstance(x, float) else x for x in list(v)]
+    except TypeError:
+        return str(v)
+
+
+def set_modifier_props(mod: Any, props: dict[str, Any]) -> dict[str, Any]:
+    """--props(JSON) を rna 検証つきで設定し、設定後の実値を返す（P2-3 G4）。
+
+    未知キーは USER_INPUT で弾き、有効キー一覧を提示する。全キーの検証を **setattr より前に**
+    済ませる（半端な設定で失敗しない）。範囲外は Blender の rna が clamp するため、戻り値
+    （読み戻し実値）で可視化する。
+    """
+    rna = _modifier_prop_rna(mod)
+    unknown = [k for k in props if k not in rna]
+    if unknown:
+        raise _op_error(
+            ErrorCode.INVALID_PARAMS,
+            f"{mod.type} に無いプロパティです: {', '.join(sorted(unknown))}"
+            f"（有効: {', '.join(sorted(rna))}）",
+            category=ErrorCategory.USER_INPUT,
+        )
+    coerced = {key: _coerce_prop_value(rna[key], raw) for key, raw in props.items()}
+    applied: dict[str, Any] = {}
+    for key, value in coerced.items():
+        try:
+            setattr(mod, key, value)
+        except (TypeError, ValueError, OverflowError) as e:
+            raise _op_error(
+                ErrorCode.INVALID_PARAMS,
+                f"props.{key} を設定できません: {e}",
+                category=ErrorCategory.USER_INPUT,
+            ) from e
+        applied[key] = _prop_value_repr(mod, key)
+    return applied
+
+
 def add_modifier(
     obj: Any,
     mod_type: str,
@@ -1205,12 +1515,16 @@ def add_modifier(
     ratio: float | None = None,
     operation: str | None = None,
     operand: Any = None,
+    props: dict[str, Any] | None = None,
     message: str | None = None,
 ) -> dict[str, Any]:
     """obj にモディファイアを追加し、要約を返す（op 不要・obj.modifiers 直接）。
 
-    name 省略時は Blender 既定名（type 名）。種類別の主要プロパティのみ設定する（最小）。
-    対象型がこの modifier を受け付けない場合（生 RuntimeError）は E_PRECONDITION に変換する。
+    name 省略時は Blender 既定名（type 名）。専用フラグ（5種の主要プロパティ）または
+    props（任意プロパティの rna 検証つき設定・P2-3）を適用する（併用は ops が弾く）。
+    props の検証失敗時は追加した modifier を撤去してから送出する（半端な状態を残さない・
+    _add_then_apply と同じアトミック流儀）。対象型がこの modifier を受け付けない場合
+    （生 RuntimeError）は E_PRECONDITION に変換する。
     """
     try:
         mod = obj.modifiers.new(name or mod_type.title(), mod_type)
@@ -1219,6 +1533,12 @@ def add_modifier(
             ErrorCode.E_PRECONDITION,
             f"この型にこのモディファイアは追加できません（type={obj.type}, modifier={mod_type}）: {e}",
         ) from e
+    if mod is None:
+        # 一部の非対応組み合わせは例外でなく None を返す（rna 仕様）。同じ E_PRECONDITION に写像。
+        raise _op_error(
+            ErrorCode.E_PRECONDITION,
+            f"この型にこのモディファイアは追加できません（type={obj.type}, modifier={mod_type}）",
+        )
     if mod_type == "MIRROR" and axis is not None:
         for i, ax in enumerate(_MIRROR_AXES):
             mod.use_axis[i] = ax == axis
@@ -1234,9 +1554,19 @@ def add_modifier(
             mod.operation = operation
         if operand is not None:
             mod.object = operand
+    applied_props: dict[str, Any] | None = None
+    if props:
+        try:
+            applied_props = set_modifier_props(mod, props)
+        except JsonRpcError:
+            obj.modifiers.remove(mod)
+            raise
     if message:
         push_undo(message)
-    return _modifier_summary(mod)
+    summary = _modifier_summary(mod)
+    if applied_props is not None:
+        summary["applied_props"] = applied_props
+    return summary
 
 
 def remove_modifier(obj: Any, name: str, *, message: str | None = None) -> None:

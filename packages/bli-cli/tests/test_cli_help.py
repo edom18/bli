@@ -106,11 +106,24 @@ def test_m6_t63_material_discoverable():
         "regex",
         "name",
         "color",
+        # P2-3 G5: PBR/テクスチャ（create 専用・presence-sensitive）
+        "metallic",
+        "roughness",
+        "emission",
+        "emission_strength",
+        "alpha",
+        "texture",
+        "pack_texture",
         "make_single_user",
     }
     assert schema["required"] == ["action"]  # targets/name は action 別に ops 側で必須化
     color = schema["properties"]["color"]
     assert color["type"] == "array" and color["minItems"] == 4 and color["maxItems"] == 4
+    emission = schema["properties"]["emission"]
+    assert emission["type"] == "array" and emission["minItems"] == 4
+    # PBR 系は presence-sensitive（default を schema に出さない・§6e）
+    for key in ("metallic", "roughness", "alpha", "pack_texture", "texture"):
+        assert "default" not in schema["properties"][key], key
 
 
 def test_material_bad_color_vec4_exit_input():
@@ -170,18 +183,25 @@ def test_m6_t64_modifier_discoverable():
     schema = json.loads(runner.invoke(app, ["help", "--command", "modifier", "--json"]).output)[
         "schema"
     ]
-    assert {"action", "targets", "type", "name", "axis", "levels", "thickness", "ratio"} <= set(
-        schema["properties"]
-    )
+    assert {
+        "action",
+        "targets",
+        "type",
+        "props",
+        "name",
+        "axis",
+        "levels",
+        "thickness",
+        "ratio",
+    } <= set(schema["properties"])
     assert set(schema["required"]) == {"action", "targets"}
-    # type/operation/axis は ENUM（choices が出る）、levels は INT
-    assert schema["properties"]["type"]["enum"] == [
-        "MIRROR",
-        "SUBSURF",
-        "SOLIDIFY",
-        "DECIMATE",
-        "BOOLEAN",
-    ]
+    # type は P2-3 で STR 化（任意 type・実在はサーバの rna 能力検出）＝enum を出さない。
+    assert schema["properties"]["type"]["type"] == "string"
+    assert "enum" not in schema["properties"]["type"]
+    # props は JSON 文字列（STR・presence-sensitive で default なし）
+    assert schema["properties"]["props"]["type"] == "string"
+    assert "default" not in schema["properties"]["props"]
+    # operation/axis は従来どおり ENUM、levels は INT
     assert schema["properties"]["operation"]["enum"] == ["UNION", "DIFFERENCE", "INTERSECT"]
     assert schema["properties"]["axis"]["enum"] == ["X", "Y", "Z"]
     assert schema["properties"]["levels"]["type"] == "integer"
@@ -641,12 +661,13 @@ def test_target_singular_alias_registered():
     assert "--target" in targets_param.opts
 
 
-def test_modifier_bad_type_local_validation():
+def test_modifier_arbitrary_type_passes_local_validation():
+    # P2-3: type は STR 化＝ローカル（Pydantic）では弾かない。実在検証はサーバの rna 能力検出。
+    # サーバ不在の CliRunner では CONNECTION(exit 3) に到達する＝送信前検証を通過した証拠。
     res = runner.invoke(
-        app, ["modifier", "--action", "add", "--targets", "Cube", "--type", "BOGUS", "--json"]
+        app, ["modifier", "--action", "add", "--targets", "Cube", "--type", "BEVEL", "--json"]
     )
-    assert res.exit_code == 4
-    assert "INVALID_PARAMS" in res.output
+    assert res.exit_code == 3, res.output
 
 
 def test_busy_rendering_maps_to_timeout_pending_exit():

@@ -440,12 +440,16 @@ command(
     required_mode=Mode.OBJECT,
 )
 
-# ---- 汎用編集（マテリアル / M6 T6.3）----
+# ---- 汎用編集（マテリアル / M6 T6.3・P2-3 で PBR/テクスチャ拡張 G5）----
 command(
     "material",
-    "マテリアルを割り当て/作成/一覧する（create は対象へ作成と同時に割り当て）",
+    "マテリアルを割り当て/作成/一覧する（create は対象へ作成と同時に割り当て・PBR/テクスチャ対応）",
     # targets/name は action により必須が変わる（条件付き必須）。schema 上は任意にし、
     # ops 側で action 別に検証する（set-origin の center/x/y/z と同じ流儀）。
+    # PBR 系（metallic/roughness/emission/emission_strength/alpha）と texture/pack_texture は
+    # **create 専用**の presence-sensitive（color と同じ流儀・他 action で渡すと INVALID_PARAMS）。
+    # 両版（5.0.1/4.4.3）とも Principled BSDF の入力名は Metallic/Roughness/Alpha/
+    # Emission Color/Emission Strength で同一（P2-3 スパイクで実機確定・版差分岐なし）。
     params=(
         p(
             "action",
@@ -463,18 +467,40 @@ command(
         ),
         p("name", ParamType.STR, help="マテリアル名（assign=既存名 / create=新規名）"),
         p("color", ParamType.VEC4, help="RGBA r,g,b,a（create の Base Color）"),
+        p("metallic", ParamType.FLOAT, help="create: Metallic（0..1）"),
+        p("roughness", ParamType.FLOAT, help="create: Roughness（0..1）"),
+        p("emission", ParamType.VEC4, help="create: Emission Color r,g,b,a"),
+        p(
+            "emission_strength",
+            ParamType.FLOAT,
+            help="create: Emission Strength（emission 指定時のみ・省略時 1.0）",
+        ),
+        p("alpha", ParamType.FLOAT, help="create: Alpha（0..1）"),
+        p(
+            "texture",
+            ParamType.PATH,
+            help="create: Base Color へ Image Texture ノードで接続する画像ファイル",
+        ),
+        p(
+            "pack_texture",
+            ParamType.BOOL,
+            help="create: テクスチャ画像を .blend にパックする（texture 指定時のみ）",
+        ),
         p("make_single_user", ParamType.BOOL, default=False, help="共有mesh時に単一ユーザ化を許可"),
     ),
     mutates=True,
     required_mode=Mode.OBJECT,
 )
 
-# ---- 汎用編集（モディファイア / M6 T6.4）----
+# ---- 汎用編集（モディファイア / M6 T6.4・P2-3 で任意 type + --props 汎用化 G4）----
 command(
     "modifier",
-    "モディファイアを追加/削除/一覧/適用する（add は --type 必須・apply は mesh へ焼き込み）",
+    "モディファイアを追加/削除/一覧/適用する（add は --type 必須・任意 type + --props 対応・apply は mesh へ焼き込み）",
     # type/name/type別params は action により必須が変わる（条件付き必須）。schema 上は任意にし、
     # ops 側で action/type 別に検証する（material/set-origin と同じ流儀）。
+    # type は P2-3 で ENUM(5種) → STR 化（G4）: 任意の Modifier type を受け、サーバが
+    # bpy.types.Modifier の rna enum から**能力検出で実在検証**する（両版 83 種・スパイク確定）。
+    # props は任意プロパティの JSON 文字列（rna から型検証・専用フラグとは併用不可）。
     params=(
         p(
             "action",
@@ -492,9 +518,13 @@ command(
         ),
         p(
             "type",
-            ParamType.ENUM,
-            choices=["MIRROR", "SUBSURF", "SOLIDIFY", "DECIMATE", "BOOLEAN"],
-            help="add 時の種類",
+            ParamType.STR,
+            help="add 時の種類（任意の Modifier type・例: MIRROR|BEVEL|ARRAY・実在はサーバ検証）",
+        ),
+        p(
+            "props",
+            ParamType.STR,
+            help='add 専用: プロパティの JSON（rna 型検証・例: \'{"width":0.1,"segments":2}\'・専用フラグと併用不可）',
         ),
         p("name", ParamType.STR, help="モディファイア名（remove/apply の対象 / add の任意名）"),
         p("axis", ParamType.ENUM, choices=["X", "Y", "Z"], help="MIRROR の軸"),
