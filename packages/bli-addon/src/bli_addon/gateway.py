@@ -1135,11 +1135,27 @@ def create_material(
             texture_path=texture_path,
             pack_texture=pack_texture,
         )
-    except JsonRpcError:
+    except BaseException:
         # 失敗時に作りかけの material を残さない（add_modifier の props と同じアトミック流儀）。
+        # JsonRpcError 限定にすると想定外例外（OSError 等）でリークする＝_add_then_apply の
+        # BaseException ロールバックと同じ広さで捕捉し、必ず再送出する（レビュー R2-B）。
         bpy.data.materials.remove(mat)
         raise
     return mat, extras
+
+
+def discard_created_material(mat: Any, extras: dict[str, Any]) -> None:
+    """create 後の後段失敗（共有 mesh ガード等）で作りたて material と texture image を撤去する。
+
+    material の撤去だけでは独立 ID の Image は消えない（R1-2 と同根）。extras["texture"]["image"]
+    は create_material が返した実名（重複採番後）なので name 引きで安全に解決できる（レビュー R2-A）。
+    """
+    tex = extras.get("texture")
+    if isinstance(tex, dict):
+        img = bpy.data.images.get(str(tex.get("image", "")))
+        if img is not None:
+            bpy.data.images.remove(img)
+    bpy.data.materials.remove(mat)
 
 
 def _apply_material_extras(
@@ -1194,16 +1210,19 @@ def _apply_material_extras(
                 if pack_texture:
                     try:
                         img.pack()
-                    except RuntimeError as e:
+                    except (RuntimeError, OSError) as e:
+                        # pack はディスク上の元画像を再読込し得る＝load と同じく OSError も
+                        # 入力起因として写像する（_load_texture_image と対称・レビュー R2-B）。
                         raise _op_error(
                             ErrorCode.E_OPERATOR,
                             f"テクスチャのパックに失敗しました: {e}",
                             category=ErrorCategory.USER_INPUT,
                         ) from e
-            except JsonRpcError:
+            except BaseException:
                 # material 撤去（呼び出し元）だけでは独立 ID の Image は消えない＝ロード済み
                 # image を orphan として残さない（screenshot_area の一時 datablock 破棄と同じ
-                # 流儀・レビュー R1-2）。
+                # 流儀・レビュー R1-2）。想定外例外でもリークさせないため BaseException で
+                # 捕捉し必ず再送出する（レビュー R2-B）。
                 bpy.data.images.remove(img)
                 raise
             extras["texture"] = {

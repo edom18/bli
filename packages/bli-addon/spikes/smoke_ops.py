@@ -1211,7 +1211,44 @@ def run_calls(p23_texture_path):
         },
     )
     assert cl["data"]["modifier"]["applied_props"]["segments"] == 1000, cl["data"]
+    # segments=1000 の BEVEL を**残さない**: 追加時点では未評価だが、後続の modifier 追加等で
+    # depsgraph 評価が走ると 12 辺 × 1000 セグメントでジオメトリ爆発（メモリ大量消費・TIMEOUT）
+    # する（2026-07-12 実地で発生・mistakes-memo 記載）。clamp の検証は applied_props で完結済み。
+    cl_name = cl["data"]["modifier"]["name"]
+    call_retry("modifier", {"action": "remove", "targets": "P23Mod", "name": cl_name})
     print("modifier_props_clamp_ok", cl["data"]["modifier"]["applied_props"])
+
+    # BOOLEAN を --props 経由で add（レビュー R2-C）: props.object は --with 経路と同一の検証
+    # （自己参照禁止・mesh 限定）を通り、applied_props に相手名が実値で返る。
+    bp, _ = call_retry(
+        "modifier",
+        {
+            "action": "add",
+            "targets": "P23Mod",
+            "type": "BOOLEAN",
+            "props": json.dumps({"operation": "DIFFERENCE", "object": "P23Bevel"}),
+        },
+    )
+    assert bp["data"]["modifier"]["applied_props"]["object"] == "P23Bevel", bp["data"]
+    assert bp["data"]["modifier"]["applied_props"]["operation"] == "DIFFERENCE", bp["data"]
+    bp_name = bp["data"]["modifier"]["name"]
+    call_retry("modifier", {"action": "remove", "targets": "P23Mod", "name": bp_name})
+    # object 欠如（不活性 modifier の silent 生成）と自己参照は bpy 前/解決時に拒否される。
+    for bad_props in ({"operation": "UNION"}, {"object": "P23Mod"}):
+        try:
+            call_retry(
+                "modifier",
+                {
+                    "action": "add",
+                    "targets": "P23Mod",
+                    "type": "BOOLEAN",
+                    "props": json.dumps(bad_props),
+                },
+            )
+            raise AssertionError(f"BOOLEAN props {bad_props} は INVALID_PARAMS のはず")
+        except client.RpcRemoteError as e:
+            assert e.error.get("message") == "INVALID_PARAMS", e.error
+    print("modifier_props_boolean_ok")
 
     # --- G5: material PBR・テクスチャ（create 専用）---
     call_retry("add", {"type": "cube", "name": "P23MatCube"})

@@ -436,19 +436,19 @@ def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
     # assign は既存マテリアルを **状態変更（単一ユーザ化）の前に** 解決する。見つからない名で
     # 先に mesh を単一ユーザ化してから失敗すると、エラー後にシーン状態が変わる（Codex P2）。
     # 未発見エラーは gateway.require_material に集約（require_single と同じ流儀。設計レビュー P2）。
+    #
+    # 共有 mesh ガード（Codex P2-A）は書き込み先が DATA slot / 空スロット append のときのみ
+    # （OBJECT リンク slot は object 限定書き込みで共有 mesh を触らない＝false-positive 回避）。
+    # ガード（--make-single-user 時は不可逆な単一ユーザ化）は **失敗し得る処理を全て通過した後**
+    # に実行する＝失敗時に mesh を分離しない: assign はマテリアル解決後 / create は P2-3 で
+    # texture・pack・Principled 欠如により失敗し得るため create_material 成功後（レビュー R2-A）。
     mat = None
+    extras: dict[str, Any] = {}
     if action == "assign":  # 既存マテリアルのみ。無ければ E_TARGET_NOT_FOUND＝create と責務分離
         mat = gateway.require_material(str(name))
-
-    # 共有 mesh ガード（Codex P2-A）。ただし書き込み先が OBJECT リンク slot のときは object
-    # 限定の書き込みで共有 mesh を触らないため掛けない（false-positive な E_PRECONDITION や
-    # --make-single-user による不要な分離を避ける。Codex P2）。DATA slot 書き込み・空スロット
-    # append のみガード対象。マテリアル解決（上）を通過した後に実行＝失敗時に mesh を分離しない。
-    if gateway.material_write_touches_mesh_data(obj):
-        _guard_shared_mesh(gateway, obj, params)
-
-    extras: dict[str, Any] = {}
-    if action == "create":
+        if gateway.material_write_touches_mesh_data(obj):
+            _guard_shared_mesh(gateway, obj, params)
+    else:  # create
         mat, extras = gateway.create_material(
             str(name),
             list(color) if color is not None else None,
@@ -464,6 +464,14 @@ def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
             texture_path=texture,
             pack_texture=bool(params.get("pack_texture", False)),
         )
+        try:
+            if gateway.material_write_touches_mesh_data(obj):
+                _guard_shared_mesh(gateway, obj, params)
+        except JsonRpcError:
+            # ガード失敗（--make-single-user なしの共有 mesh 等）で作りたて material/image を
+            # 残さない（create_material 内のアトミック撤去と対称・レビュー R2-A）。
+            gateway.discard_created_material(mat, extras)
+            raise
 
     slot = gateway.assign_material(obj, mat)
     gateway.push_undo(f"material {action}")

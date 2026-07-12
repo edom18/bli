@@ -351,6 +351,35 @@ def test_modifier_props_only_for_add_invalid_params():
     assert ei.value.code == RPC_INVALID_PARAMS
 
 
+def test_modifier_boolean_props_missing_object_invalid_params():
+    # BOOLEAN を --props 経由で add する場合は props.object が必須（bpy 到達前・レビュー R2-C）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier",
+            {
+                "action": "add",
+                "targets": "Cube",
+                "type": "BOOLEAN",
+                "props": '{"operation":"UNION"}',
+            },
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+    assert ei.value.data is not None
+    assert "props.object" in ei.value.data.userVisibleSymptom
+
+
+def test_modifier_boolean_props_object_non_string_invalid_params():
+    # props.object は文字列（オブジェクト名）のみ（bpy 到達前・レビュー R2-C）。
+    with pytest.raises(JsonRpcError) as ei:
+        ops.dispatch(
+            "modifier",
+            {"action": "add", "targets": "Cube", "type": "BOOLEAN", "props": '{"object": 5}'},
+            INFO,
+        )
+    assert ei.value.code == RPC_INVALID_PARAMS
+
+
 def test_modifier_props_conflicts_with_dedicated_flag_invalid_params():
     # 専用フラグと --props の併用は曖昧（同一プロパティの二重指定）＝弾く。
     with pytest.raises(JsonRpcError) as ei:
