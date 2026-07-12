@@ -868,7 +868,9 @@ def run_calls(p23_texture_path):
     except client.RpcRemoteError as e:
         assert e.error.get("message") == "E_PRECONDITION", e.error
         assert e.error.get("data", {}).get("category") == "PRECONDITION", e.error
-    # ガードは create_material より前に走るため、失敗時にマテリアルを生成しない（orphan なし）。
+    # R2-A でガードは create_material **成功後**に移動（失敗し得る処理を通過してから不可逆な
+    # 単一ユーザ化）。ガード失敗時は discard_created_material が作りたて material を撤去する
+    # ため、orphan は残らない（アサーション自体は移動前後で不変・レビュー drift r3 で追随）。
     assert bpy.data.materials.get("SmRed") is None, "failed create should not leak a material"
     print("material_shared_guard_ok")
 

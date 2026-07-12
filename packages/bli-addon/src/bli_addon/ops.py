@@ -467,9 +467,11 @@ def _material(params: dict[str, Any], info: ServerInfo) -> dict[str, Any]:
         try:
             if gateway.material_write_touches_mesh_data(obj):
                 _guard_shared_mesh(gateway, obj, params)
-        except JsonRpcError:
+        except BaseException:
             # ガード失敗（--make-single-user なしの共有 mesh 等）で作りたて material/image を
-            # 残さない（create_material 内のアトミック撤去と対称・レビュー R2-A）。
+            # 残さない（レビュー R2-A）。JsonRpcError 限定にすると想定外例外（MemoryError 等）で
+            # リークする＝gateway.create_material/_apply_material_extras と同じ捕捉幅に揃え、
+            # 必ず再送出する（methods.md の無条件アトミック性・レビュー R3-A・4 finder 収束）。
             gateway.discard_created_material(mat, extras)
             raise
 
