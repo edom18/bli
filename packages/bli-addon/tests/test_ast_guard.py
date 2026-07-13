@@ -53,13 +53,23 @@ def test_skips_spikes_dir(tmp_path):
 
 
 def test_allow_dir_is_skipped(tmp_path):
-    d = tmp_path / "gateway"
-    d.mkdir()
+    d = tmp_path / "bli_addon" / "gateway"
+    d.mkdir(parents=True)
     f = d / "objects.py"
     f.write_text(
         "import bpy\nbpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')\n", encoding="utf-8"
     )
-    # gateway/ ディレクトリ配下は run_operator ラッパを分割したパッケージとして許可される
-    assert guard.check([str(tmp_path)], allow=set(), allow_dirs={"gateway"}) == []
+    # bli_addon/gateway/ 配下は run_operator ラッパを分割したパッケージとして許可される
+    assert guard.check([str(tmp_path)], allow=set(), allow_dirs={"bli_addon/gateway"}) == []
     # 許可しなければ検出される
     assert len(guard.check([str(tmp_path)], allow=set(), allow_dirs=set())) == 1
+
+
+def test_allow_dir_is_anchored(tmp_path):
+    # 別位置の同名ディレクトリ（例: bli_addon/xyz/gateway/）は免除されない
+    # （裸名一致だと任意階層の「gateway」でサブツリー全体が素通りするため・R1-1）
+    d = tmp_path / "bli_addon" / "xyz" / "gateway"
+    d.mkdir(parents=True)
+    f = d / "evil.py"
+    f.write_text("import bpy\nbpy.ops.object.delete()\n", encoding="utf-8")
+    assert len(guard.check([str(tmp_path)], allow=set(), allow_dirs={"bli_addon/gateway"})) == 1
