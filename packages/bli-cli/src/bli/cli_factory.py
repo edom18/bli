@@ -4,7 +4,7 @@
 Typer に広げる。definitions.py の Param（型/required/default/choices/help）から typer.Option
 を組み立て、動的シグネチャ（`__signature__`）付きコールバックとして app に登録する。
 
-新コマンドの必須変更は「definitions.py + ops.py + gateway.py（+任意で formatters.py の
+新コマンドの必須変更は「definitions.py + ops/ + gateway/（+任意で formatters.py の
 HUMAN_FORMATTERS 登録）」に減る。CLI 固有の互換情報（help 文言の差・別名・送信ポリシー例外・
 手書きバリデーション）は cli_specs.py のオーバーライド表に集約し、SSOT 側は変更しない
 （schema_hash 不変＝挙動を変えない内部リファクタ。report §4 P2-2）。
