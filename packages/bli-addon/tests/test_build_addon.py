@@ -42,7 +42,9 @@ def test_zip_contains_vendored_core_and_no_caches(tmp_path: Path) -> None:
 
     # アドオン本体 + vendored bli_core が同梱されている。
     assert "bli_addon/__init__.py" in names
-    assert "bli_addon/gateway.py" in names
+    # gateway は単一ファイルから gateway/ パッケージへ分割済み（P2-4）。
+    assert "bli_addon/gateway/__init__.py" in names
+    assert "bli_addon/gateway/core.py" in names
     assert "bli_addon/vendored/bli_core/__init__.py" in names
     assert "bli_addon/vendored/bli_core/runtime.py" in names
     assert "bli_addon/vendored/bli_core/schema.py" in names

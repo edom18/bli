@@ -47,8 +47,13 @@ def _make_fake_bpy(objects: tuple[Any, ...] = ()) -> types.ModuleType:
 
 
 def _forget_gateway_module() -> None:
-    """bli_addon.gateway を sys.modules と親パッケージ属性の両方から除去する（mistakes-memo の罠）。"""
-    sys.modules.pop("bli_addon.gateway", None)
+    """bli_addon.gateway とそのサブモジュールを sys.modules と親パッケージ属性の両方から除去する
+    （mistakes-memo の罠。gateway パッケージ化＝P2-4 でサブモジュールも prefix 一致で pop する）。
+    """
+    for name in [
+        k for k in sys.modules if k == "bli_addon.gateway" or k.startswith("bli_addon.gateway.")
+    ]:
+        sys.modules.pop(name, None)
     bli_addon = sys.modules.get("bli_addon")
     if bli_addon is not None:
         bli_addon.__dict__.pop("gateway", None)
