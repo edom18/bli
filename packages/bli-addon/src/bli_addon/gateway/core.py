@@ -143,7 +143,7 @@ def exec_user_code(code: str) -> tuple[Any, str]:
     委譲する（研究 §E14）。**サンドボックスはしない**＝コードは同一 OS 権限で走る（spec §459）。
     namespace は毎回新規（セッション REPL ではない・v1）。`__builtins__` は exec が自動注入する。
     """
-    from . import exec_runner
+    from .. import exec_runner
 
     namespace: dict[str, Any] = {"bpy": bpy, "__name__": "__bli_exec__"}
     outcome = exec_runner.run_code(code, namespace)
