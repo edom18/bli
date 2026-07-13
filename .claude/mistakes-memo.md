@@ -46,6 +46,16 @@
 状況：`tomllib` は 3.11+。アドオンは 3.11 で動くが、bli-core は 3.10 互換・依存ゼロを厳守する層。
 → 対策：tomllib 利用は addon 側（3.11）に閉じ込める。bli-core には外部依存も 3.11 専用 API も入れない。
 
+**Case: モジュール→パッケージ分割で、関数内 lazy import の相対深さを 1 箇所だけ変換し漏らした**
+状況：P2-4 の gateway/ パッケージ化で `from . import exec_runner`（gateway/core.py・関数内）を
+　`from .. import` へ変え忘れ、`bli_addon.gateway.exec_runner` を探して ModuleNotFoundError。
+　関数内 import は実行時まで評価されず、かつ当該 glue は pytest では fake gateway 経由のため
+　797 全緑のまま素通りし、実機 smoke の exec-python（audited 実行）だけが INTERNAL 化した。
+→ 対策：①分割後は `grep -rn "from \. import" <pkg>/` で親レベル モジュール参照の残りを機械確認する
+　（ops/ 分割の指示には入れて 0 件・gateway/ 側の指示に入れ忘れた）。②恒久ガードとして
+　`test_package_relative_imports.py`（L1）が level=1 相対 import の参照先＝同一パッケージ内
+　サブモジュール実在を AST で強制する。bpy 不要で全 lazy import を検証できる。
+
 ## テスト / CI
 
 **Case: `--help` の出力に文字列マッチするテストを書いた**
