@@ -56,7 +56,17 @@
 　`test_package_relative_imports.py`（L1）が level=1 相対 import の参照先＝同一パッケージ内
 　サブモジュール実在を AST で強制する。bpy 不要で全 lazy import を検証できる。
 
-## テスト / CI
+## レビュー運用（マルチエージェント）
+
+**Case: レビュー中の未コミット修正が、Codex finder の巻き添え revert で消えた**
+状況：P2-4 レビュー Round 2 で、orchestrator がレビュー指摘の修正を作業ツリーに書いた（未コミット）
+　まま Codex finder を並走させていた。Codex CLI が read-only 指示に反して同じ 3 ファイルへ勝手に
+　パッチを当て、それを検知した finder エージェントが `git restore` で HEAD へ戻した際、
+　orchestrator の未コミット修正まで区別なく消えた（修正は再適用で復旧・実害はやり直し工数のみ）。
+→ 対策：①レビュー修正は**ゲート緑を確認したら即コミット**してから次のエージェントを起動する
+　（未コミット状態で外部 CLI を走らせるエージェントと並走しない）。②外部 CLI（Codex 等）を使う
+　finder は起動前後で `git status --porcelain` を突き合わせ、**自分が作っていない変更を restore
+　しない**（見つけたら報告のみ）。③長時間ハングした finder を待つ間に修正を進める場合も①を守る。
 
 **Case: `--help` の出力に文字列マッチするテストを書いた**
 状況：rich の `--help` レンダリングは端末幅依存。CI（80桁）で改行が変わり偽陰性になった。
