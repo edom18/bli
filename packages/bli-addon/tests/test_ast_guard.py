@@ -50,3 +50,56 @@ def test_skips_spikes_dir(tmp_path):
     f = d / "op_spike.py"
     f.write_text("import bpy\nbpy.ops.object.select_all(action='SELECT')\n", encoding="utf-8")
     assert guard.check([str(tmp_path)], allow=set()) == []
+
+
+def test_allow_dir_is_skipped(tmp_path):
+    d = tmp_path / "bli_addon" / "gateway"
+    d.mkdir(parents=True)
+    f = d / "objects.py"
+    f.write_text(
+        "import bpy\nbpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')\n", encoding="utf-8"
+    )
+    # bli_addon/gateway/ 配下は run_operator ラッパを分割したパッケージとして許可される
+    assert guard.check([str(tmp_path)], allow=set(), allow_dirs={"bli_addon/gateway"}) == []
+    # 許可しなければ検出される
+    assert len(guard.check([str(tmp_path)], allow=set(), allow_dirs=set())) == 1
+
+
+def test_allow_dir_is_anchored(tmp_path):
+    # 別位置の同名ディレクトリ（例: bli_addon/xyz/gateway/）は免除されない
+    # （裸名一致だと任意階層の「gateway」でサブツリー全体が素通りするため・R1-1）
+    d = tmp_path / "bli_addon" / "xyz" / "gateway"
+    d.mkdir(parents=True)
+    f = d / "evil.py"
+    f.write_text("import bpy\nbpy.ops.object.delete()\n", encoding="utf-8")
+    assert len(guard.check([str(tmp_path)], allow=set(), allow_dirs={"bli_addon/gateway"})) == 1
+
+
+def test_allow_dir_applies_to_single_file_input(tmp_path):
+    # 単一ファイル指定でもディレクトリ走査と同じ判定になる（R3-1: root=parent 化で
+    # prefix が一致しなくなり、正規のラッパ実装ファイルが過検知される回帰の防止）
+    d = tmp_path / "bli_addon" / "gateway"
+    d.mkdir(parents=True)
+    f = d / "core.py"
+    f.write_text("import bpy\nbpy.ops.ed.undo_push(message='x')\n", encoding="utf-8")
+    # ディレクトリ走査・単一ファイル指定の両方で免除される
+    assert guard.check([str(tmp_path)], allow=set(), allow_dirs={"bli_addon/gateway"}) == []
+    assert guard.check([str(f)], allow=set(), allow_dirs={"bli_addon/gateway"}) == []
+    # gateway 外の単一ファイルは引き続き検出される
+    g = tmp_path / "elsewhere.py"
+    g.write_text("import bpy\nbpy.ops.object.delete()\n", encoding="utf-8")
+    assert len(guard.check([str(g)], allow=set(), allow_dirs={"bli_addon/gateway"})) == 1
+
+
+def test_allow_dir_is_root_prefix_not_substring(tmp_path):
+    # 連続部分列の一致でも、走査ルート直下でなければ免除されない（R2-1）
+    # 例1: bli_addon/ops/ の下に bli_addon/gateway/ セグメント列を再現するネスト
+    d1 = tmp_path / "bli_addon" / "ops" / "bli_addon" / "gateway"
+    d1.mkdir(parents=True)
+    (d1 / "evil.py").write_text("import bpy\nbpy.ops.object.delete()\n", encoding="utf-8")
+    # 例2: 無関係ディレクトリの下にぶら下げたケース
+    d2 = tmp_path / "evil_pkg" / "bli_addon" / "gateway"
+    d2.mkdir(parents=True)
+    (d2 / "evil2.py").write_text("import bpy\nbpy.ops.object.delete()\n", encoding="utf-8")
+    violations = guard.check([str(tmp_path)], allow=set(), allow_dirs={"bli_addon/gateway"})
+    assert len(violations) == 2

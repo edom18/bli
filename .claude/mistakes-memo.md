@@ -46,7 +46,27 @@
 状況：`tomllib` は 3.11+。アドオンは 3.11 で動くが、bli-core は 3.10 互換・依存ゼロを厳守する層。
 → 対策：tomllib 利用は addon 側（3.11）に閉じ込める。bli-core には外部依存も 3.11 専用 API も入れない。
 
-## テスト / CI
+**Case: モジュール→パッケージ分割で、関数内 lazy import の相対深さを 1 箇所だけ変換し漏らした**
+状況：P2-4 の gateway/ パッケージ化で `from . import exec_runner`（gateway/core.py・関数内）を
+　`from .. import` へ変え忘れ、`bli_addon.gateway.exec_runner` を探して ModuleNotFoundError。
+　関数内 import は実行時まで評価されず、かつ当該 glue は pytest では fake gateway 経由のため
+　797 全緑のまま素通りし、実機 smoke の exec-python（audited 実行）だけが INTERNAL 化した。
+→ 対策：①分割後は `grep -rn "from \. import" <pkg>/` で親レベル モジュール参照の残りを機械確認する
+　（ops/ 分割の指示には入れて 0 件・gateway/ 側の指示に入れ忘れた）。②恒久ガードとして
+　`test_package_relative_imports.py`（L1）が level=1 相対 import の参照先＝同一パッケージ内
+　サブモジュール実在を AST で強制する。bpy 不要で全 lazy import を検証できる。
+
+## レビュー運用（マルチエージェント）
+
+**Case: レビュー中の未コミット修正が、Codex finder の巻き添え revert で消えた**
+状況：P2-4 レビュー Round 2 で、orchestrator がレビュー指摘の修正を作業ツリーに書いた（未コミット）
+　まま Codex finder を並走させていた。Codex CLI が read-only 指示に反して同じ 3 ファイルへ勝手に
+　パッチを当て、それを検知した finder エージェントが `git restore` で HEAD へ戻した際、
+　orchestrator の未コミット修正まで区別なく消えた（修正は再適用で復旧・実害はやり直し工数のみ）。
+→ 対策：①レビュー修正は**ゲート緑を確認したら即コミット**してから次のエージェントを起動する
+　（未コミット状態で外部 CLI を走らせるエージェントと並走しない）。②外部 CLI（Codex 等）を使う
+　finder は起動前後で `git status --porcelain` を突き合わせ、**自分が作っていない変更を restore
+　しない**（見つけたら報告のみ）。③長時間ハングした finder を待つ間に修正を進める場合も①を守る。
 
 **Case: `--help` の出力に文字列マッチするテストを書いた**
 状況：rich の `--help` レンダリングは端末幅依存。CI（80桁）で改行が変わり偽陰性になった。

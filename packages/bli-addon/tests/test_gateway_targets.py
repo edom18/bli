@@ -155,14 +155,19 @@ def _make_fake_bpy(
 
 
 def _forget_gateway_module() -> None:
-    """bli_addon.gateway を sys.modules と親パッケージ属性の両方から除去する。
+    """bli_addon.gateway とそのサブモジュールを sys.modules と親パッケージ属性の両方から除去する。
 
     `from . import gateway`（ops.py 等）は、`bli_addon` に `gateway` 属性が既にあれば
     sys.modules を経由せずそれを直接使う（Python の import 属性キャッシュ）。sys.modules から
     popするだけでは親パッケージの属性が残り、フェイク bpy を積んだこのモジュールが後続テストへ
-    漏れ、「bpy 無し＝ModuleNotFoundError」前提の他テストを壊す。両方を消して完全に忘れさせる。
+    漏れ、「bpy 無し＝ModuleNotFoundError」前提の他テストを壊す。gateway パッケージ化（P2-4）後は
+    `bli_addon.gateway.core` 等のサブモジュールも sys.modules に残るため、prefix 一致で全て pop
+    する（一部だけ残るとフェイク bpy に束縛されたサブモジュールが再 import 時に再利用される）。
     """
-    sys.modules.pop("bli_addon.gateway", None)
+    for name in [
+        k for k in sys.modules if k == "bli_addon.gateway" or k.startswith("bli_addon.gateway.")
+    ]:
+        sys.modules.pop(name, None)
     bli_addon = sys.modules.get("bli_addon")
     if bli_addon is not None:
         bli_addon.__dict__.pop("gateway", None)
