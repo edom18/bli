@@ -33,6 +33,14 @@ DEFAULT_ALLOW_DIRS = {"bli_addon/gateway"}
 SKIP_DIR_PARTS = {"spikes", "vendored", "__pycache__", "tests"}
 
 
+def _allow_dir_segments(allow_dirs: set[str]) -> list[tuple[str, ...]]:
+    return [
+        segs
+        for spec in allow_dirs
+        if (segs := tuple(s for s in spec.replace("\\", "/").split("/") if s))
+    ]
+
+
 def _matches_allow_dir(rel_parts: tuple[str, ...], allow_dirs: set[str]) -> bool:
     """走査ルートからの相対パスが、許可ディレクトリのセグメント列で**始まる**か。
 
@@ -40,14 +48,16 @@ def _matches_allow_dir(rel_parts: tuple[str, ...], allow_dirs: set[str]) -> bool
     連続部分列一致は `x/bli_addon/gateway/` のようなネスト再現を、それぞれ丸ごと
     免除してしまう。走査ルート起点の先頭一致（prefix）に固定して両方を塞ぐ。
     """
-    for spec in allow_dirs:
-        segs = tuple(s for s in spec.replace("\\", "/").split("/") if s)
-        n = len(segs)
-        if n == 0:
-            continue
-        if rel_parts[:n] == segs:
-            return True
-    return False
+    return any(rel_parts[: len(segs)] == segs for segs in _allow_dir_segments(allow_dirs))
+
+
+def _parent_suffix_matches(parent_parts: tuple[str, ...], allow_dirs: set[str]) -> bool:
+    """親ディレクトリのパス構成要素が、許可ディレクトリのセグメント列で**終わる**か。
+
+    単一ファイル指定には走査ルートが無く prefix 判定が適用できないため、
+    こちらで判定する（ディレクトリ走査のデコイ検出は prefix 判定が担う）。
+    """
+    return any(parent_parts[-len(segs) :] == segs for segs in _allow_dir_segments(allow_dirs))
 
 
 def _attr_root_is_bpy_ops(node: ast.Attribute) -> bool:
@@ -74,13 +84,16 @@ class _RawOpsVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def _iter_py_files(paths: list[str]) -> list[tuple[Path, Path]]:
-    """(走査ルート, ファイル) の組で列挙する（allow-dir のルート相対判定に使う）。"""
-    files: list[tuple[Path, Path]] = []
+def _iter_py_files(paths: list[str]) -> list[tuple[Path | None, Path]]:
+    """(走査ルート, ファイル) の組で列挙する（allow-dir のルート相対判定に使う）。
+
+    単一ファイル指定には走査ルートが無いため root=None を返す。
+    """
+    files: list[tuple[Path | None, Path]] = []
     for p in paths:
         root = Path(p)
         if root.is_file() and root.suffix == ".py":
-            files.append((root.parent, root))
+            files.append((None, root))
         else:
             files.extend((root, f) for f in root.rglob("*.py"))
     return files
@@ -94,7 +107,13 @@ def check(paths: list[str], allow: set[str], allow_dirs: set[str] | None = None)
             continue
         if f.name in allow:
             continue
-        if _matches_allow_dir(f.relative_to(root).parts, allow_dirs):
+        if root is not None:
+            allowed = _matches_allow_dir(f.relative_to(root).parts, allow_dirs)
+        else:
+            # 単一ファイル指定: 走査ルートが無いので親ディレクトリ列の末尾一致で判定
+            # （ディレクトリ走査と同じファイルが同じ判定になるようにする・R3-1）
+            allowed = _parent_suffix_matches(f.resolve().parent.parts, allow_dirs)
+        if allowed:
             continue
         try:
             tree = ast.parse(f.read_text(encoding="utf-8"), filename=str(f))

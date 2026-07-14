@@ -75,6 +75,22 @@ def test_allow_dir_is_anchored(tmp_path):
     assert len(guard.check([str(tmp_path)], allow=set(), allow_dirs={"bli_addon/gateway"})) == 1
 
 
+def test_allow_dir_applies_to_single_file_input(tmp_path):
+    # 単一ファイル指定でもディレクトリ走査と同じ判定になる（R3-1: root=parent 化で
+    # prefix が一致しなくなり、正規のラッパ実装ファイルが過検知される回帰の防止）
+    d = tmp_path / "bli_addon" / "gateway"
+    d.mkdir(parents=True)
+    f = d / "core.py"
+    f.write_text("import bpy\nbpy.ops.ed.undo_push(message='x')\n", encoding="utf-8")
+    # ディレクトリ走査・単一ファイル指定の両方で免除される
+    assert guard.check([str(tmp_path)], allow=set(), allow_dirs={"bli_addon/gateway"}) == []
+    assert guard.check([str(f)], allow=set(), allow_dirs={"bli_addon/gateway"}) == []
+    # gateway 外の単一ファイルは引き続き検出される
+    g = tmp_path / "elsewhere.py"
+    g.write_text("import bpy\nbpy.ops.object.delete()\n", encoding="utf-8")
+    assert len(guard.check([str(g)], allow=set(), allow_dirs={"bli_addon/gateway"})) == 1
+
+
 def test_allow_dir_is_root_prefix_not_substring(tmp_path):
     # 連続部分列の一致でも、走査ルート直下でなければ免除されない（R2-1）
     # 例1: bli_addon/ops/ の下に bli_addon/gateway/ セグメント列を再現するネスト
