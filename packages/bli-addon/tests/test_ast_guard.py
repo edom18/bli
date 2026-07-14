@@ -73,3 +73,17 @@ def test_allow_dir_is_anchored(tmp_path):
     f = d / "evil.py"
     f.write_text("import bpy\nbpy.ops.object.delete()\n", encoding="utf-8")
     assert len(guard.check([str(tmp_path)], allow=set(), allow_dirs={"bli_addon/gateway"})) == 1
+
+
+def test_allow_dir_is_root_prefix_not_substring(tmp_path):
+    # 連続部分列の一致でも、走査ルート直下でなければ免除されない（R2-1）
+    # 例1: bli_addon/ops/ の下に bli_addon/gateway/ セグメント列を再現するネスト
+    d1 = tmp_path / "bli_addon" / "ops" / "bli_addon" / "gateway"
+    d1.mkdir(parents=True)
+    (d1 / "evil.py").write_text("import bpy\nbpy.ops.object.delete()\n", encoding="utf-8")
+    # 例2: 無関係ディレクトリの下にぶら下げたケース
+    d2 = tmp_path / "evil_pkg" / "bli_addon" / "gateway"
+    d2.mkdir(parents=True)
+    (d2 / "evil2.py").write_text("import bpy\nbpy.ops.object.delete()\n", encoding="utf-8")
+    violations = guard.check([str(tmp_path)], allow=set(), allow_dirs={"bli_addon/gateway"})
+    assert len(violations) == 2

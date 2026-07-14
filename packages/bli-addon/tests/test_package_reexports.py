@@ -54,30 +54,36 @@ def _init_exports(init_path: pathlib.Path) -> tuple[dict[str, set[str]], set[str
     return imported, dunder_all
 
 
+def _missing_reexports(pkg_dir: pathlib.Path) -> list[str]:
+    """パッケージ内の「__init__ に re-export されていない定義名」を列挙する（検出本体）。"""
+    imported, dunder_all = _init_exports(pkg_dir / "__init__.py")
+    missing: list[str] = []
+    for sub in sorted(pkg_dir.glob("*.py")):
+        if sub.name == "__init__.py":
+            continue
+        defined = _toplevel_defined_names(sub)
+        from_init = imported.get(sub.stem, set())
+        for name in sorted(defined):
+            if name not in from_init:
+                missing.append(
+                    f"{pkg_dir.name}/__init__.py が {sub.stem}.{name} を import していない"
+                )
+            elif name not in dunder_all:
+                missing.append(f"{pkg_dir.name}/__all__ に {sub.stem}.{name} が無い")
+    return missing
+
+
 def test_reexports_cover_all_submodule_definitions():
     for pkg in PACKAGES:
-        pkg_dir = SRC / pkg
-        imported, dunder_all = _init_exports(pkg_dir / "__init__.py")
-        missing: list[str] = []
-        for sub in sorted(pkg_dir.glob("*.py")):
-            if sub.name == "__init__.py":
-                continue
-            defined = _toplevel_defined_names(sub)
-            from_init = imported.get(sub.stem, set())
-            for name in sorted(defined):
-                if name not in from_init:
-                    missing.append(f"{pkg}/__init__.py が {sub.stem}.{name} を import していない")
-                elif name not in dunder_all:
-                    missing.append(f"{pkg}/__all__ に {sub.stem}.{name} が無い")
-        assert missing == []
+        assert _missing_reexports(SRC / pkg) == []
 
 
 def test_detects_missing_reexport(tmp_path):
-    # サブモジュールに関数を追加して __init__ に足し忘れたケースを検出できる
+    # サブモジュールに関数を追加して __init__ に足し忘れたケースを、検出本体
+    # （_missing_reexports）そのものが報告することを確認する（R2-2: 自己テストが
+    # 判定ロジックを経由しないと、判定側の将来の退行を検出できない）
     pkg = tmp_path / "gateway"
     pkg.mkdir()
     (pkg / "core.py").write_text("def added():\n    return 1\n", encoding="utf-8")
     (pkg / "__init__.py").write_text("__all__ = []\n", encoding="utf-8")
-    imported, _ = _init_exports(pkg / "__init__.py")
-    assert "added" not in imported.get("core", set())
-    assert "added" in _toplevel_defined_names(pkg / "core.py")
+    assert _missing_reexports(pkg) == ["gateway/__init__.py が core.added を import していない"]
